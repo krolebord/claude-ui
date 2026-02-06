@@ -1,0 +1,42 @@
+{
+  "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
+  "vcs": {
+    "enabled": false,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "ignore": [
+      "dist",
+      "dist-electron",
+      ".vite",
+      "node_modules",
+      ".vscode",
+      ".github",
+      "build",
+      "electron",
+      "public",
+      "test",
+      "src/App.css",
+      "src/App.tsx",
+      "src/assets",
+      "src/components",
+      "src/demos",
+      "src/index.css",
+      "src/main.tsx",
+      "src/type",
+      "src/vite-env.d.ts"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true
+    }
+  }
+}
