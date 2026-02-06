@@ -1,20 +1,21 @@
 import { existsSync, statSync } from "node:fs";
 import { type IPty, spawn } from "node-pty";
 import type {
-  ClaudeErrorEvent,
-  ClaudeExitEvent,
+  ClaudeSessionErrorEvent,
+  ClaudeSessionExitEvent,
   ClaudeSessionStatus,
-  StartClaudeInput,
-  StartClaudeResult,
-  StopClaudeResult,
+  StartClaudeSessionInput,
+  StopClaudeSessionResult,
 } from "../shared/claude-types";
 
 interface SessionCallbacks {
   emitData: (chunk: string) => void;
-  emitExit: (payload: ClaudeExitEvent) => void;
-  emitError: (payload: ClaudeErrorEvent) => void;
+  emitExit: (payload: Omit<ClaudeSessionExitEvent, "sessionId">) => void;
+  emitError: (payload: Omit<ClaudeSessionErrorEvent, "sessionId">) => void;
   emitStatus: (status: ClaudeSessionStatus) => void;
 }
+
+type ClaudeSessionStartResult = { ok: true } | { ok: false; message: string };
 
 interface ActiveSession {
   pty: IPty;
@@ -47,9 +48,9 @@ export class ClaudeSessionManager {
   }
 
   async start(
-    input: StartClaudeInput,
+    input: StartClaudeSessionInput,
     launchOptions?: ClaudeLaunchOptions,
-  ): Promise<StartClaudeResult> {
+  ): Promise<ClaudeSessionStartResult> {
     const validationError = this.validateInput(input);
     if (validationError) {
       this.setStatus("error");
@@ -126,7 +127,7 @@ export class ClaudeSessionManager {
     }
   }
 
-  async stop(): Promise<StopClaudeResult> {
+  async stop(): Promise<StopClaudeSessionResult> {
     if (!this.activeSession) {
       return { ok: true };
     }
@@ -205,7 +206,7 @@ export class ClaudeSessionManager {
     this.callbacks.emitStatus(nextStatus);
   }
 
-  private validateInput(input: StartClaudeInput): string | null {
+  private validateInput(input: StartClaudeSessionInput): string | null {
     if (!input.cwd) {
       return "Select a folder before starting Claude.";
     }

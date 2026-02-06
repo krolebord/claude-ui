@@ -28,6 +28,16 @@ function TerminalPaneComponent(
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
+  const onInputRef = useRef(onInput);
+  const onResizeRef = useRef(onResize);
+
+  useEffect(() => {
+    onInputRef.current = onInput;
+  }, [onInput]);
+
+  useEffect(() => {
+    onResizeRef.current = onResize;
+  }, [onResize]);
 
   useImperativeHandle(ref, () => ({
     write: (chunk: string) => {
@@ -71,15 +81,15 @@ function TerminalPaneComponent(
       }
 
       fitAddon.fit();
-      onResize(terminal.cols, terminal.rows);
+      onResizeRef.current(terminal.cols, terminal.rows);
     };
 
     const onDataDisposable = terminal.onData((data) => {
-      onInput(data);
+      onInputRef.current(data);
     });
 
     const onResizeDisposable = terminal.onResize(({ cols, rows }) => {
-      onResize(cols, rows);
+      onResizeRef.current(cols, rows);
     });
 
     const resizeObserver = new ResizeObserver(() => {
@@ -102,7 +112,7 @@ function TerminalPaneComponent(
       terminal.dispose();
       terminalRef.current = null;
     };
-  }, [onInput, onResize]);
+  }, []);
 
   return <div ref={containerRef} className={cn("h-full w-full", className)} />;
 }

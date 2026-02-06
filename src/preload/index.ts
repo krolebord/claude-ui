@@ -1,15 +1,23 @@
 import { contextBridge, ipcRenderer } from "electron";
 import {
   CLAUDE_IPC_CHANNELS,
-  type ClaudeActivityState,
+  type ClaudeActiveSessionChangedEvent,
   type ClaudeDesktopApi,
-  type ClaudeErrorEvent,
-  type ClaudeExitEvent,
-  type ClaudeHookEvent,
-  type ClaudeSessionStatus,
-  type StartClaudeInput,
-  type StartClaudeResult,
-  type StopClaudeResult,
+  type ClaudeSessionActivityStateEvent,
+  type ClaudeSessionActivityWarningEvent,
+  type ClaudeSessionDataEvent,
+  type ClaudeSessionErrorEvent,
+  type ClaudeSessionExitEvent,
+  type ClaudeSessionHookEvent,
+  type ClaudeSessionStatusEvent,
+  type ClaudeSessionsSnapshot,
+  type ResizeClaudeSessionInput,
+  type SetActiveSessionInput,
+  type StartClaudeSessionInput,
+  type StartClaudeSessionResult,
+  type StopClaudeSessionInput,
+  type StopClaudeSessionResult,
+  type WriteClaudeSessionInput,
 } from "../shared/claude-types";
 
 function subscribe<T>(
@@ -29,35 +37,64 @@ function subscribe<T>(
 
 const claudeApi: ClaudeDesktopApi = {
   selectFolder: () => ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.selectFolder),
-  getStatus: () => ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.getStatus),
-  getActivityState: () =>
-    ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.getActivityState),
-  getActivityWarning: () =>
-    ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.getActivityWarning),
-  startClaude: (input: StartClaudeInput): Promise<StartClaudeResult> =>
-    ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.start, input),
-  stopClaude: (): Promise<StopClaudeResult> =>
-    ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.stop),
-  writeToClaude: (data: string): void => {
-    ipcRenderer.send(CLAUDE_IPC_CHANNELS.write, data);
+  getSessions: (): Promise<ClaudeSessionsSnapshot> =>
+    ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.getSessions),
+  startClaudeSession: (
+    input: StartClaudeSessionInput,
+  ): Promise<StartClaudeSessionResult> =>
+    ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.startSession, input),
+  stopClaudeSession: (
+    input: StopClaudeSessionInput,
+  ): Promise<StopClaudeSessionResult> =>
+    ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.stopSession, input),
+  setActiveSession: (input: SetActiveSessionInput): Promise<void> =>
+    ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.setActiveSession, input),
+  writeToClaudeSession: (input: WriteClaudeSessionInput): void => {
+    ipcRenderer.send(CLAUDE_IPC_CHANNELS.writeSession, input);
   },
-  resizeClaude: (cols: number, rows: number): void => {
-    ipcRenderer.send(CLAUDE_IPC_CHANNELS.resize, { cols, rows });
+  resizeClaudeSession: (input: ResizeClaudeSessionInput): void => {
+    ipcRenderer.send(CLAUDE_IPC_CHANNELS.resizeSession, input);
   },
-  onClaudeData: (callback) =>
-    subscribe<string>(CLAUDE_IPC_CHANNELS.data, callback),
-  onClaudeExit: (callback) =>
-    subscribe<ClaudeExitEvent>(CLAUDE_IPC_CHANNELS.exit, callback),
-  onClaudeError: (callback) =>
-    subscribe<ClaudeErrorEvent>(CLAUDE_IPC_CHANNELS.error, callback),
-  onClaudeStatus: (callback) =>
-    subscribe<ClaudeSessionStatus>(CLAUDE_IPC_CHANNELS.status, callback),
-  onClaudeActivityState: (callback) =>
-    subscribe<ClaudeActivityState>(CLAUDE_IPC_CHANNELS.activityState, callback),
-  onClaudeActivityWarning: (callback) =>
-    subscribe<string | null>(CLAUDE_IPC_CHANNELS.activityWarning, callback),
-  onClaudeHookEvent: (callback) =>
-    subscribe<ClaudeHookEvent>(CLAUDE_IPC_CHANNELS.hookEvent, callback),
+  onClaudeSessionData: (callback) =>
+    subscribe<ClaudeSessionDataEvent>(
+      CLAUDE_IPC_CHANNELS.sessionData,
+      callback,
+    ),
+  onClaudeSessionExit: (callback) =>
+    subscribe<ClaudeSessionExitEvent>(
+      CLAUDE_IPC_CHANNELS.sessionExit,
+      callback,
+    ),
+  onClaudeSessionError: (callback) =>
+    subscribe<ClaudeSessionErrorEvent>(
+      CLAUDE_IPC_CHANNELS.sessionError,
+      callback,
+    ),
+  onClaudeSessionStatus: (callback) =>
+    subscribe<ClaudeSessionStatusEvent>(
+      CLAUDE_IPC_CHANNELS.sessionStatus,
+      callback,
+    ),
+  onClaudeSessionActivityState: (callback) =>
+    subscribe<ClaudeSessionActivityStateEvent>(
+      CLAUDE_IPC_CHANNELS.sessionActivityState,
+      callback,
+    ),
+  onClaudeSessionActivityWarning: (callback) =>
+    subscribe<ClaudeSessionActivityWarningEvent>(
+      CLAUDE_IPC_CHANNELS.sessionActivityWarning,
+      callback,
+    ),
+  onClaudeActiveSessionChanged: (callback) =>
+    subscribe<ClaudeActiveSessionChangedEvent>(
+      CLAUDE_IPC_CHANNELS.activeSessionChanged,
+      callback,
+    ),
+  onClaudeSessionHookEvent: (callback) =>
+    subscribe<ClaudeSessionHookEvent>(
+      CLAUDE_IPC_CHANNELS.sessionHookEvent,
+      callback,
+    ),
 };
 
 contextBridge.exposeInMainWorld("claude", claudeApi);

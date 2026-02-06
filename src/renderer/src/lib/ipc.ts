@@ -1,22 +1,61 @@
 import type {
-  ClaudeActivityState,
-  ClaudeSessionStatus,
-  StartClaudeInput,
-  StartClaudeResult,
-  StopClaudeResult,
+  ClaudeActiveSessionChangedEvent,
+  ClaudeSessionActivityStateEvent,
+  ClaudeSessionActivityWarningEvent,
+  ClaudeSessionDataEvent,
+  ClaudeSessionErrorEvent,
+  ClaudeSessionExitEvent,
+  ClaudeSessionHookEvent,
+  ClaudeSessionStatusEvent,
+  ClaudeSessionsSnapshot,
+  ResizeClaudeSessionInput,
+  SetActiveSessionInput,
+  StartClaudeSessionInput,
+  StartClaudeSessionResult,
+  StopClaudeSessionInput,
+  StopClaudeSessionResult,
+  WriteClaudeSessionInput,
 } from "@shared/claude-types";
 
 export const claudeIpc = {
   selectFolder: (): Promise<string | null> => window.claude.selectFolder(),
-  getStatus: (): Promise<ClaudeSessionStatus> => window.claude.getStatus(),
-  getActivityState: (): Promise<ClaudeActivityState> =>
-    window.claude.getActivityState(),
-  getActivityWarning: (): Promise<string | null> =>
-    window.claude.getActivityWarning(),
-  startClaude: (input: StartClaudeInput): Promise<StartClaudeResult> =>
-    window.claude.startClaude(input),
-  stopClaude: (): Promise<StopClaudeResult> => window.claude.stopClaude(),
-  writeToClaude: (data: string): void => window.claude.writeToClaude(data),
-  resizeClaude: (cols: number, rows: number): void =>
-    window.claude.resizeClaude(cols, rows),
+  getSessions: (): Promise<ClaudeSessionsSnapshot> =>
+    window.claude.getSessions(),
+  startClaudeSession: (
+    input: StartClaudeSessionInput,
+  ): Promise<StartClaudeSessionResult> =>
+    window.claude.startClaudeSession(input),
+  stopClaudeSession: (
+    input: StopClaudeSessionInput,
+  ): Promise<StopClaudeSessionResult> => window.claude.stopClaudeSession(input),
+  setActiveSession: (input: SetActiveSessionInput): Promise<void> =>
+    window.claude.setActiveSession(input),
+  writeToClaudeSession: (input: WriteClaudeSessionInput): void =>
+    window.claude.writeToClaudeSession(input),
+  resizeClaudeSession: (input: ResizeClaudeSessionInput): void =>
+    window.claude.resizeClaudeSession(input),
+  onClaudeSessionData: (
+    callback: (payload: ClaudeSessionDataEvent) => void,
+  ): (() => void) => window.claude.onClaudeSessionData(callback),
+  onClaudeSessionExit: (
+    callback: (payload: ClaudeSessionExitEvent) => void,
+  ): (() => void) => window.claude.onClaudeSessionExit(callback),
+  onClaudeSessionError: (
+    callback: (payload: ClaudeSessionErrorEvent) => void,
+  ): (() => void) => window.claude.onClaudeSessionError(callback),
+  onClaudeSessionStatus: (
+    callback: (payload: ClaudeSessionStatusEvent) => void,
+  ): (() => void) => window.claude.onClaudeSessionStatus(callback),
+  onClaudeSessionActivityState: (
+    callback: (payload: ClaudeSessionActivityStateEvent) => void,
+  ): (() => void) => window.claude.onClaudeSessionActivityState(callback),
+  onClaudeSessionActivityWarning: (
+    callback: (payload: ClaudeSessionActivityWarningEvent) => void,
+  ): (() => void) => window.claude.onClaudeSessionActivityWarning(callback),
+  onClaudeActiveSessionChanged: (
+    callback: (payload: ClaudeActiveSessionChangedEvent) => void,
+  ): (() => void) => window.claude.onClaudeActiveSessionChanged(callback),
+  onClaudeSessionHookEvent: (
+    callback: (payload: ClaudeSessionHookEvent) => void,
+  ): (() => void) => window.claude.onClaudeSessionHookEvent(callback),
 };

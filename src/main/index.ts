@@ -1,15 +1,15 @@
-import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { BrowserWindow, app, dialog, ipcMain, shell } from "electron";
 import type {
-  ClaudeResizeInput,
-  StartClaudeInput,
+  ResizeClaudeSessionInput,
+  SetActiveSessionInput,
+  StartClaudeSessionInput,
+  StopClaudeSessionInput,
+  WriteClaudeSessionInput,
 } from "../shared/claude-types";
 import { CLAUDE_IPC_CHANNELS } from "../shared/claude-types";
-import { ClaudeActivityMonitor } from "./claude-activity-monitor";
-import { ClaudeSessionManager } from "./claude-session";
+import { ClaudeSessionService } from "./claude-session-service";
 import { ensureManagedClaudeStatePlugin } from "./claude-state-plugin";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -27,60 +27,24 @@ const preload = path.join(__dirname, "../preload/index.mjs");
 const indexHtml = path.join(rendererDist, "index.html");
 
 let mainWindow: BrowserWindow | null = null;
+let sessionService: ClaudeSessionService | null = null;
 let managedPluginDir: string | null = null;
-let activityWarning: string | null = null;
+let pluginWarning: string | null = null;
 
 function sendToRenderer(channel: string, payload: unknown): void {
   mainWindow?.webContents.send(channel, payload);
 }
 
-function setActivityWarning(nextWarning: string | null): void {
-  if (activityWarning === nextWarning) {
-    return;
-  }
-
-  activityWarning = nextWarning;
-  sendToRenderer(CLAUDE_IPC_CHANNELS.activityWarning, activityWarning);
-}
-
-const activityMonitor = new ClaudeActivityMonitor({
-  emitActivityState: (activityState) =>
-    sendToRenderer(CLAUDE_IPC_CHANNELS.activityState, activityState),
-  emitHookEvent: (event) =>
-    sendToRenderer(CLAUDE_IPC_CHANNELS.hookEvent, event),
-});
-
-const claudeSession = new ClaudeSessionManager({
-  emitData: (chunk) => sendToRenderer(CLAUDE_IPC_CHANNELS.data, chunk),
-  emitExit: (payload) => {
-    activityMonitor.stopMonitoring({ preserveState: true });
-    sendToRenderer(CLAUDE_IPC_CHANNELS.exit, payload);
-  },
-  emitError: (payload) => sendToRenderer(CLAUDE_IPC_CHANNELS.error, payload),
-  emitStatus: (status) => sendToRenderer(CLAUDE_IPC_CHANNELS.status, status),
-});
-
-async function createStateFile(userDataPath: string): Promise<string> {
-  const stateDir = path.join(userDataPath, "claude-state");
-  const stateFilePath = path.join(stateDir, `${randomUUID()}.ndjson`);
-
-  await mkdir(stateDir, { recursive: true });
-  await writeFile(stateFilePath, "", "utf8");
-
-  return stateFilePath;
-}
-
 async function initializeManagedPlugin(userDataPath: string): Promise<void> {
   try {
     managedPluginDir = await ensureManagedClaudeStatePlugin(userDataPath);
-    setActivityWarning(null);
+    pluginWarning = null;
   } catch (error) {
     managedPluginDir = null;
-    const message =
+    pluginWarning =
       error instanceof Error
         ? `Hook monitoring plugin failed to load: ${error.message}`
         : "Hook monitoring plugin failed to load.";
-    setActivityWarning(message);
   }
 }
 
@@ -116,7 +80,7 @@ async function createWindow(): Promise<void> {
   });
 }
 
-function registerIpcHandlers(userDataPath: string): void {
+function registerIpcHandlers(): void {
   ipcMain.handle(CLAUDE_IPC_CHANNELS.selectFolder, async () => {
     const options: Electron.OpenDialogOptions = {
       title: "Select Project Folder",
@@ -133,53 +97,52 @@ function registerIpcHandlers(userDataPath: string): void {
     return result.filePaths[0] ?? null;
   });
 
-  ipcMain.handle(CLAUDE_IPC_CHANNELS.getStatus, () =>
-    claudeSession.getStatus(),
+  ipcMain.handle(
+    CLAUDE_IPC_CHANNELS.getSessions,
+    () =>
+      sessionService?.getSessionsSnapshot() ?? {
+        sessions: [],
+        activeSessionId: null,
+      },
   );
-
-  ipcMain.handle(CLAUDE_IPC_CHANNELS.getActivityState, () =>
-    activityMonitor.getState(),
-  );
-
-  ipcMain.handle(CLAUDE_IPC_CHANNELS.getActivityWarning, () => activityWarning);
 
   ipcMain.handle(
-    CLAUDE_IPC_CHANNELS.start,
-    async (_event, input: StartClaudeInput) => {
-      const stateFilePath = await createStateFile(userDataPath);
-      activityMonitor.startMonitoring(stateFilePath);
-
-      if (!managedPluginDir) {
-        setActivityWarning(
-          "Hook monitoring plugin is unavailable. Activity state will remain unknown.",
-        );
-      } else {
-        setActivityWarning(null);
+    CLAUDE_IPC_CHANNELS.startSession,
+    async (_event, input: StartClaudeSessionInput) => {
+      if (!sessionService) {
+        return {
+          ok: false,
+          message: "Session service is unavailable.",
+        };
       }
 
-      const result = await claudeSession.start(input, {
-        pluginDir: managedPluginDir,
-        stateFilePath,
-      });
-
-      if (!result.ok) {
-        activityMonitor.stopMonitoring();
-      }
-
-      return result;
+      return sessionService.startSession(input);
     },
   );
 
-  ipcMain.handle(CLAUDE_IPC_CHANNELS.stop, () => claudeSession.stop());
+  ipcMain.handle(
+    CLAUDE_IPC_CHANNELS.stopSession,
+    (_event, input: StopClaudeSessionInput) =>
+      sessionService?.stopSession(input) ?? Promise.resolve({ ok: true }),
+  );
 
-  ipcMain.on(CLAUDE_IPC_CHANNELS.write, (_event, data: string) => {
-    claudeSession.write(data);
-  });
+  ipcMain.handle(
+    CLAUDE_IPC_CHANNELS.setActiveSession,
+    (_event, input: SetActiveSessionInput) =>
+      sessionService?.setActiveSession(input.sessionId) ?? Promise.resolve(),
+  );
 
   ipcMain.on(
-    CLAUDE_IPC_CHANNELS.resize,
-    (_event, payload: ClaudeResizeInput) => {
-      claudeSession.resize(payload.cols, payload.rows);
+    CLAUDE_IPC_CHANNELS.writeSession,
+    (_event, input: WriteClaudeSessionInput) => {
+      sessionService?.writeToSession(input.sessionId, input.data);
+    },
+  );
+
+  ipcMain.on(
+    CLAUDE_IPC_CHANNELS.resizeSession,
+    (_event, input: ResizeClaudeSessionInput) => {
+      sessionService?.resizeSession(input.sessionId, input.cols, input.rows);
     },
   );
 }
@@ -188,7 +151,31 @@ app.whenReady().then(async () => {
   const userDataPath = app.getPath("userData");
   await initializeManagedPlugin(userDataPath);
 
-  registerIpcHandlers(userDataPath);
+  sessionService = new ClaudeSessionService({
+    userDataPath,
+    pluginDir: managedPluginDir,
+    pluginWarning,
+    callbacks: {
+      emitSessionData: (payload) =>
+        sendToRenderer(CLAUDE_IPC_CHANNELS.sessionData, payload),
+      emitSessionExit: (payload) =>
+        sendToRenderer(CLAUDE_IPC_CHANNELS.sessionExit, payload),
+      emitSessionError: (payload) =>
+        sendToRenderer(CLAUDE_IPC_CHANNELS.sessionError, payload),
+      emitSessionStatus: (payload) =>
+        sendToRenderer(CLAUDE_IPC_CHANNELS.sessionStatus, payload),
+      emitSessionActivityState: (payload) =>
+        sendToRenderer(CLAUDE_IPC_CHANNELS.sessionActivityState, payload),
+      emitSessionActivityWarning: (payload) =>
+        sendToRenderer(CLAUDE_IPC_CHANNELS.sessionActivityWarning, payload),
+      emitActiveSessionChanged: (payload) =>
+        sendToRenderer(CLAUDE_IPC_CHANNELS.activeSessionChanged, payload),
+      emitSessionHookEvent: (payload) =>
+        sendToRenderer(CLAUDE_IPC_CHANNELS.sessionHookEvent, payload),
+    },
+  });
+
+  registerIpcHandlers();
   await createWindow();
 
   app.on("activate", () => {
@@ -199,8 +186,7 @@ app.whenReady().then(async () => {
 });
 
 app.on("window-all-closed", () => {
-  activityMonitor.stopMonitoring();
-  claudeSession.dispose();
+  sessionService?.dispose();
 
   if (process.platform !== "darwin") {
     app.quit();
@@ -208,6 +194,5 @@ app.on("window-all-closed", () => {
 });
 
 app.on("before-quit", () => {
-  activityMonitor.stopMonitoring();
-  claudeSession.dispose();
+  sessionService?.dispose();
 });

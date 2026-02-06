@@ -1,10 +1,6 @@
-import type {
-  ClaudeActivityState,
-  ClaudeSessionStatus,
-} from "@shared/claude-types";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { ClaudeActivityState, ClaudeSessionStatus } from "@shared/claude-types";
 import { AlertCircle } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useRef } from "react";
 import { FolderControls } from "@renderer/components/folder-controls";
 import {
   type TerminalPaneHandle,
@@ -17,180 +13,99 @@ import {
   CardTitle,
 } from "@renderer/components/ui/card";
 import { Separator } from "@renderer/components/ui/separator";
-import { claudeIpc } from "@renderer/lib/ipc";
+import { useTerminalSession } from "@renderer/services/use-terminal-session";
 
-const statusQueryKey = ["claude-status"];
-const activityQueryKey = ["claude-activity-state"];
-const activityWarningQueryKey = ["claude-activity-warning"];
+function getActivityDetail(nextState: ClaudeActivityState): string | null {
+  switch (nextState) {
+    case "awaiting_approval":
+      return "Claude is waiting for tool approval.";
+    case "awaiting_user_response":
+      return "Claude is waiting for your input.";
+    default:
+      return null;
+  }
+}
 
 function App() {
-  const queryClient = useQueryClient();
-  const terminalRef = useRef<TerminalPaneHandle>(null);
+  const { state, actions } = useTerminalSession();
+  const terminalRef = useRef<TerminalPaneHandle | null>(null);
 
-  const [folderPath, setFolderPath] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
+  const activeSession = state.activeSessionId
+    ? state.sessionsById[state.activeSessionId] ?? null
+    : null;
 
-  const statusQuery = useQuery({
-    queryKey: statusQueryKey,
-    queryFn: claudeIpc.getStatus,
-  });
-
-  const status: ClaudeSessionStatus = statusQuery.data ?? "idle";
-  const activityStateQuery = useQuery({
-    queryKey: activityQueryKey,
-    queryFn: claudeIpc.getActivityState,
-  });
-  const activityWarningQuery = useQuery({
-    queryKey: activityWarningQueryKey,
-    queryFn: claudeIpc.getActivityWarning,
-  });
+  const status: ClaudeSessionStatus = activeSession?.status ?? "idle";
   const activityState: ClaudeActivityState =
-    activityStateQuery.data ?? "unknown";
-  const activityWarning = activityWarningQuery.data ?? null;
+    activeSession?.activityState ?? "unknown";
+  const activityWarning = activeSession?.activityWarning ?? null;
+  const errorMessage = state.errorMessage || activeSession?.lastError || "";
 
-  const selectFolderMutation = useMutation({
-    mutationFn: claudeIpc.selectFolder,
-    onSuccess: (selectedPath) => {
-      if (selectedPath) {
-        setFolderPath(selectedPath);
-      }
-    },
-  });
+  const handleStart = useCallback(() => {
+    if (!state.folderPath || state.isStarting) {
+      return;
+    }
 
-  const startMutation = useMutation({
-    mutationFn: async () => {
-      const terminalSize = terminalRef.current?.getSize() ?? {
-        cols: 80,
-        rows: 24,
-      };
-      return claudeIpc.startClaude({
-        cwd: folderPath,
-        cols: terminalSize.cols,
-        rows: terminalSize.rows,
-      });
-    },
-    onMutate: () => {
-      setErrorMessage("");
-    },
-    onSuccess: (result) => {
-      if (!result.ok) {
-        setErrorMessage(result.message);
-        queryClient.setQueryData<ClaudeSessionStatus>(statusQueryKey, "error");
-        return;
-      }
-
-      terminalRef.current?.clear();
-      void queryClient.invalidateQueries({ queryKey: statusQueryKey });
-    },
-  });
-
-  const stopMutation = useMutation({
-    mutationFn: claudeIpc.stopClaude,
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: statusQueryKey });
-    },
-  });
-
-  useEffect(() => {
-    const unsubscribeData = window.claude.onClaudeData((chunk) => {
-      terminalRef.current?.write(chunk);
-    });
-
-    const unsubscribeExit = window.claude.onClaudeExit(() => {
-      void queryClient.invalidateQueries({ queryKey: statusQueryKey });
-    });
-
-    const unsubscribeError = window.claude.onClaudeError((payload) => {
-      setErrorMessage(payload.message);
-      queryClient.setQueryData<ClaudeSessionStatus>(statusQueryKey, "error");
-    });
-
-    const unsubscribeStatus = window.claude.onClaudeStatus((nextStatus) => {
-      if (nextStatus !== "error") {
-        setErrorMessage("");
-      }
-      queryClient.setQueryData<ClaudeSessionStatus>(statusQueryKey, nextStatus);
-    });
-
-    const unsubscribeActivityState = window.claude.onClaudeActivityState(
-      (nextActivityState) => {
-        queryClient.setQueryData<ClaudeActivityState>(
-          activityQueryKey,
-          nextActivityState,
-        );
-      },
-    );
-
-    const unsubscribeActivityWarning = window.claude.onClaudeActivityWarning(
-      (warning) => {
-        queryClient.setQueryData<string | null>(activityWarningQueryKey, warning);
-      },
-    );
-
-    return () => {
-      unsubscribeData();
-      unsubscribeExit();
-      unsubscribeError();
-      unsubscribeStatus();
-      unsubscribeActivityState();
-      unsubscribeActivityWarning();
+    const terminalSize = terminalRef.current?.getSize() ?? {
+      cols: 80,
+      rows: 24,
     };
-  }, [queryClient]);
 
-  const handleStart = () => {
-    if (!folderPath || startMutation.isPending) {
+    void actions.startSession({
+      cols: terminalSize.cols,
+      rows: terminalSize.rows,
+    });
+  }, [actions, state.folderPath, state.isStarting]);
+
+  const handleStop = useCallback(() => {
+    if (state.isStopping) {
       return;
     }
 
-    startMutation.mutate();
-  };
+    void actions.stopActiveSession();
+  }, [actions, state.isStopping]);
 
-  const handleStop = () => {
-    if (stopMutation.isPending) {
-      return;
-    }
+  const handleTerminalResize = useCallback(
+    (cols: number, rows: number) => {
+      actions.resizeActiveSession(cols, rows);
+    },
+    [actions],
+  );
 
-    stopMutation.mutate();
-  };
+  const handleTerminalRef = useCallback(
+    (handle: TerminalPaneHandle | null) => {
+      terminalRef.current = handle;
+      actions.attachTerminal(handle);
+    },
+    [actions],
+  );
 
-  const handleTerminalResize = (cols: number, rows: number) => {
-    claudeIpc.resizeClaude(cols, rows);
-  };
-
-  const getActivityDetail = (nextState: ClaudeActivityState): string | null => {
-    switch (nextState) {
-      case "awaiting_approval":
-        return "Claude is waiting for tool approval.";
-      case "awaiting_user_response":
-        return "Claude is waiting for your input.";
-      default:
-        return null;
-    }
-  };
+  const handleTerminalInput = useCallback(
+    (data: string) => {
+      actions.writeToActiveSession(data);
+    },
+    [actions],
+  );
 
   return (
     <div className="min-h-screen bg-[radial-gradient(120%_80%_at_0%_0%,#d7e6ff_0%,#f4f7ff_45%,#f9fbff_100%)] p-4 lg:p-6">
       <div className="mx-auto flex h-[calc(100vh-2rem)] max-w-7xl flex-col gap-4 lg:h-[calc(100vh-3rem)] lg:gap-6">
         <FolderControls
-          folderPath={folderPath}
+          folderPath={state.folderPath}
           status={status}
           activityState={activityState}
           activityDetail={getActivityDetail(activityState)}
           activityWarning={activityWarning}
-          onSelectFolder={() => selectFolderMutation.mutate()}
+          onSelectFolder={() => {
+            void actions.selectFolder();
+          }}
           onStart={handleStart}
           onStop={handleStop}
-          isSelecting={selectFolderMutation.isPending}
-          isStarting={startMutation.isPending}
-          isStopping={stopMutation.isPending}
-          isStartDisabled={
-            !folderPath ||
-            selectFolderMutation.isPending ||
-            startMutation.isPending
-          }
+          isSelecting={state.isSelecting}
+          isStarting={state.isStarting}
+          isStopping={state.isStopping}
+          isStartDisabled={!state.folderPath || state.isSelecting || state.isStarting}
           isStopDisabled={
-            (status !== "running" && status !== "starting") ||
-            stopMutation.isPending
+            (status !== "running" && status !== "starting") || state.isStopping
           }
         />
 
@@ -211,8 +126,8 @@ function App() {
           <CardContent className="min-h-0 flex-1 p-2 lg:p-3">
             <div className="h-full overflow-hidden rounded-md border border-border bg-[#0c1219]">
               <TerminalPane
-                ref={terminalRef}
-                onInput={claudeIpc.writeToClaude}
+                ref={handleTerminalRef}
+                onInput={handleTerminalInput}
                 onResize={handleTerminalResize}
               />
             </div>
