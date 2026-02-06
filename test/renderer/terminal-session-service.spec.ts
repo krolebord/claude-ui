@@ -11,6 +11,7 @@ import type {
   ClaudeSessionsSnapshot,
 } from "../../src/shared/claude-types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ProjectStorage } from "../../src/renderer/src/services/project-storage";
 import {
   buildProjectSessionGroups,
   getSessionSidebarIndicatorState,
@@ -271,7 +272,9 @@ describe("TerminalSessionService", () => {
 
   it("adds a project and persists project list", async () => {
     const storage = createStorageMock();
-    const service = new TerminalSessionService({ storage });
+    const service = new TerminalSessionService({
+      projectStorage: new ProjectStorage({ storage }),
+    });
 
     await service.actions.addProject();
 
@@ -290,7 +293,9 @@ describe("TerminalSessionService", () => {
 
   it("ignores duplicate projects without changing persisted list", async () => {
     const storage = createStorageMock([{ path: "/workspace", collapsed: false }]);
-    const service = new TerminalSessionService({ storage });
+    const service = new TerminalSessionService({
+      projectStorage: new ProjectStorage({ storage }),
+    });
 
     await service.actions.addProject();
 
@@ -312,6 +317,7 @@ describe("TerminalSessionService", () => {
       open: true,
       projectPath: "/workspace",
       sessionName: "",
+      model: "opus",
       dangerouslySkipPermissions: false,
     });
 
@@ -319,12 +325,17 @@ describe("TerminalSessionService", () => {
     state = service.getSnapshot();
     expect(state.newSessionDialog.sessionName).toBe("Refactor runner");
 
+    service.actions.setNewSessionModel("haiku");
+    state = service.getSnapshot();
+    expect(state.newSessionDialog.model).toBe("haiku");
+
     service.actions.closeNewSessionDialog();
     state = service.getSnapshot();
     expect(state.newSessionDialog).toEqual({
       open: false,
       projectPath: null,
       sessionName: "",
+      model: "opus",
       dangerouslySkipPermissions: false,
     });
   });
@@ -376,6 +387,7 @@ describe("TerminalSessionService", () => {
     expect(ipcHarness.claudeIpc.startClaudeSession).toHaveBeenCalledWith({
       cwd: "/workspace",
       sessionName: "Refactor runner",
+      model: "opus",
       dangerouslySkipPermissions: false,
       cols: 80,
       rows: 24,
@@ -383,6 +395,42 @@ describe("TerminalSessionService", () => {
 
     expect(service.getSnapshot().activeSessionId).toBe("session-3");
     service.release();
+  });
+
+  it("passes model selection through to IPC when creating a session", async () => {
+    ipcHarness.claudeIpc.startClaudeSession.mockResolvedValue({
+      ok: true,
+      sessionId: "session-3",
+      snapshot: {
+        activeSessionId: "session-3",
+        sessions: [
+          {
+            sessionId: "session-3",
+            cwd: "/workspace",
+            sessionName: null,
+            status: "running",
+            activityState: "working",
+            activityWarning: null,
+            lastError: null,
+            createdAt: "2026-02-06T00:00:02.000Z",
+          },
+        ],
+      },
+    });
+
+    const service = new TerminalSessionService();
+    service.actions.openNewSessionDialog("/workspace");
+    service.actions.setNewSessionModel("opus");
+    await service.actions.confirmNewSession({ cols: 80, rows: 24 });
+
+    expect(ipcHarness.claudeIpc.startClaudeSession).toHaveBeenCalledWith({
+      cwd: "/workspace",
+      sessionName: null,
+      model: "opus",
+      dangerouslySkipPermissions: false,
+      cols: 80,
+      rows: 24,
+    });
   });
 
   it("passes dangerously-skip-permissions when selected in new-session dialog", async () => {
@@ -414,6 +462,7 @@ describe("TerminalSessionService", () => {
     expect(ipcHarness.claudeIpc.startClaudeSession).toHaveBeenCalledWith({
       cwd: "/workspace",
       sessionName: null,
+      model: "opus",
       dangerouslySkipPermissions: true,
       cols: 80,
       rows: 24,

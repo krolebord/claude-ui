@@ -14,10 +14,13 @@ export const CLAUDE_IPC_CHANNELS = {
   sessionActivityState: "claude:session-activity-state",
   sessionActivityWarning: "claude:session-activity-warning",
   sessionHookEvent: "claude:session-hook-event",
+  sessionTitleChanged: "claude:session-title-changed",
   activeSessionChanged: "claude:active-session-changed",
 } as const;
 
 export type SessionId = string;
+
+export type ClaudeModel = "opus" | "sonnet" | "haiku";
 
 export type ClaudeSessionStatus =
   | "idle"
@@ -55,6 +58,7 @@ export interface StartClaudeSessionInput {
   rows: number;
   sessionName?: string | null;
   dangerouslySkipPermissions?: boolean;
+  model?: ClaudeModel;
 }
 
 export type StartClaudeSessionResult =
@@ -130,6 +134,11 @@ export interface ClaudeSessionActivityWarningEvent {
   warning: string | null;
 }
 
+export interface ClaudeSessionTitleChangedEvent {
+  sessionId: SessionId;
+  title: string;
+}
+
 export interface ClaudeActiveSessionChangedEvent {
   activeSessionId: SessionId | null;
 }
@@ -183,6 +192,9 @@ export interface ClaudeDesktopApi {
   ) => () => void;
   onClaudeSessionActivityWarning: (
     callback: (payload: ClaudeSessionActivityWarningEvent) => void,
+  ) => () => void;
+  onClaudeSessionTitleChanged: (
+    callback: (payload: ClaudeSessionTitleChangedEvent) => void,
   ) => () => void;
   onClaudeActiveSessionChanged: (
     callback: (payload: ClaudeActiveSessionChangedEvent) => void,

@@ -161,6 +161,29 @@ describe("ClaudeSessionService", () => {
     );
   });
 
+  it("keeps generated session IDs canonical after hook events", async () => {
+    const harness = createHarness();
+
+    const result = await harness.service.startSession(START_INPUT);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    harness.monitorMocks[0]?.callbacks.emitHookEvent({
+      timestamp: "2026-02-06T00:00:01.000Z",
+      hook_event_name: "SessionStart",
+      session_id: "claude-session-1",
+    });
+
+    const snapshot = harness.service.getSessionsSnapshot();
+    expect(snapshot.sessions[0]?.sessionId).toBe("session-1");
+    expect(snapshot.activeSessionId).toBe("session-1");
+    expect(harness.eventLog.activeChanged.at(-1)).toEqual({
+      activeSessionId: "session-1",
+    });
+  });
+
   it("passes dangerouslySkipPermissions to session start", async () => {
     const harness = createHarness();
 
@@ -174,7 +197,28 @@ describe("ClaudeSessionService", () => {
       expect.objectContaining({
         dangerouslySkipPermissions: true,
       }),
-      expect.any(Object),
+      expect.objectContaining({
+        sessionId: "session-1",
+      }),
+    );
+  });
+
+  it("passes model to session start", async () => {
+    const harness = createHarness();
+
+    const result = await harness.service.startSession({
+      ...START_INPUT,
+      model: "haiku",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(harness.managerMocks[0]?.start).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: "haiku",
+      }),
+      expect.objectContaining({
+        sessionId: "session-1",
+      }),
     );
   });
 
@@ -232,6 +276,28 @@ describe("ClaudeSessionService", () => {
     expect(harness.eventLog.sessionError[0]?.sessionId).toBe("session-1");
     expect(harness.eventLog.sessionExit[0]?.sessionId).toBe("session-1");
     expect(harness.eventLog.sessionActivityState[0]?.sessionId).toBe("session-1");
+  });
+
+  it("continues routing by generated session IDs after hook events", async () => {
+    const harness = createHarness();
+
+    const result = await harness.service.startSession(START_INPUT);
+    expect(result.ok).toBe(true);
+
+    harness.monitorMocks[0]?.callbacks.emitHookEvent({
+      timestamp: "2026-02-06T00:00:01.000Z",
+      hook_event_name: "SessionStart",
+      session_id: "claude-session-1",
+    });
+
+    harness.service.writeToSession("session-1", "hello");
+    await harness.service.stopSession({ sessionId: "session-1" });
+
+    expect(harness.managerMocks[0]?.write).toHaveBeenCalledWith("hello");
+    expect(harness.managerMocks[0]?.stop).toHaveBeenCalledTimes(1);
+    expect(harness.managerMocks[0]?.write).not.toHaveBeenCalledWith(
+      expect.stringContaining("claude-session-1"),
+    );
   });
 
   it("emits active-session change events when active session moves", async () => {

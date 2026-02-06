@@ -111,11 +111,13 @@ function App() {
         open={state.newSessionDialog.open}
         projectPath={state.newSessionDialog.projectPath}
         sessionName={state.newSessionDialog.sessionName}
+        model={state.newSessionDialog.model}
         dangerouslySkipPermissions={
           state.newSessionDialog.dangerouslySkipPermissions
         }
         isStarting={state.isStarting}
         onSessionNameChange={actions.setNewSessionName}
+        onModelChange={actions.setNewSessionModel}
         onDangerouslySkipPermissionsChange={
           actions.setNewSessionDangerouslySkipPermissions
         }

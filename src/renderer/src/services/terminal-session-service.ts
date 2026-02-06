@@ -1,22 +1,20 @@
 import type { TerminalPaneHandle } from "@renderer/components/terminal-pane";
 import { claudeIpc } from "@renderer/lib/ipc";
 import type {
+  ClaudeModel,
   ClaudeSessionSnapshot,
   ClaudeSessionsSnapshot,
   SessionId,
 } from "@shared/claude-types";
+import { ProjectStorage, type SidebarProject } from "./project-storage";
 
-const PROJECT_STORAGE_KEY = "claude-ui.projects.v1";
-
-export interface SidebarProject {
-  path: string;
-  collapsed: boolean;
-}
+export type { SidebarProject } from "./project-storage";
 
 export interface NewSessionDialogState {
   open: boolean;
   projectPath: string | null;
   sessionName: string;
+  model: ClaudeModel;
   dangerouslySkipPermissions: boolean;
 }
 
@@ -41,63 +39,8 @@ export interface TerminalSessionState {
 
 type Listener = () => void;
 
-interface StorageLike {
-  getItem: (key: string) => string | null;
-  setItem: (key: string, value: string) => void;
-}
-
 interface TerminalSessionServiceOptions {
-  storage?: StorageLike | null;
-}
-
-function resolveStorage(): StorageLike | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  return window.localStorage;
-}
-
-function parseProjects(rawProjects: string | null): SidebarProject[] {
-  if (!rawProjects) {
-    return [];
-  }
-
-  try {
-    const parsed = JSON.parse(rawProjects);
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-
-    return parsed
-      .map((entry) => {
-        if (!entry || typeof entry !== "object") {
-          return null;
-        }
-
-        const candidate = entry as {
-          path?: unknown;
-          collapsed?: unknown;
-        };
-
-        if (typeof candidate.path !== "string") {
-          return null;
-        }
-
-        const path = candidate.path.trim();
-        if (!path) {
-          return null;
-        }
-
-        return {
-          path,
-          collapsed: candidate.collapsed === true,
-        } satisfies SidebarProject;
-      })
-      .filter((entry): entry is SidebarProject => entry !== null);
-  } catch {
-    return [];
-  }
+  projectStorage?: ProjectStorage;
 }
 
 function toTimestamp(value: string): number {
@@ -217,7 +160,7 @@ export function buildProjectSessionGroups(
 }
 
 export class TerminalSessionService {
-  private readonly storage: StorageLike | null;
+  private readonly projectStorage: ProjectStorage;
 
   private state: TerminalSessionState;
   private sessionOutputById: Record<SessionId, string> = {};
@@ -232,7 +175,7 @@ export class TerminalSessionService {
   private refreshInFlight: Promise<void> | null = null;
 
   constructor(options?: TerminalSessionServiceOptions) {
-    this.storage = options?.storage ?? resolveStorage();
+    this.projectStorage = options?.projectStorage ?? new ProjectStorage();
     this.state = {
       projects: this.readProjects(),
       sessionsById: {},
@@ -241,6 +184,7 @@ export class TerminalSessionService {
         open: false,
         projectPath: null,
         sessionName: "",
+        model: "opus",
         dangerouslySkipPermissions: false,
       },
       isSelecting: false,
@@ -330,6 +274,7 @@ export class TerminalSessionService {
           open: true,
           projectPath,
           sessionName: "",
+          model: "opus",
           dangerouslySkipPermissions: false,
         },
       }));
@@ -341,6 +286,7 @@ export class TerminalSessionService {
           open: false,
           projectPath: null,
           sessionName: "",
+          model: "opus",
           dangerouslySkipPermissions: false,
         },
       }));
@@ -351,6 +297,15 @@ export class TerminalSessionService {
         newSessionDialog: {
           ...prev.newSessionDialog,
           sessionName: value,
+        },
+      }));
+    },
+    setNewSessionModel: (value: ClaudeModel): void => {
+      this.updateState((prev) => ({
+        ...prev,
+        newSessionDialog: {
+          ...prev.newSessionDialog,
+          model: value,
         },
       }));
     },
@@ -373,6 +328,7 @@ export class TerminalSessionService {
       }
 
       const sessionName = this.state.newSessionDialog.sessionName;
+      const model = this.state.newSessionDialog.model;
       const dangerouslySkipPermissions =
         this.state.newSessionDialog.dangerouslySkipPermissions;
 
@@ -382,6 +338,7 @@ export class TerminalSessionService {
           open: false,
           projectPath: null,
           sessionName: "",
+          model: "opus",
           dangerouslySkipPermissions: false,
         },
       }));
@@ -389,6 +346,7 @@ export class TerminalSessionService {
       await this.startSessionInProject({
         cwd: projectPath,
         sessionName,
+        model,
         dangerouslySkipPermissions,
         cols: input.cols,
         rows: input.rows,
@@ -525,6 +483,7 @@ export class TerminalSessionService {
   private async startSessionInProject(input: {
     cwd: string;
     sessionName: string;
+    model: ClaudeModel;
     dangerouslySkipPermissions: boolean;
     cols: number;
     rows: number;
@@ -541,6 +500,7 @@ export class TerminalSessionService {
         cwd: input.cwd,
         sessionName:
           normalizedSessionName.length > 0 ? normalizedSessionName : null,
+        model: input.model,
         dangerouslySkipPermissions: input.dangerouslySkipPermissions,
         cols: input.cols,
         rows: input.rows,
@@ -766,11 +726,11 @@ export class TerminalSessionService {
   }
 
   private readProjects(): SidebarProject[] {
-    return parseProjects(this.storage?.getItem(PROJECT_STORAGE_KEY) ?? null);
+    return this.projectStorage.readProjects();
   }
 
   private persistProjects(projects: SidebarProject[]): void {
-    this.storage?.setItem(PROJECT_STORAGE_KEY, JSON.stringify(projects));
+    this.projectStorage.writeProjects(projects);
   }
 
   private appendSessionOutput(sessionId: SessionId, chunk: string): void {

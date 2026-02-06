@@ -4,8 +4,6 @@ import path from "node:path";
 import type {
   ClaudeActiveSessionChangedEvent,
   ClaudeActivityState,
-  DeleteClaudeSessionInput,
-  DeleteClaudeSessionResult,
   ClaudeSessionActivityStateEvent,
   ClaudeSessionActivityWarningEvent,
   ClaudeSessionDataEvent,
@@ -15,7 +13,10 @@ import type {
   ClaudeSessionSnapshot,
   ClaudeSessionStatus,
   ClaudeSessionStatusEvent,
+  ClaudeSessionTitleChangedEvent,
   ClaudeSessionsSnapshot,
+  DeleteClaudeSessionInput,
+  DeleteClaudeSessionResult,
   SessionId,
   StartClaudeSessionInput,
   StartClaudeSessionResult,
@@ -24,6 +25,7 @@ import type {
 } from "../shared/claude-types";
 import { ClaudeActivityMonitor } from "./claude-activity-monitor";
 import { ClaudeSessionManager } from "./claude-session";
+import { generateSessionTitle } from "./generate-session-title";
 
 interface ClaudeSessionServiceCallbacks {
   emitSessionData: (payload: ClaudeSessionDataEvent) => void;
@@ -34,6 +36,7 @@ interface ClaudeSessionServiceCallbacks {
   emitSessionActivityWarning: (
     payload: ClaudeSessionActivityWarningEvent,
   ) => void;
+  emitSessionTitleChanged: (payload: ClaudeSessionTitleChangedEvent) => void;
   emitActiveSessionChanged: (payload: ClaudeActiveSessionChangedEvent) => void;
   emitSessionHookEvent?: (payload: ClaudeSessionHookEvent) => void;
 }
@@ -131,7 +134,10 @@ export class ClaudeSessionService {
 
     return {
       sessions,
-      activeSessionId: this.activeSessionId,
+      activeSessionId:
+        this.activeSessionId && this.sessions.has(this.activeSessionId)
+          ? this.activeSessionId
+          : null,
     };
   }
 
@@ -153,10 +159,11 @@ export class ClaudeSessionService {
       const result = await record.manager.start(input, {
         pluginDir: this.pluginDir,
         stateFilePath,
+        sessionId: record.sessionId,
       });
 
       if (!result.ok) {
-        this.sessions.delete(sessionId);
+        this.removeSessionRecord(sessionId, record);
         record.monitor.stopMonitoring();
         record.manager.dispose();
         if (this.activeSessionId === sessionId) {
@@ -166,16 +173,16 @@ export class ClaudeSessionService {
       }
 
       record.ready = true;
-      this.setActiveSessionInternal(sessionId);
+      this.setActiveSessionInternal(record.sessionId);
       this.flushPendingEvents(record);
 
       return {
         ok: true,
-        sessionId,
+        sessionId: record.sessionId,
         snapshot: this.getSessionsSnapshot(),
       };
     } catch (error) {
-      this.sessions.delete(sessionId);
+      this.removeSessionRecord(sessionId, record);
       record.monitor.stopMonitoring();
       record.manager.dispose();
       if (this.activeSessionId === sessionId) {
@@ -222,7 +229,7 @@ export class ClaudeSessionService {
       stopError = error;
     } finally {
       record.manager.dispose();
-      this.sessions.delete(input.sessionId);
+      this.removeSessionRecord(input.sessionId, record);
 
       if (this.activeSessionId === input.sessionId) {
         this.setActiveSessionInternal(null);
@@ -263,7 +270,8 @@ export class ClaudeSessionService {
   }
 
   dispose(): void {
-    for (const record of this.sessions.values()) {
+    const uniqueRecords = new Set(this.sessions.values());
+    for (const record of uniqueRecords) {
       record.monitor.stopMonitoring();
       record.manager.dispose();
     }
@@ -310,7 +318,7 @@ export class ClaudeSessionService {
         record.activityState = activityState;
         this.emitOrQueue(record, () => {
           this.callbacks.emitSessionActivityState({
-            sessionId,
+            sessionId: record.sessionId,
             activityState,
           });
         });
@@ -318,7 +326,7 @@ export class ClaudeSessionService {
       emitHookEvent: (event) => {
         this.emitOrQueue(record, () => {
           this.callbacks.emitSessionHookEvent?.({
-            sessionId,
+            sessionId: record.sessionId,
             event,
           });
         });
@@ -328,20 +336,26 @@ export class ClaudeSessionService {
     const manager = this.sessionManagerFactory({
       emitData: (chunk) => {
         this.emitOrQueue(record, () => {
-          this.callbacks.emitSessionData({ sessionId, chunk });
+          this.callbacks.emitSessionData({
+            sessionId: record.sessionId,
+            chunk,
+          });
         });
       },
       emitExit: (payload) => {
         monitor.stopMonitoring({ preserveState: true });
         this.emitOrQueue(record, () => {
-          this.callbacks.emitSessionExit({ sessionId, ...payload });
+          this.callbacks.emitSessionExit({
+            sessionId: record.sessionId,
+            ...payload,
+          });
         });
       },
       emitError: (payload) => {
         record.lastError = payload.message;
         this.emitOrQueue(record, () => {
           this.callbacks.emitSessionError({
-            sessionId,
+            sessionId: record.sessionId,
             message: payload.message,
           });
         });
@@ -352,7 +366,10 @@ export class ClaudeSessionService {
           record.lastError = null;
         }
         this.emitOrQueue(record, () => {
-          this.callbacks.emitSessionStatus({ sessionId, status });
+          this.callbacks.emitSessionStatus({
+            sessionId: record.sessionId,
+            status,
+          });
         });
       },
     });
@@ -363,7 +380,7 @@ export class ClaudeSessionService {
     if (record.activityWarning !== null) {
       this.emitOrQueue(record, () => {
         this.callbacks.emitSessionActivityWarning({
-          sessionId,
+          sessionId: record.sessionId,
           warning: record.activityWarning,
         });
       });
@@ -391,12 +408,27 @@ export class ClaudeSessionService {
   }
 
   private setActiveSessionInternal(sessionId: SessionId | null): void {
+    if (sessionId !== null && !this.sessions.has(sessionId)) {
+      return;
+    }
+
     if (this.activeSessionId === sessionId) {
       return;
     }
 
     this.activeSessionId = sessionId;
-    this.callbacks.emitActiveSessionChanged({ activeSessionId: sessionId });
+    this.callbacks.emitActiveSessionChanged({
+      activeSessionId: sessionId,
+    });
+  }
+
+  private removeSessionRecord(
+    sessionId: SessionId,
+    record: SessionRecord,
+  ): void {
+    if (this.sessions.get(sessionId) === record) {
+      this.sessions.delete(sessionId);
+    }
   }
 
   private normalizeSessionName(sessionName?: string | null): string | null {

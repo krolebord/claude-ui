@@ -1,6 +1,7 @@
 import { existsSync, statSync } from "node:fs";
 import { type IPty, spawn } from "node-pty";
 import type {
+  ClaudeModel,
   ClaudeSessionErrorEvent,
   ClaudeSessionExitEvent,
   ClaudeSessionStatus,
@@ -30,6 +31,7 @@ interface LaunchCommand {
 interface ClaudeLaunchOptions {
   pluginDir?: string | null;
   stateFilePath?: string;
+  sessionId?: string;
 }
 
 const GRACEFUL_EXIT_COMMAND = "/exit\r";
@@ -77,6 +79,8 @@ export class ClaudeSessionManager {
       const launch = this.getInteractiveLaunchCommand(
         launchOptions?.pluginDir,
         input.dangerouslySkipPermissions === true,
+        launchOptions?.sessionId,
+        input.model,
       );
       const pty = spawn(launch.file, launch.args, {
         name: "xterm-256color",
@@ -244,6 +248,8 @@ export class ClaudeSessionManager {
   private getInteractiveLaunchCommand(
     pluginDir?: string | null,
     dangerouslySkipPermissions = false,
+    sessionId?: string,
+    model?: ClaudeModel,
   ): LaunchCommand {
     const skipPermissionsArgs = dangerouslySkipPermissions
       ? " --dangerously-skip-permissions"
@@ -251,6 +257,10 @@ export class ClaudeSessionManager {
     const pluginArgs = pluginDir
       ? ` --plugin-dir ${this.shellQuote(pluginDir)}`
       : "";
+    const sessionIdArgs = sessionId
+      ? ` --session-id ${this.shellQuote(sessionId)}`
+      : "";
+    const modelArgs = model ? ` --model ${model}` : "";
 
     if (process.platform === "win32") {
       const shell = process.env.COMSPEC ?? "cmd.exe";
@@ -260,13 +270,17 @@ export class ClaudeSessionManager {
       const winPluginArgs = pluginDir
         ? ` --plugin-dir "${pluginDir.replace(/\"/g, '""')}"`
         : "";
+      const winSessionIdArgs = sessionId
+        ? ` --session-id "${sessionId.replace(/\"/g, '""')}"`
+        : "";
+      const winModelArgs = model ? ` --model ${model}` : "";
       return {
         file: shell,
         args: [
           "/d",
           "/s",
           "/c",
-          `claude${winSkipPermissionsArgs}${winPluginArgs}`,
+          `claude${winSkipPermissionsArgs}${winPluginArgs}${winSessionIdArgs}${winModelArgs}`,
         ],
       };
     }
@@ -277,7 +291,10 @@ export class ClaudeSessionManager {
 
     return {
       file: shell,
-      args: ["-ilc", `exec claude${skipPermissionsArgs}${pluginArgs}`],
+      args: [
+        "-ilc",
+        `exec claude${skipPermissionsArgs}${pluginArgs}${sessionIdArgs}${modelArgs}`,
+      ],
     };
   }
 

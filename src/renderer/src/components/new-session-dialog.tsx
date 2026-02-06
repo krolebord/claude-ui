@@ -1,14 +1,17 @@
 import { Input } from "@renderer/components/ui/input";
 import { cn } from "@renderer/lib/utils";
+import type { ClaudeModel } from "@shared/claude-types";
 import { useEffect } from "react";
 
 interface NewSessionDialogProps {
   open: boolean;
   projectPath: string | null;
   sessionName: string;
+  model: ClaudeModel;
   dangerouslySkipPermissions: boolean;
   isStarting: boolean;
   onSessionNameChange: (value: string) => void;
+  onModelChange: (value: ClaudeModel) => void;
   onDangerouslySkipPermissionsChange: (value: boolean) => void;
   onCancel: () => void;
   onConfirm: () => void;
@@ -21,13 +24,21 @@ function getProjectNameFromPath(path: string): string {
   return segments[segments.length - 1] ?? path;
 }
 
+const MODEL_OPTIONS: { value: ClaudeModel; label: string }[] = [
+  { value: "opus", label: "Opus" },
+  { value: "sonnet", label: "Sonnet" },
+  { value: "haiku", label: "Haiku" },
+];
+
 export function NewSessionDialog({
   open,
   projectPath,
   sessionName,
+  model,
   dangerouslySkipPermissions,
   isStarting,
   onSessionNameChange,
+  onModelChange,
   onDangerouslySkipPermissionsChange,
   onCancel,
   onConfirm,
@@ -98,6 +109,26 @@ export function NewSessionDialog({
               }}
               className="border-white/15 bg-white/5 text-zinc-100 placeholder:text-zinc-500"
             />
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="new-session-model" className="text-sm text-zinc-300">
+              Model
+            </label>
+            <select
+              id="new-session-model"
+              value={model}
+              onChange={(event) => {
+                onModelChange(event.target.value as ClaudeModel);
+              }}
+              className="w-full rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm text-zinc-100"
+            >
+              {MODEL_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </div>
 
           <label
