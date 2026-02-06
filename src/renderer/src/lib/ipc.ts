@@ -8,6 +8,8 @@ import type {
   ClaudeSessionHookEvent,
   ClaudeSessionStatusEvent,
   ClaudeSessionsSnapshot,
+  DeleteClaudeSessionInput,
+  DeleteClaudeSessionResult,
   ResizeClaudeSessionInput,
   SetActiveSessionInput,
   StartClaudeSessionInput,
@@ -28,6 +30,10 @@ export const claudeIpc = {
   stopClaudeSession: (
     input: StopClaudeSessionInput,
   ): Promise<StopClaudeSessionResult> => window.claude.stopClaudeSession(input),
+  deleteClaudeSession: (
+    input: DeleteClaudeSessionInput,
+  ): Promise<DeleteClaudeSessionResult> =>
+    window.claude.deleteClaudeSession(input),
   setActiveSession: (input: SetActiveSessionInput): Promise<void> =>
     window.claude.setActiveSession(input),
   writeToClaudeSession: (input: WriteClaudeSessionInput): void =>

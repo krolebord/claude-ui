@@ -11,6 +11,8 @@ import {
   type ClaudeSessionHookEvent,
   type ClaudeSessionStatusEvent,
   type ClaudeSessionsSnapshot,
+  type DeleteClaudeSessionInput,
+  type DeleteClaudeSessionResult,
   type ResizeClaudeSessionInput,
   type SetActiveSessionInput,
   type StartClaudeSessionInput,
@@ -47,6 +49,10 @@ const claudeApi: ClaudeDesktopApi = {
     input: StopClaudeSessionInput,
   ): Promise<StopClaudeSessionResult> =>
     ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.stopSession, input),
+  deleteClaudeSession: (
+    input: DeleteClaudeSessionInput,
+  ): Promise<DeleteClaudeSessionResult> =>
+    ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.deleteSession, input),
   setActiveSession: (input: SetActiveSessionInput): Promise<void> =>
     ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.setActiveSession, input),
   writeToClaudeSession: (input: WriteClaudeSessionInput): void => {

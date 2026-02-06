@@ -2,6 +2,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { BrowserWindow, app, dialog, ipcMain, shell } from "electron";
 import type {
+  DeleteClaudeSessionInput,
   ResizeClaudeSessionInput,
   SetActiveSessionInput,
   StartClaudeSessionInput,
@@ -124,6 +125,12 @@ function registerIpcHandlers(): void {
     CLAUDE_IPC_CHANNELS.stopSession,
     (_event, input: StopClaudeSessionInput) =>
       sessionService?.stopSession(input) ?? Promise.resolve({ ok: true }),
+  );
+
+  ipcMain.handle(
+    CLAUDE_IPC_CHANNELS.deleteSession,
+    (_event, input: DeleteClaudeSessionInput) =>
+      sessionService?.deleteSession(input) ?? Promise.resolve({ ok: true }),
   );
 
   ipcMain.handle(

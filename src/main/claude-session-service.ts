@@ -4,6 +4,8 @@ import path from "node:path";
 import type {
   ClaudeActiveSessionChangedEvent,
   ClaudeActivityState,
+  DeleteClaudeSessionInput,
+  DeleteClaudeSessionResult,
   ClaudeSessionActivityStateEvent,
   ClaudeSessionActivityWarningEvent,
   ClaudeSessionDataEvent,
@@ -70,6 +72,7 @@ interface ActivityMonitorLike {
 interface SessionRecord {
   sessionId: SessionId;
   cwd: string;
+  sessionName: string | null;
   createdAt: string;
   status: ClaudeSessionStatus;
   activityState: ClaudeActivityState;
@@ -136,7 +139,11 @@ export class ClaudeSessionService {
     input: StartClaudeSessionInput,
   ): Promise<StartClaudeSessionResult> {
     const sessionId = this.sessionIdFactory();
-    const record = this.createRecord(sessionId, input.cwd);
+    const record = this.createRecord(
+      sessionId,
+      input.cwd,
+      this.normalizeSessionName(input.sessionName),
+    );
     this.sessions.set(sessionId, record);
 
     try {
@@ -197,6 +204,38 @@ export class ClaudeSessionService {
     return { ok: true };
   }
 
+  async deleteSession(
+    input: DeleteClaudeSessionInput,
+  ): Promise<DeleteClaudeSessionResult> {
+    const record = this.sessions.get(input.sessionId);
+    if (!record) {
+      return { ok: true };
+    }
+
+    let stopError: unknown = null;
+
+    record.monitor.stopMonitoring();
+
+    try {
+      await record.manager.stop();
+    } catch (error) {
+      stopError = error;
+    } finally {
+      record.manager.dispose();
+      this.sessions.delete(input.sessionId);
+
+      if (this.activeSessionId === input.sessionId) {
+        this.setActiveSessionInternal(null);
+      }
+    }
+
+    if (stopError) {
+      throw stopError;
+    }
+
+    return { ok: true };
+  }
+
   async setActiveSession(sessionId: SessionId): Promise<void> {
     if (!this.sessions.has(sessionId)) {
       return;
@@ -237,6 +276,7 @@ export class ClaudeSessionService {
     return {
       sessionId: record.sessionId,
       cwd: record.cwd,
+      sessionName: record.sessionName,
       status: record.status,
       activityState: record.activityState,
       activityWarning: record.activityWarning,
@@ -245,10 +285,15 @@ export class ClaudeSessionService {
     };
   }
 
-  private createRecord(sessionId: SessionId, cwd: string): SessionRecord {
+  private createRecord(
+    sessionId: SessionId,
+    cwd: string,
+    sessionName: string | null,
+  ): SessionRecord {
     const record: SessionRecord = {
       sessionId,
       cwd,
+      sessionName,
       createdAt: this.nowFactory(),
       status: "idle",
       activityState: "unknown",
@@ -352,6 +397,15 @@ export class ClaudeSessionService {
 
     this.activeSessionId = sessionId;
     this.callbacks.emitActiveSessionChanged({ activeSessionId: sessionId });
+  }
+
+  private normalizeSessionName(sessionName?: string | null): string | null {
+    if (typeof sessionName !== "string") {
+      return null;
+    }
+
+    const trimmed = sessionName.trim();
+    return trimmed.length > 0 ? trimmed : null;
   }
 
   private async createStateFile(): Promise<string> {

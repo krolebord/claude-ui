@@ -3,6 +3,7 @@ export const CLAUDE_IPC_CHANNELS = {
   getSessions: "claude:get-sessions",
   startSession: "claude:start-session",
   stopSession: "claude:stop-session",
+  deleteSession: "claude:delete-session",
   setActiveSession: "claude:set-active-session",
   writeSession: "claude:write-session",
   resizeSession: "claude:resize-session",
@@ -35,6 +36,7 @@ export type ClaudeActivityState =
 export interface ClaudeSessionSnapshot {
   sessionId: SessionId;
   cwd: string;
+  sessionName: string | null;
   status: ClaudeSessionStatus;
   activityState: ClaudeActivityState;
   activityWarning: string | null;
@@ -51,6 +53,7 @@ export interface StartClaudeSessionInput {
   cwd: string;
   cols: number;
   rows: number;
+  sessionName?: string | null;
 }
 
 export type StartClaudeSessionResult =
@@ -69,6 +72,14 @@ export interface StopClaudeSessionInput {
 }
 
 export interface StopClaudeSessionResult {
+  ok: true;
+}
+
+export interface DeleteClaudeSessionInput {
+  sessionId: SessionId;
+}
+
+export interface DeleteClaudeSessionResult {
   ok: true;
 }
 
@@ -148,6 +159,9 @@ export interface ClaudeDesktopApi {
   stopClaudeSession: (
     input: StopClaudeSessionInput,
   ) => Promise<StopClaudeSessionResult>;
+  deleteClaudeSession: (
+    input: DeleteClaudeSessionInput,
+  ) => Promise<DeleteClaudeSessionResult>;
   setActiveSession: (input: SetActiveSessionInput) => Promise<void>;
   writeToClaudeSession: (input: WriteClaudeSessionInput) => void;
   resizeClaudeSession: (input: ResizeClaudeSessionInput) => void;

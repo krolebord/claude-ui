@@ -1,30 +1,15 @@
-import type { ClaudeActivityState, ClaudeSessionStatus } from "@shared/claude-types";
-import { AlertCircle } from "lucide-react";
-import { useCallback, useRef } from "react";
-import { FolderControls } from "@renderer/components/folder-controls";
+import { NewSessionDialog } from "@renderer/components/new-session-dialog";
+import { SessionSidebar } from "@renderer/components/session-sidebar";
 import {
   type TerminalPaneHandle,
   TerminalPane,
 } from "@renderer/components/terminal-pane";
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@renderer/components/ui/card";
-import { Separator } from "@renderer/components/ui/separator";
-import { useTerminalSession } from "@renderer/services/use-terminal-session";
-
-function getActivityDetail(nextState: ClaudeActivityState): string | null {
-  switch (nextState) {
-    case "awaiting_approval":
-      return "Claude is waiting for tool approval.";
-    case "awaiting_user_response":
-      return "Claude is waiting for your input.";
-    default:
-      return null;
-  }
-}
+  buildProjectSessionGroups,
+  useTerminalSession,
+} from "@renderer/services/use-terminal-session";
+import { AlertCircle } from "lucide-react";
+import { useCallback, useMemo, useRef } from "react";
 
 function App() {
   const { state, actions } = useTerminalSession();
@@ -34,41 +19,22 @@ function App() {
     ? state.sessionsById[state.activeSessionId] ?? null
     : null;
 
-  const status: ClaudeSessionStatus = activeSession?.status ?? "idle";
-  const activityState: ClaudeActivityState =
-    activeSession?.activityState ?? "unknown";
-  const activityWarning = activeSession?.activityWarning ?? null;
+  const groups = useMemo(
+    () =>
+      buildProjectSessionGroups({
+        projects: state.projects,
+        sessionsById: state.sessionsById,
+      }),
+    [state.projects, state.sessionsById]
+  );
+
   const errorMessage = state.errorMessage || activeSession?.lastError || "";
-
-  const handleStart = useCallback(() => {
-    if (!state.folderPath || state.isStarting) {
-      return;
-    }
-
-    const terminalSize = terminalRef.current?.getSize() ?? {
-      cols: 80,
-      rows: 24,
-    };
-
-    void actions.startSession({
-      cols: terminalSize.cols,
-      rows: terminalSize.rows,
-    });
-  }, [actions, state.folderPath, state.isStarting]);
-
-  const handleStop = useCallback(() => {
-    if (state.isStopping) {
-      return;
-    }
-
-    void actions.stopActiveSession();
-  }, [actions, state.isStopping]);
 
   const handleTerminalResize = useCallback(
     (cols: number, rows: number) => {
       actions.resizeActiveSession(cols, rows);
     },
-    [actions],
+    [actions]
   );
 
   const handleTerminalRef = useCallback(
@@ -76,64 +42,80 @@ function App() {
       terminalRef.current = handle;
       actions.attachTerminal(handle);
     },
-    [actions],
+    [actions]
   );
 
   const handleTerminalInput = useCallback(
     (data: string) => {
       actions.writeToActiveSession(data);
     },
-    [actions],
+    [actions]
   );
 
+  const handleConfirmNewSession = useCallback(() => {
+    const terminalSize = terminalRef.current?.getSize() ?? {
+      cols: 80,
+      rows: 24,
+    };
+
+    void actions.confirmNewSession({
+      cols: terminalSize.cols,
+      rows: terminalSize.rows,
+    });
+  }, [actions]);
+
   return (
-    <div className="min-h-screen bg-[radial-gradient(120%_80%_at_0%_0%,#d7e6ff_0%,#f4f7ff_45%,#f9fbff_100%)] p-4 lg:p-6">
-      <div className="mx-auto flex h-[calc(100vh-2rem)] max-w-7xl flex-col gap-4 lg:h-[calc(100vh-3rem)] lg:gap-6">
-        <FolderControls
-          folderPath={state.folderPath}
-          status={status}
-          activityState={activityState}
-          activityDetail={getActivityDetail(activityState)}
-          activityWarning={activityWarning}
-          onSelectFolder={() => {
-            void actions.selectFolder();
+    <div className="min-h-screen bg-[radial-gradient(120%_90%_at_0%_0%,#242b36_0%,#111419_45%,#090b10_100%)]">
+      <div className="mx-auto flex h-[calc(100vh-2rem)] max-w-[1600px] overflow-hidden border border-white/10 bg-black/25 shadow-[0_30px_80px_rgba(0,0,0,0.5)]">
+        <SessionSidebar
+          groups={groups}
+          activeSessionId={state.activeSessionId}
+          isAddingProject={state.isSelecting}
+          onAddProject={() => {
+            void actions.addProject();
           }}
-          onStart={handleStart}
-          onStop={handleStop}
-          isSelecting={state.isSelecting}
-          isStarting={state.isStarting}
-          isStopping={state.isStopping}
-          isStartDisabled={!state.folderPath || state.isSelecting || state.isStarting}
-          isStopDisabled={
-            (status !== "running" && status !== "starting") || state.isStopping
-          }
+          onToggleProject={actions.toggleProjectCollapsed}
+          onOpenNewSessionDialog={actions.openNewSessionDialog}
+          onSelectSession={(sessionId) => {
+            void actions.setActiveSession(sessionId);
+          }}
+          onStopSession={(sessionId) => {
+            void actions.stopSession(sessionId);
+          }}
+          onDeleteSession={(sessionId) => {
+            void actions.deleteSession(sessionId);
+          }}
         />
 
-        {errorMessage ? (
-          <Card className="border-destructive/40 bg-destructive/5">
-            <CardContent className="flex items-center gap-2 py-3 text-sm text-destructive">
+        <main className="flex min-w-0 flex-1 flex-col bg-black/15">
+          {errorMessage ? (
+            <div className="mx-4 mt-4 flex items-center gap-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
               <AlertCircle className="size-4" />
               <span>{errorMessage}</span>
-            </CardContent>
-          </Card>
-        ) : null}
+            </div>
+          ) : null}
 
-        <Card className="flex min-h-0 flex-1 flex-col">
-          <CardHeader>
-            <CardTitle>Embedded Terminal</CardTitle>
-          </CardHeader>
-          <Separator />
-          <CardContent className="min-h-0 flex-1 p-2 lg:p-3">
-            <div className="h-full overflow-hidden rounded-md border border-border bg-[#0c1219]">
+          <div className="min-h-0 flex-1">
+            <div className="h-full overflow-hidden border border-white/10 bg-[#080a0e]">
               <TerminalPane
                 ref={handleTerminalRef}
                 onInput={handleTerminalInput}
                 onResize={handleTerminalResize}
               />
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </main>
       </div>
+
+      <NewSessionDialog
+        open={state.newSessionDialog.open}
+        projectPath={state.newSessionDialog.projectPath}
+        sessionName={state.newSessionDialog.sessionName}
+        isStarting={state.isStarting}
+        onSessionNameChange={actions.setNewSessionName}
+        onCancel={actions.closeNewSessionDialog}
+        onConfirm={handleConfirmNewSession}
+      />
     </div>
   );
 }

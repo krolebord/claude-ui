@@ -2,6 +2,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import {
   type TerminalSessionService,
   type TerminalSessionState,
+  buildProjectSessionGroups,
   getTerminalSessionService,
 } from "./terminal-session-service";
 
@@ -32,3 +33,5 @@ export function useTerminalSession(): UseTerminalSessionResult {
     actions: service.actions,
   };
 }
+
+export { buildProjectSessionGroups };

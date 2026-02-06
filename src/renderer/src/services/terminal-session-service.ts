@@ -6,10 +6,32 @@ import type {
   SessionId,
 } from "@shared/claude-types";
 
+const PROJECT_STORAGE_KEY = "claude-ui.projects.v1";
+
+export interface SidebarProject {
+  path: string;
+  collapsed: boolean;
+}
+
+export interface NewSessionDialogState {
+  open: boolean;
+  projectPath: string | null;
+  sessionName: string;
+}
+
+export interface ProjectSessionGroup {
+  path: string;
+  name: string;
+  collapsed: boolean;
+  fromProjectList: boolean;
+  sessions: ClaudeSessionSnapshot[];
+}
+
 export interface TerminalSessionState {
-  folderPath: string;
+  projects: SidebarProject[];
   sessionsById: Record<SessionId, ClaudeSessionSnapshot>;
   activeSessionId: SessionId | null;
+  newSessionDialog: NewSessionDialogState;
   isSelecting: boolean;
   isStarting: boolean;
   isStopping: boolean;
@@ -18,16 +40,191 @@ export interface TerminalSessionState {
 
 type Listener = () => void;
 
+interface StorageLike {
+  getItem: (key: string) => string | null;
+  setItem: (key: string, value: string) => void;
+}
+
+interface TerminalSessionServiceOptions {
+  storage?: StorageLike | null;
+}
+
+function resolveStorage(): StorageLike | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return window.localStorage;
+}
+
+function parseProjects(rawProjects: string | null): SidebarProject[] {
+  if (!rawProjects) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(rawProjects);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed
+      .map((entry) => {
+        if (!entry || typeof entry !== "object") {
+          return null;
+        }
+
+        const candidate = entry as {
+          path?: unknown;
+          collapsed?: unknown;
+        };
+
+        if (typeof candidate.path !== "string") {
+          return null;
+        }
+
+        const path = candidate.path.trim();
+        if (!path) {
+          return null;
+        }
+
+        return {
+          path,
+          collapsed: candidate.collapsed === true,
+        } satisfies SidebarProject;
+      })
+      .filter((entry): entry is SidebarProject => entry !== null);
+  } catch {
+    return [];
+  }
+}
+
+function toTimestamp(value: string): number {
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+function compareSessionsByCreatedAtDesc(
+  a: ClaudeSessionSnapshot,
+  b: ClaudeSessionSnapshot,
+): number {
+  return toTimestamp(b.createdAt) - toTimestamp(a.createdAt);
+}
+
+function getProjectNameFromPath(path: string): string {
+  const normalized = path.replace(/\\/g, "/");
+  const segments = normalized.split("/").filter(Boolean);
+
+  return segments[segments.length - 1] ?? path;
+}
+
+export function getSessionTitle(session: ClaudeSessionSnapshot): string {
+  const sessionName = session.sessionName?.trim() ?? "";
+  if (sessionName.length > 0) {
+    return sessionName;
+  }
+
+  return `Session ${session.sessionId.slice(0, 8)}`;
+}
+
+export type SessionSidebarIndicatorState =
+  | "idle"
+  | "pending"
+  | "running"
+  | "awaiting_approval"
+  | "awaiting_user_response"
+  | "stopped"
+  | "error";
+
+export function getSessionSidebarIndicatorState(
+  session: ClaudeSessionSnapshot,
+): SessionSidebarIndicatorState {
+  if (session.status === "error") {
+    return "error";
+  }
+
+  if (session.status === "stopped") {
+    return "stopped";
+  }
+
+  if (session.activityState === "awaiting_approval") {
+    return "awaiting_approval";
+  }
+
+  if (session.activityState === "awaiting_user_response") {
+    return "awaiting_user_response";
+  }
+
+  if (
+    session.status === "starting" ||
+    session.activityState === "working"
+  ) {
+    return "pending";
+  }
+
+  if (session.status === "running") {
+    return "running";
+  }
+
+  return "idle";
+}
+
+export function buildProjectSessionGroups(
+  state: Pick<TerminalSessionState, "projects" | "sessionsById">,
+): ProjectSessionGroup[] {
+  const allSessions = Object.values(state.sessionsById).sort(
+    compareSessionsByCreatedAtDesc,
+  );
+
+  const sessionsByPath = new Map<string, ClaudeSessionSnapshot[]>();
+  for (const session of allSessions) {
+    const bucket = sessionsByPath.get(session.cwd);
+    if (bucket) {
+      bucket.push(session);
+      continue;
+    }
+
+    sessionsByPath.set(session.cwd, [session]);
+  }
+
+  const groups: ProjectSessionGroup[] = [];
+  const seenPaths = new Set<string>();
+
+  for (const project of state.projects) {
+    groups.push({
+      path: project.path,
+      name: getProjectNameFromPath(project.path),
+      collapsed: project.collapsed,
+      fromProjectList: true,
+      sessions: sessionsByPath.get(project.path) ?? [],
+    });
+    seenPaths.add(project.path);
+  }
+
+  for (const [path, sessions] of sessionsByPath.entries()) {
+    if (seenPaths.has(path)) {
+      continue;
+    }
+
+    groups.push({
+      path,
+      name: getProjectNameFromPath(path),
+      collapsed: false,
+      fromProjectList: false,
+      sessions,
+    });
+  }
+
+  return groups;
+}
+
 export class TerminalSessionService {
-  private state: TerminalSessionState = {
-    folderPath: "",
-    sessionsById: {},
-    activeSessionId: null,
-    isSelecting: false,
-    isStarting: false,
-    isStopping: false,
-    errorMessage: "",
-  };
+  private readonly storage: StorageLike | null;
+
+  private state: TerminalSessionState;
+  private sessionOutputById: Record<SessionId, string> = {};
+  private renderedSessionId: SessionId | null = null;
+  private renderedOutputLength = 0;
 
   private terminal: TerminalPaneHandle | null = null;
   private listeners = new Set<Listener>();
@@ -36,8 +233,26 @@ export class TerminalSessionService {
   private subscribers = 0;
   private refreshInFlight: Promise<void> | null = null;
 
+  constructor(options?: TerminalSessionServiceOptions) {
+    this.storage = options?.storage ?? resolveStorage();
+    this.state = {
+      projects: this.readProjects(),
+      sessionsById: {},
+      activeSessionId: null,
+      newSessionDialog: {
+        open: false,
+        projectPath: null,
+        sessionName: "",
+      },
+      isSelecting: false,
+      isStarting: false,
+      isStopping: false,
+      errorMessage: "",
+    };
+  }
+
   readonly actions = {
-    selectFolder: async (): Promise<void> => {
+    addProject: async (): Promise<void> => {
       if (this.state.isSelecting) {
         return;
       }
@@ -49,12 +264,34 @@ export class TerminalSessionService {
 
       try {
         const selectedPath = await claudeIpc.selectFolder();
-        if (selectedPath) {
-          this.updateState((prev) => ({
-            ...prev,
-            folderPath: selectedPath,
-          }));
+        if (!selectedPath) {
+          return;
         }
+
+        const normalizedPath = selectedPath.trim();
+        if (!normalizedPath) {
+          return;
+        }
+
+        if (
+          this.state.projects.some((project) => project.path === normalizedPath)
+        ) {
+          return;
+        }
+
+        const nextProjects = [
+          ...this.state.projects,
+          {
+            path: normalizedPath,
+            collapsed: false,
+          },
+        ];
+
+        this.persistProjects(nextProjects);
+        this.updateState((prev) => ({
+          ...prev,
+          projects: nextProjects,
+        }));
       } finally {
         this.updateState((prev) => ({
           ...prev,
@@ -62,62 +299,86 @@ export class TerminalSessionService {
         }));
       }
     },
-    startSession: async (input: {
+    toggleProjectCollapsed: (projectPath: string): void => {
+      let didToggle = false;
+
+      const nextProjects = this.state.projects.map((project) => {
+        if (project.path !== projectPath) {
+          return project;
+        }
+
+        didToggle = true;
+        return {
+          ...project,
+          collapsed: !project.collapsed,
+        };
+      });
+
+      if (!didToggle) {
+        return;
+      }
+
+      this.persistProjects(nextProjects);
+      this.updateState((prev) => ({
+        ...prev,
+        projects: nextProjects,
+      }));
+    },
+    openNewSessionDialog: (projectPath: string): void => {
+      this.updateState((prev) => ({
+        ...prev,
+        newSessionDialog: {
+          open: true,
+          projectPath,
+          sessionName: "",
+        },
+      }));
+    },
+    closeNewSessionDialog: (): void => {
+      this.updateState((prev) => ({
+        ...prev,
+        newSessionDialog: {
+          open: false,
+          projectPath: null,
+          sessionName: "",
+        },
+      }));
+    },
+    setNewSessionName: (value: string): void => {
+      this.updateState((prev) => ({
+        ...prev,
+        newSessionDialog: {
+          ...prev.newSessionDialog,
+          sessionName: value,
+        },
+      }));
+    },
+    confirmNewSession: async (input: {
       cols: number;
       rows: number;
     }): Promise<void> => {
-      if (this.state.isStarting) {
+      const projectPath = this.state.newSessionDialog.projectPath?.trim() ?? "";
+      if (!projectPath || this.state.isStarting) {
         return;
       }
 
-      const cwd = this.state.folderPath.trim();
-      if (!cwd) {
-        return;
-      }
+      const sessionName = this.state.newSessionDialog.sessionName;
 
       this.updateState((prev) => ({
         ...prev,
-        isStarting: true,
-        errorMessage: "",
+        newSessionDialog: {
+          open: false,
+          projectPath: null,
+          sessionName: "",
+        },
       }));
 
-      try {
-        const active = this.getActiveSession();
-        if (
-          active &&
-          (active.status === "running" || active.status === "starting")
-        ) {
-          await claudeIpc.stopClaudeSession({ sessionId: active.sessionId });
-        }
-
-        const result = await claudeIpc.startClaudeSession({
-          cwd,
-          cols: input.cols,
-          rows: input.rows,
-        });
-
-        if (!result.ok) {
-          this.updateState((prev) => ({
-            ...prev,
-            errorMessage: result.message,
-          }));
-          return;
-        }
-
-        this.applySnapshot(result.snapshot);
-        this.terminal?.clear();
-      } catch (error) {
-        this.updateState((prev) => ({
-          ...prev,
-          errorMessage:
-            error instanceof Error ? error.message : "Failed to start session.",
-        }));
-      } finally {
-        this.updateState((prev) => ({
-          ...prev,
-          isStarting: false,
-        }));
-      }
+      await this.startSessionInProject({
+        cwd: projectPath,
+        sessionName,
+        cols: input.cols,
+        rows: input.rows,
+      });
     },
     stopActiveSession: async (): Promise<void> => {
       if (this.state.isStopping) {
@@ -149,12 +410,55 @@ export class TerminalSessionService {
         }));
       }
     },
+    stopSession: async (sessionId: SessionId): Promise<void> => {
+      if (!(sessionId in this.state.sessionsById)) {
+        return;
+      }
+
+      try {
+        await claudeIpc.stopClaudeSession({ sessionId });
+      } catch (error) {
+        this.updateState((prev) => ({
+          ...prev,
+          errorMessage:
+            error instanceof Error ? error.message : "Failed to stop session.",
+        }));
+      }
+    },
+    deleteSession: async (sessionId: SessionId): Promise<void> => {
+      if (!(sessionId in this.state.sessionsById)) {
+        return;
+      }
+
+      try {
+        await claudeIpc.deleteClaudeSession({ sessionId });
+        await this.refreshSessions();
+      } catch (error) {
+        this.updateState((prev) => ({
+          ...prev,
+          errorMessage:
+            error instanceof Error
+              ? error.message
+              : "Failed to delete session.",
+        }));
+      }
+    },
     setActiveSession: async (sessionId: SessionId): Promise<void> => {
       if (this.state.activeSessionId === sessionId) {
         return;
       }
 
-      await claudeIpc.setActiveSession({ sessionId });
+      try {
+        await claudeIpc.setActiveSession({ sessionId });
+      } catch (error) {
+        this.updateState((prev) => ({
+          ...prev,
+          errorMessage:
+            error instanceof Error
+              ? error.message
+              : "Failed to switch session.",
+        }));
+      }
     },
     writeToActiveSession: (data: string): void => {
       const sessionId = this.state.activeSessionId;
@@ -174,6 +478,7 @@ export class TerminalSessionService {
     },
     attachTerminal: (handle: TerminalPaneHandle | null): void => {
       this.terminal = handle;
+      this.renderActiveSessionOutput();
     },
   };
 
@@ -203,6 +508,52 @@ export class TerminalSessionService {
     }
   }
 
+  private async startSessionInProject(input: {
+    cwd: string;
+    sessionName: string;
+    cols: number;
+    rows: number;
+  }): Promise<void> {
+    this.updateState((prev) => ({
+      ...prev,
+      isStarting: true,
+      errorMessage: "",
+    }));
+
+    try {
+      const normalizedSessionName = input.sessionName.trim();
+      const result = await claudeIpc.startClaudeSession({
+        cwd: input.cwd,
+        sessionName:
+          normalizedSessionName.length > 0 ? normalizedSessionName : null,
+        cols: input.cols,
+        rows: input.rows,
+      });
+
+      if (!result.ok) {
+        this.updateState((prev) => ({
+          ...prev,
+          errorMessage: result.message,
+        }));
+        return;
+      }
+
+      this.applySnapshot(result.snapshot);
+      this.terminal?.clear();
+    } catch (error) {
+      this.updateState((prev) => ({
+        ...prev,
+        errorMessage:
+          error instanceof Error ? error.message : "Failed to start session.",
+      }));
+    } finally {
+      this.updateState((prev) => ({
+        ...prev,
+        isStarting: false,
+      }));
+    }
+  }
+
   private async initialize(): Promise<void> {
     if (this.initialized) {
       return;
@@ -212,8 +563,12 @@ export class TerminalSessionService {
 
     this.unsubscribers = [
       claudeIpc.onClaudeSessionData((payload) => {
+        this.appendSessionOutput(payload.sessionId, payload.chunk);
         if (payload.sessionId === this.state.activeSessionId) {
           this.terminal?.write(payload.chunk);
+          this.renderedSessionId = payload.sessionId;
+          this.renderedOutputLength =
+            this.sessionOutputById[payload.sessionId]?.length ?? 0;
         }
       }),
       claudeIpc.onClaudeSessionExit((payload) => {
@@ -277,10 +632,13 @@ export class TerminalSessionService {
         }
       }),
       claudeIpc.onClaudeActiveSessionChanged((payload) => {
-        this.updateState((prev) => ({
-          ...prev,
-          activeSessionId: payload.activeSessionId,
-        }));
+        if (this.state.activeSessionId !== payload.activeSessionId) {
+          this.updateState((prev) => ({
+            ...prev,
+            activeSessionId: payload.activeSessionId,
+          }));
+          this.renderActiveSessionOutput(true);
+        }
 
         if (
           payload.activeSessionId &&
@@ -315,6 +673,7 @@ export class TerminalSessionService {
   }
 
   private applySnapshot(snapshot: ClaudeSessionsSnapshot): void {
+    const previousActiveSessionId = this.state.activeSessionId;
     const sessionsById = snapshot.sessions.reduce<
       Record<SessionId, ClaudeSessionSnapshot>
     >((acc, session) => {
@@ -322,11 +681,19 @@ export class TerminalSessionService {
       return acc;
     }, {});
 
+    this.pruneSessionOutput(
+      snapshot.sessions.map((session) => session.sessionId),
+    );
+
     this.updateState((prev) => ({
       ...prev,
       sessionsById,
       activeSessionId: snapshot.activeSessionId,
     }));
+
+    if (previousActiveSessionId !== snapshot.activeSessionId) {
+      this.renderActiveSessionOutput();
+    }
   }
 
   private updateSession(
@@ -349,15 +716,6 @@ export class TerminalSessionService {
     }));
 
     return true;
-  }
-
-  private getActiveSession(): ClaudeSessionSnapshot | null {
-    const sessionId = this.state.activeSessionId;
-    if (!sessionId) {
-      return null;
-    }
-
-    return this.state.sessionsById[sessionId] ?? null;
   }
 
   private updateState(
@@ -387,6 +745,65 @@ export class TerminalSessionService {
     this.initialized = false;
     this.refreshInFlight = null;
     this.terminal = null;
+    this.renderedSessionId = null;
+    this.renderedOutputLength = 0;
+  }
+
+  private readProjects(): SidebarProject[] {
+    return parseProjects(this.storage?.getItem(PROJECT_STORAGE_KEY) ?? null);
+  }
+
+  private persistProjects(projects: SidebarProject[]): void {
+    this.storage?.setItem(PROJECT_STORAGE_KEY, JSON.stringify(projects));
+  }
+
+  private appendSessionOutput(sessionId: SessionId, chunk: string): void {
+    const previous = this.sessionOutputById[sessionId] ?? "";
+    this.sessionOutputById = {
+      ...this.sessionOutputById,
+      [sessionId]: previous + chunk,
+    };
+  }
+
+  private pruneSessionOutput(sessionIds: SessionId[]): void {
+    const nextOutputById: Record<SessionId, string> = {};
+
+    for (const sessionId of sessionIds) {
+      nextOutputById[sessionId] = this.sessionOutputById[sessionId] ?? "";
+    }
+
+    this.sessionOutputById = nextOutputById;
+  }
+
+  private renderActiveSessionOutput(force = false): void {
+    if (!this.terminal) {
+      return;
+    }
+
+    const activeSessionId = this.state.activeSessionId;
+    const output = activeSessionId
+      ? (this.sessionOutputById[activeSessionId] ?? "")
+      : "";
+
+    if (
+      !force &&
+      this.renderedSessionId === activeSessionId &&
+      this.renderedOutputLength === output.length
+    ) {
+      return;
+    }
+
+    this.terminal.clear();
+
+    if (!activeSessionId || !output) {
+      this.renderedSessionId = activeSessionId;
+      this.renderedOutputLength = output.length;
+      return;
+    }
+
+    this.terminal.write(output);
+    this.renderedSessionId = activeSessionId;
+    this.renderedOutputLength = output.length;
   }
 }
 

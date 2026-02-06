@@ -24,7 +24,7 @@ interface TerminalPaneProps {
 
 function TerminalPaneComponent(
   { className, onInput, onResize }: TerminalPaneProps,
-  ref: ForwardedRef<TerminalPaneHandle>,
+  ref: ForwardedRef<TerminalPaneHandle>
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -74,6 +74,22 @@ function TerminalPaneComponent(
     terminal.loadAddon(fitAddon);
     terminal.open(container);
     terminalRef.current = terminal;
+
+    terminal.attachCustomKeyEventHandler((event) => {
+      if (
+        event.type === "keydown" &&
+        event.key === "Enter" &&
+        event.shiftKey &&
+        !event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey
+      ) {
+        onInputRef.current("\\");
+        return false;
+      }
+
+      return true;
+    });
 
     const fitAndNotify = () => {
       if (!container.clientWidth || !container.clientHeight) {

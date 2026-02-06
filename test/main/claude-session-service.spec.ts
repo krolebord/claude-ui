@@ -139,6 +139,26 @@ describe("ClaudeSessionService", () => {
     expect(second.sessionId).toBe("session-2");
     expect(second.snapshot.sessions).toHaveLength(2);
     expect(second.snapshot.activeSessionId).toBe("session-2");
+    expect(second.snapshot.sessions[0]?.sessionName).toBeNull();
+    expect(second.snapshot.sessions[1]?.sessionName).toBeNull();
+  });
+
+  it("stores session name when provided", async () => {
+    const harness = createHarness();
+
+    const result = await harness.service.startSession({
+      ...START_INPUT,
+      sessionName: "Refactor terminal service",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.snapshot.sessions[0]?.sessionName).toBe(
+      "Refactor terminal service",
+    );
   });
 
   it("stops only the requested session", async () => {
@@ -151,6 +171,28 @@ describe("ClaudeSessionService", () => {
 
     expect(harness.managerMocks[0]?.stop).toHaveBeenCalledTimes(1);
     expect(harness.managerMocks[1]?.stop).not.toHaveBeenCalled();
+  });
+
+  it("deletes only the requested session and clears active when needed", async () => {
+    const harness = createHarness();
+
+    await harness.service.startSession(START_INPUT);
+    await harness.service.startSession(START_INPUT);
+
+    await harness.service.deleteSession({ sessionId: "session-2" });
+
+    expect(harness.managerMocks[1]?.stop).toHaveBeenCalledTimes(1);
+    expect(harness.managerMocks[1]?.dispose).toHaveBeenCalledTimes(1);
+    expect(harness.monitorMocks[1]?.stopMonitoring).toHaveBeenCalledTimes(1);
+    expect(harness.managerMocks[0]?.stop).not.toHaveBeenCalled();
+
+    const snapshot = harness.service.getSessionsSnapshot();
+    expect(snapshot.sessions).toHaveLength(1);
+    expect(snapshot.sessions[0]?.sessionId).toBe("session-1");
+    expect(snapshot.activeSessionId).toBeNull();
+    expect(harness.eventLog.activeChanged.at(-1)).toEqual({
+      activeSessionId: null,
+    });
   });
 
   it("emits session-scoped events with the correct sessionId", async () => {
