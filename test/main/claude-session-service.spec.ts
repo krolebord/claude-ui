@@ -161,6 +161,23 @@ describe("ClaudeSessionService", () => {
     );
   });
 
+  it("passes dangerouslySkipPermissions to session start", async () => {
+    const harness = createHarness();
+
+    const result = await harness.service.startSession({
+      ...START_INPUT,
+      dangerouslySkipPermissions: true,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(harness.managerMocks[0]?.start).toHaveBeenCalledWith(
+      expect.objectContaining({
+        dangerouslySkipPermissions: true,
+      }),
+      expect.any(Object),
+    );
+  });
+
   it("stops only the requested session", async () => {
     const harness = createHarness();
 

@@ -17,6 +17,7 @@ export interface NewSessionDialogState {
   open: boolean;
   projectPath: string | null;
   sessionName: string;
+  dangerouslySkipPermissions: boolean;
 }
 
 export interface ProjectSessionGroup {
@@ -155,10 +156,7 @@ export function getSessionSidebarIndicatorState(
     return "awaiting_user_response";
   }
 
-  if (
-    session.status === "starting" ||
-    session.activityState === "working"
-  ) {
+  if (session.status === "starting" || session.activityState === "working") {
     return "pending";
   }
 
@@ -243,6 +241,7 @@ export class TerminalSessionService {
         open: false,
         projectPath: null,
         sessionName: "",
+        dangerouslySkipPermissions: false,
       },
       isSelecting: false,
       isStarting: false,
@@ -331,6 +330,7 @@ export class TerminalSessionService {
           open: true,
           projectPath,
           sessionName: "",
+          dangerouslySkipPermissions: false,
         },
       }));
     },
@@ -341,6 +341,7 @@ export class TerminalSessionService {
           open: false,
           projectPath: null,
           sessionName: "",
+          dangerouslySkipPermissions: false,
         },
       }));
     },
@@ -350,6 +351,15 @@ export class TerminalSessionService {
         newSessionDialog: {
           ...prev.newSessionDialog,
           sessionName: value,
+        },
+      }));
+    },
+    setNewSessionDangerouslySkipPermissions: (value: boolean): void => {
+      this.updateState((prev) => ({
+        ...prev,
+        newSessionDialog: {
+          ...prev.newSessionDialog,
+          dangerouslySkipPermissions: value,
         },
       }));
     },
@@ -363,6 +373,8 @@ export class TerminalSessionService {
       }
 
       const sessionName = this.state.newSessionDialog.sessionName;
+      const dangerouslySkipPermissions =
+        this.state.newSessionDialog.dangerouslySkipPermissions;
 
       this.updateState((prev) => ({
         ...prev,
@@ -370,12 +382,14 @@ export class TerminalSessionService {
           open: false,
           projectPath: null,
           sessionName: "",
+          dangerouslySkipPermissions: false,
         },
       }));
 
       await this.startSessionInProject({
         cwd: projectPath,
         sessionName,
+        dangerouslySkipPermissions,
         cols: input.cols,
         rows: input.rows,
       });
@@ -511,6 +525,7 @@ export class TerminalSessionService {
   private async startSessionInProject(input: {
     cwd: string;
     sessionName: string;
+    dangerouslySkipPermissions: boolean;
     cols: number;
     rows: number;
   }): Promise<void> {
@@ -526,6 +541,7 @@ export class TerminalSessionService {
         cwd: input.cwd,
         sessionName:
           normalizedSessionName.length > 0 ? normalizedSessionName : null,
+        dangerouslySkipPermissions: input.dangerouslySkipPermissions,
         cols: input.cols,
         rows: input.rows,
       });

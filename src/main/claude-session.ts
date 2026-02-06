@@ -74,7 +74,10 @@ export class ClaudeSessionManager {
         : 24;
 
     try {
-      const launch = this.getInteractiveLaunchCommand(launchOptions?.pluginDir);
+      const launch = this.getInteractiveLaunchCommand(
+        launchOptions?.pluginDir,
+        input.dangerouslySkipPermissions === true,
+      );
       const pty = spawn(launch.file, launch.args, {
         name: "xterm-256color",
         cols,
@@ -240,19 +243,31 @@ export class ClaudeSessionManager {
 
   private getInteractiveLaunchCommand(
     pluginDir?: string | null,
+    dangerouslySkipPermissions = false,
   ): LaunchCommand {
+    const skipPermissionsArgs = dangerouslySkipPermissions
+      ? " --dangerously-skip-permissions"
+      : "";
     const pluginArgs = pluginDir
       ? ` --plugin-dir ${this.shellQuote(pluginDir)}`
       : "";
 
     if (process.platform === "win32") {
       const shell = process.env.COMSPEC ?? "cmd.exe";
+      const winSkipPermissionsArgs = dangerouslySkipPermissions
+        ? " --dangerously-skip-permissions"
+        : "";
       const winPluginArgs = pluginDir
         ? ` --plugin-dir "${pluginDir.replace(/\"/g, '""')}"`
         : "";
       return {
         file: shell,
-        args: ["/d", "/s", "/c", `claude${winPluginArgs}`],
+        args: [
+          "/d",
+          "/s",
+          "/c",
+          `claude${winSkipPermissionsArgs}${winPluginArgs}`,
+        ],
       };
     }
 
@@ -262,7 +277,7 @@ export class ClaudeSessionManager {
 
     return {
       file: shell,
-      args: ["-ilc", `exec claude${pluginArgs}`],
+      args: ["-ilc", `exec claude${skipPermissionsArgs}${pluginArgs}`],
     };
   }
 

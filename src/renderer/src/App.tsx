@@ -111,8 +111,14 @@ function App() {
         open={state.newSessionDialog.open}
         projectPath={state.newSessionDialog.projectPath}
         sessionName={state.newSessionDialog.sessionName}
+        dangerouslySkipPermissions={
+          state.newSessionDialog.dangerouslySkipPermissions
+        }
         isStarting={state.isStarting}
         onSessionNameChange={actions.setNewSessionName}
+        onDangerouslySkipPermissionsChange={
+          actions.setNewSessionDangerouslySkipPermissions
+        }
         onCancel={actions.closeNewSessionDialog}
         onConfirm={handleConfirmNewSession}
       />

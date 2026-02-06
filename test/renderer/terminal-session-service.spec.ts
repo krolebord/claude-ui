@@ -312,6 +312,7 @@ describe("TerminalSessionService", () => {
       open: true,
       projectPath: "/workspace",
       sessionName: "",
+      dangerouslySkipPermissions: false,
     });
 
     service.actions.setNewSessionName("Refactor runner");
@@ -324,6 +325,7 @@ describe("TerminalSessionService", () => {
       open: false,
       projectPath: null,
       sessionName: "",
+      dangerouslySkipPermissions: false,
     });
   });
 
@@ -374,12 +376,48 @@ describe("TerminalSessionService", () => {
     expect(ipcHarness.claudeIpc.startClaudeSession).toHaveBeenCalledWith({
       cwd: "/workspace",
       sessionName: "Refactor runner",
+      dangerouslySkipPermissions: false,
       cols: 80,
       rows: 24,
     });
 
     expect(service.getSnapshot().activeSessionId).toBe("session-3");
     service.release();
+  });
+
+  it("passes dangerously-skip-permissions when selected in new-session dialog", async () => {
+    ipcHarness.claudeIpc.startClaudeSession.mockResolvedValue({
+      ok: true,
+      sessionId: "session-3",
+      snapshot: {
+        activeSessionId: "session-3",
+        sessions: [
+          {
+            sessionId: "session-3",
+            cwd: "/workspace",
+            sessionName: null,
+            status: "running",
+            activityState: "working",
+            activityWarning: null,
+            lastError: null,
+            createdAt: "2026-02-06T00:00:02.000Z",
+          },
+        ],
+      },
+    });
+
+    const service = new TerminalSessionService();
+    service.actions.openNewSessionDialog("/workspace");
+    service.actions.setNewSessionDangerouslySkipPermissions(true);
+    await service.actions.confirmNewSession({ cols: 80, rows: 24 });
+
+    expect(ipcHarness.claudeIpc.startClaudeSession).toHaveBeenCalledWith({
+      cwd: "/workspace",
+      sessionName: null,
+      dangerouslySkipPermissions: true,
+      cols: 80,
+      rows: 24,
+    });
   });
 
   it("sorts sessions newest-first inside each project group", () => {

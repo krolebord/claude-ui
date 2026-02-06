@@ -6,8 +6,10 @@ interface NewSessionDialogProps {
   open: boolean;
   projectPath: string | null;
   sessionName: string;
+  dangerouslySkipPermissions: boolean;
   isStarting: boolean;
   onSessionNameChange: (value: string) => void;
+  onDangerouslySkipPermissionsChange: (value: boolean) => void;
   onCancel: () => void;
   onConfirm: () => void;
 }
@@ -23,8 +25,10 @@ export function NewSessionDialog({
   open,
   projectPath,
   sessionName,
+  dangerouslySkipPermissions,
   isStarting,
   onSessionNameChange,
+  onDangerouslySkipPermissionsChange,
   onCancel,
   onConfirm,
 }: NewSessionDialogProps) {
@@ -95,6 +99,22 @@ export function NewSessionDialog({
               className="border-white/15 bg-white/5 text-zinc-100 placeholder:text-zinc-500"
             />
           </div>
+
+          <label
+            htmlFor="new-session-dangerously-skip-permissions"
+            className="flex cursor-pointer items-center gap-2 text-sm text-zinc-300"
+          >
+            <input
+              id="new-session-dangerously-skip-permissions"
+              type="checkbox"
+              checked={dangerouslySkipPermissions}
+              onChange={(event) => {
+                onDangerouslySkipPermissionsChange(event.target.checked);
+              }}
+              className="size-4 rounded border-white/20 bg-white/5 accent-white"
+            />
+            <span>Create with --dangerously-skip-permissions</span>
+          </label>
 
           <div className="flex justify-end gap-2">
             <button

@@ -54,6 +54,7 @@ export interface StartClaudeSessionInput {
   cols: number;
   rows: number;
   sessionName?: string | null;
+  dangerouslySkipPermissions?: boolean;
 }
 
 export type StartClaudeSessionResult =
