@@ -1,7 +1,9 @@
 import type {
   ClaudeActivityState,
   ClaudeProject,
+  ClaudeSessionSnapshot,
   ClaudeSessionStatus,
+  SessionId,
   StartClaudeSessionInput,
 } from "../../src/shared/claude-types";
 import { describe, expect, it, vi } from "vitest";
@@ -34,7 +36,13 @@ interface MockActivityMonitor {
   stopMonitoring: ReturnType<typeof vi.fn>;
 }
 
-function createHarness() {
+function createHarness(options?: {
+  initialProjects?: ClaudeProject[];
+  initialSessionSnapshotState?: {
+    sessions: ClaudeSessionSnapshot[];
+    activeSessionId: SessionId | null;
+  };
+}) {
   const managerMocks: MockSessionManager[] = [];
   const monitorMocks: MockActivityMonitor[] = [];
   const eventLog = {
@@ -53,13 +61,35 @@ function createHarness() {
 
   const sessionIds = ["session-1", "session-2", "session-3"];
   let sessionIdIndex = 0;
-  const storedProjects: ClaudeProject[] = [];
+  const storedProjects: ClaudeProject[] = [...(options?.initialProjects ?? [])];
   const projectStore = {
     readProjects: vi.fn(() => storedProjects),
     writeProjects: vi.fn((projects: ClaudeProject[]) => {
       storedProjects.length = 0;
       storedProjects.push(...projects);
     }),
+  };
+  const storedSessionSnapshotState = {
+    sessions: [
+      ...(options?.initialSessionSnapshotState?.sessions ?? []),
+    ] as ClaudeSessionSnapshot[],
+    activeSessionId:
+      options?.initialSessionSnapshotState?.activeSessionId ?? null,
+  };
+  const sessionSnapshotStore = {
+    readSessionSnapshotState: vi.fn(() => ({
+      sessions: storedSessionSnapshotState.sessions,
+      activeSessionId: storedSessionSnapshotState.activeSessionId,
+    })),
+    writeSessionSnapshotState: vi.fn(
+      (state: {
+        sessions: ClaudeSessionSnapshot[];
+        activeSessionId: SessionId | null;
+      }) => {
+        storedSessionSnapshotState.sessions = [...state.sessions];
+        storedSessionSnapshotState.activeSessionId = state.activeSessionId;
+      },
+    ),
   };
 
   const service = new ClaudeSessionService({
@@ -120,6 +150,7 @@ function createHarness() {
     sessionIdFactory: () => sessionIds[sessionIdIndex++] ?? `session-${sessionIdIndex}`,
     nowFactory: () => "2026-02-06T00:00:00.000Z",
     projectStore,
+    sessionSnapshotStore,
   });
 
   return {
@@ -128,7 +159,9 @@ function createHarness() {
     monitorMocks,
     eventLog,
     projectStore,
+    sessionSnapshotStore,
     storedProjects,
+    storedSessionSnapshotState,
   };
 }
 
@@ -206,6 +239,115 @@ describe("ClaudeSessionService", () => {
     expect(harness.projectStore.writeProjects).not.toHaveBeenCalled();
   });
 
+  it("hydrates persisted sessions and marks them as stopped", () => {
+    const harness = createHarness({
+      initialSessionSnapshotState: {
+        sessions: [
+          {
+            sessionId: "session-1",
+            cwd: "/workspace",
+            sessionName: "Recovered Session",
+            status: "running",
+            activityState: "working",
+            activityWarning: null,
+            lastError: null,
+            createdAt: "2026-02-05T00:00:00.000Z",
+          },
+        ],
+        activeSessionId: "session-1",
+      },
+    });
+
+    const snapshot = harness.service.getSessionsSnapshot();
+    expect(snapshot.activeSessionId).toBe("session-1");
+    expect(snapshot.sessions).toEqual([
+      {
+        sessionId: "session-1",
+        cwd: "/workspace",
+        sessionName: "Recovered Session",
+        status: "stopped",
+        activityState: "idle",
+        activityWarning: null,
+        lastError: null,
+        createdAt: "2026-02-05T00:00:00.000Z",
+      },
+    ]);
+  });
+
+  it("avoids session ID collisions with hydrated sessions", async () => {
+    const harness = createHarness({
+      initialSessionSnapshotState: {
+        sessions: [
+          {
+            sessionId: "session-1",
+            cwd: "/workspace",
+            sessionName: "Recovered Session",
+            status: "stopped",
+            activityState: "idle",
+            activityWarning: null,
+            lastError: null,
+            createdAt: "2026-02-05T00:00:00.000Z",
+          },
+        ],
+        activeSessionId: "session-1",
+      },
+    });
+
+    const result = await harness.service.startSession(START_INPUT);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.sessionId).toBe("session-2");
+    const snapshot = harness.service.getSessionsSnapshot();
+    expect(snapshot.sessions.map((session) => session.sessionId)).toEqual([
+      "session-1",
+      "session-2",
+    ]);
+  });
+
+  it("resumes hydrated sessions after relaunch", async () => {
+    const harness = createHarness({
+      initialSessionSnapshotState: {
+        sessions: [
+          {
+            sessionId: "session-1",
+            cwd: "/workspace",
+            sessionName: "Recovered Session",
+            status: "stopped",
+            activityState: "idle",
+            activityWarning: null,
+            lastError: null,
+            createdAt: "2026-02-05T00:00:00.000Z",
+          },
+        ],
+        activeSessionId: "session-1",
+      },
+    });
+
+    const result = await harness.service.startSession({
+      ...START_INPUT,
+      resumeSessionId: "session-1",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.sessionId).toBe("session-1");
+    expect(harness.managerMocks).toHaveLength(1);
+    expect(harness.managerMocks[0]?.start).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cwd: "/workspace",
+      }),
+      expect.objectContaining({
+        resumeSessionId: "session-1",
+      }),
+    );
+  });
+
   it("creates distinct session IDs and keeps snapshots", async () => {
     const harness = createHarness();
 
@@ -225,6 +367,8 @@ describe("ClaudeSessionService", () => {
     expect(second.snapshot.activeSessionId).toBe("session-2");
     expect(second.snapshot.sessions[0]?.sessionName).toBeNull();
     expect(second.snapshot.sessions[1]?.sessionName).toBeNull();
+    expect(harness.storedSessionSnapshotState.sessions).toHaveLength(2);
+    expect(harness.storedSessionSnapshotState.activeSessionId).toBe("session-2");
   });
 
   it("stores session name when provided", async () => {
@@ -379,6 +523,8 @@ describe("ClaudeSessionService", () => {
     expect(snapshot.sessions).toHaveLength(1);
     expect(snapshot.sessions[0]?.sessionId).toBe("session-1");
     expect(snapshot.activeSessionId).toBeNull();
+    expect(harness.storedSessionSnapshotState.sessions).toHaveLength(1);
+    expect(harness.storedSessionSnapshotState.activeSessionId).toBeNull();
     expect(harness.eventLog.activeChanged.at(-1)).toEqual({
       activeSessionId: null,
     });
@@ -465,6 +611,9 @@ describe("ClaudeSessionService", () => {
 
     const snapshot = harness.service.getSessionsSnapshot();
     expect(snapshot.sessions[0]?.sessionName).toBe("Generated Title");
+    expect(harness.storedSessionSnapshotState.sessions[0]?.sessionName).toBe(
+      "Generated Title",
+    );
   });
 
   it("does not generate a title for sessions with explicit names", async () => {

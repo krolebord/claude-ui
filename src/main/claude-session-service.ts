@@ -32,6 +32,7 @@ import type {
 import { ClaudeActivityMonitor } from "./claude-activity-monitor";
 import type { ClaudeProjectStoreLike } from "./claude-project-store";
 import { ClaudeSessionManager } from "./claude-session";
+import type { ClaudeSessionSnapshotStoreLike } from "./claude-session-snapshot-store";
 import { generateSessionTitle } from "./generate-session-title";
 
 interface ClaudeSessionServiceCallbacks {
@@ -64,6 +65,7 @@ interface ClaudeSessionServiceOptions {
   nowFactory?: () => string;
   generateTitleFactory?: (prompt: string) => Promise<string>;
   projectStore?: ClaudeProjectStoreLike;
+  sessionSnapshotStore?: ClaudeSessionSnapshotStoreLike;
 }
 
 interface SessionManagerLike {
@@ -121,6 +123,7 @@ export class ClaudeSessionService {
     ClaudeSessionServiceOptions["generateTitleFactory"]
   >;
   private readonly projectStore: ClaudeProjectStoreLike;
+  private readonly sessionSnapshotStore: ClaudeSessionSnapshotStoreLike;
   private readonly sessions = new Map<SessionId, SessionRecord>();
   private projects: ClaudeProject[] = [];
   private activeSessionId: SessionId | null = null;
@@ -146,7 +149,16 @@ export class ClaudeSessionService {
       readProjects: () => [],
       writeProjects: () => undefined,
     };
+    this.sessionSnapshotStore = options.sessionSnapshotStore ?? {
+      readSessionSnapshotState: () => ({
+        sessions: [],
+        activeSessionId: null,
+      }),
+      writeSessionSnapshotState: () => undefined,
+    };
     this.projects = this.normalizeProjects(this.projectStore.readProjects());
+    this.hydratePersistedSessions();
+    this.persistSessionSnapshots();
   }
 
   getSessionsSnapshot(): ClaudeSessionsSnapshot {
@@ -236,18 +248,21 @@ export class ClaudeSessionService {
   async startSession(
     input: StartClaudeSessionInput,
   ): Promise<StartClaudeSessionResult> {
-    const resumeSessionId = this.normalizeResumeSessionId(input.resumeSessionId);
+    const resumeSessionId = this.normalizeResumeSessionId(
+      input.resumeSessionId,
+    );
     if (resumeSessionId) {
       return this.resumeStoppedSession(resumeSessionId, input);
     }
 
-    const sessionId = this.sessionIdFactory();
+    const sessionId = this.createUniqueSessionId();
     const record = this.createRecord(
       sessionId,
       input.cwd,
       this.normalizeSessionName(input.sessionName),
     );
     this.sessions.set(sessionId, record);
+    this.persistSessionSnapshots();
 
     try {
       const stateFilePath = await this.stateFileFactory();
@@ -579,6 +594,7 @@ export class ClaudeSessionService {
     }
 
     this.activeSessionId = sessionId;
+    this.persistSessionSnapshots();
     this.callbacks.emitActiveSessionChanged({
       activeSessionId: sessionId,
     });
@@ -590,6 +606,7 @@ export class ClaudeSessionService {
   ): void {
     if (this.sessions.get(sessionId) === record) {
       this.sessions.delete(sessionId);
+      this.persistSessionSnapshots();
     }
   }
 
@@ -602,9 +619,7 @@ export class ClaudeSessionService {
     return trimmed.length > 0 ? trimmed : null;
   }
 
-  private normalizeResumeSessionId(
-    sessionId?: SessionId,
-  ): SessionId | null {
+  private normalizeResumeSessionId(sessionId?: SessionId): SessionId | null {
     if (typeof sessionId !== "string") {
       return null;
     }
@@ -668,6 +683,7 @@ export class ClaudeSessionService {
         }
 
         record.sessionName = title;
+        this.persistSessionSnapshots();
         this.callbacks.emitSessionTitleChanged({
           sessionId: record.sessionId,
           title,
@@ -686,5 +702,77 @@ export class ClaudeSessionService {
     await writeFile(stateFilePath, "", "utf8");
 
     return stateFilePath;
+  }
+
+  private hydratePersistedSessions(): void {
+    const persisted = this.sessionSnapshotStore.readSessionSnapshotState();
+    const seenSessionIds = new Set<SessionId>();
+
+    for (const snapshot of persisted.sessions) {
+      const sessionId = this.normalizeResumeSessionId(snapshot.sessionId);
+      const cwd = this.normalizeProjectPath(snapshot.cwd);
+      if (!sessionId || !cwd || seenSessionIds.has(sessionId)) {
+        continue;
+      }
+
+      seenSessionIds.add(sessionId);
+
+      const record = this.createRecord(
+        sessionId,
+        cwd,
+        this.normalizeSessionName(snapshot.sessionName),
+      );
+
+      record.createdAt = this.normalizeCreatedAt(snapshot.createdAt);
+      record.status = "stopped";
+      record.activityState = "idle";
+      record.activityWarning = this.pluginWarning;
+      record.lastError = snapshot.lastError;
+      record.ready = true;
+      record.pendingEvents = [];
+
+      this.sessions.set(sessionId, record);
+    }
+
+    const normalizedActiveSessionId = this.normalizeResumeSessionId(
+      persisted.activeSessionId ?? undefined,
+    );
+    this.activeSessionId =
+      normalizedActiveSessionId && this.sessions.has(normalizedActiveSessionId)
+        ? normalizedActiveSessionId
+        : null;
+  }
+
+  private normalizeCreatedAt(createdAt: string): string {
+    const normalized = createdAt.trim();
+    return normalized.length > 0 ? normalized : this.nowFactory();
+  }
+
+  private createUniqueSessionId(): SessionId {
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const sessionId = this.normalizeResumeSessionId(this.sessionIdFactory());
+      if (sessionId && !this.sessions.has(sessionId)) {
+        return sessionId;
+      }
+    }
+
+    let fallbackSessionId = randomUUID();
+    while (this.sessions.has(fallbackSessionId)) {
+      fallbackSessionId = randomUUID();
+    }
+
+    return fallbackSessionId;
+  }
+
+  private persistSessionSnapshots(): void {
+    this.sessionSnapshotStore.writeSessionSnapshotState({
+      sessions: Array.from(this.sessions.values()).map((record) =>
+        this.toSnapshot(record),
+      ),
+      activeSessionId:
+        this.activeSessionId && this.sessions.has(this.activeSessionId)
+          ? this.activeSessionId
+          : null,
+    });
   }
 }

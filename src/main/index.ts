@@ -14,6 +14,7 @@ import type {
 import { CLAUDE_IPC_CHANNELS } from "../shared/claude-types";
 import { ClaudeProjectStore } from "./claude-project-store";
 import { ClaudeSessionService } from "./claude-session-service";
+import { ClaudeSessionSnapshotStore } from "./claude-session-snapshot-store";
 import { ensureManagedClaudeStatePlugin } from "./claude-state-plugin";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -193,6 +194,7 @@ app.whenReady().then(async () => {
     pluginDir: managedPluginDir,
     pluginWarning,
     projectStore: new ClaudeProjectStore(),
+    sessionSnapshotStore: new ClaudeSessionSnapshotStore(),
     callbacks: {
       emitSessionData: (payload) =>
         sendToRenderer(CLAUDE_IPC_CHANNELS.sessionData, payload),
