@@ -74,7 +74,6 @@ Desktop Electron app that embeds Claude CLI in an xterm terminal. Runtime state 
 - Terminal writes are sent only for the active session; inactive session output is buffered for replay on activation.
 - Session switch UI state changes only after main emits `active-session-changed`.
 - Renderer business logic belongs in `terminal-session-service`; components stay presentation-focused.
-- `writeToSession` updates activity timestamp with debounced snapshot persistence to reduce disk churn.
 - Session title auto-generation triggers once, only for unnamed sessions, on first non-empty `UserPromptSubmit`.
 
 ## Directory Structure

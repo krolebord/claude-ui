@@ -438,7 +438,6 @@ export class ClaudeSessionService {
       return;
     }
 
-    this.touchSessionActivity(record, undefined, "debounced");
     record.manager.write(data);
   }
 

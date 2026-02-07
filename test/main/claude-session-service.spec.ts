@@ -403,55 +403,6 @@ describe("ClaudeSessionService", () => {
     );
   });
 
-  it("updates lastActivityAt on write and persists it with debounce", async () => {
-    vi.useFakeTimers();
-
-    let nowIndex = 0;
-    const nowValues = [
-      "2026-02-06T00:00:00.000Z",
-      "2026-02-06T00:00:30.000Z",
-      "2026-02-06T00:01:00.000Z",
-    ];
-
-    try {
-      const harness = createHarness({
-        nowFactory: () => nowValues[nowIndex++] ?? nowValues.at(-1)!,
-      });
-
-      const result = await harness.service.startSession(START_INPUT);
-      expect(result.ok).toBe(true);
-      if (!result.ok) {
-        return;
-      }
-
-      const writesBeforeWrite =
-        harness.sessionSnapshotStore.writeSessionSnapshotState.mock.calls.length;
-      harness.service.writeToSession("session-1", "hello");
-
-      expect(harness.managerMocks[0]?.write).toHaveBeenCalledWith("hello");
-      expect(
-        harness.service.getSessionsSnapshot().sessions[0]?.lastActivityAt,
-      ).toBe("2026-02-06T00:00:30.000Z");
-      expect(
-        harness.storedSessionSnapshotState.sessions[0]?.lastActivityAt,
-      ).not.toBe("2026-02-06T00:00:30.000Z");
-      expect(
-        harness.sessionSnapshotStore.writeSessionSnapshotState,
-      ).toHaveBeenCalledTimes(writesBeforeWrite);
-
-      await vi.advanceTimersByTimeAsync(1_000);
-
-      expect(
-        harness.sessionSnapshotStore.writeSessionSnapshotState,
-      ).toHaveBeenCalledTimes(writesBeforeWrite + 1);
-      expect(
-        harness.storedSessionSnapshotState.sessions[0]?.lastActivityAt,
-      ).toBe("2026-02-06T00:00:30.000Z");
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
   it("uses hook event timestamp for lastActivityAt", async () => {
     const harness = createHarness();
 
