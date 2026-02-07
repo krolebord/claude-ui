@@ -35,12 +35,6 @@ function compareSessionsByCreatedAtDesc(
   a: ClaudeSessionSnapshot,
   b: ClaudeSessionSnapshot,
 ): number {
-  const byLastActivity =
-    toTimestamp(b.lastActivityAt) - toTimestamp(a.lastActivityAt);
-  if (byLastActivity !== 0) {
-    return byLastActivity;
-  }
-
   return toTimestamp(b.createdAt) - toTimestamp(a.createdAt);
 }
 
