@@ -32,6 +32,7 @@ interface ClaudeLaunchOptions {
   pluginDir?: string | null;
   stateFilePath?: string;
   sessionId?: string;
+  resumeSessionId?: string;
 }
 
 const GRACEFUL_EXIT_COMMAND = "/exit\r";
@@ -80,6 +81,7 @@ export class ClaudeSessionManager {
         launchOptions?.pluginDir,
         input.dangerouslySkipPermissions === true,
         launchOptions?.sessionId,
+        launchOptions?.resumeSessionId,
         input.model,
       );
       const pty = spawn(launch.file, launch.args, {
@@ -249,6 +251,7 @@ export class ClaudeSessionManager {
     pluginDir?: string | null,
     dangerouslySkipPermissions = false,
     sessionId?: string,
+    resumeSessionId?: string,
     model?: ClaudeModel,
   ): LaunchCommand {
     const skipPermissionsArgs = dangerouslySkipPermissions
@@ -257,8 +260,12 @@ export class ClaudeSessionManager {
     const pluginArgs = pluginDir
       ? ` --plugin-dir ${this.shellQuote(pluginDir)}`
       : "";
-    const sessionIdArgs = sessionId
-      ? ` --session-id ${this.shellQuote(sessionId)}`
+    const sessionIdArgs =
+      resumeSessionId || !sessionId
+        ? ""
+        : ` --session-id ${this.shellQuote(sessionId)}`;
+    const resumeSessionArgs = resumeSessionId
+      ? ` --resume ${this.shellQuote(resumeSessionId)}`
       : "";
     const modelArgs = model ? ` --model ${model}` : "";
 
@@ -270,8 +277,12 @@ export class ClaudeSessionManager {
       const winPluginArgs = pluginDir
         ? ` --plugin-dir "${pluginDir.replace(/\"/g, '""')}"`
         : "";
-      const winSessionIdArgs = sessionId
-        ? ` --session-id "${sessionId.replace(/\"/g, '""')}"`
+      const winSessionIdArgs =
+        resumeSessionId || !sessionId
+          ? ""
+          : ` --session-id "${sessionId.replace(/\"/g, '""')}"`;
+      const winResumeSessionArgs = resumeSessionId
+        ? ` --resume "${resumeSessionId.replace(/\"/g, '""')}"`
         : "";
       const winModelArgs = model ? ` --model ${model}` : "";
       return {
@@ -280,7 +291,7 @@ export class ClaudeSessionManager {
           "/d",
           "/s",
           "/c",
-          `claude${winSkipPermissionsArgs}${winPluginArgs}${winSessionIdArgs}${winModelArgs}`,
+          `claude${winSkipPermissionsArgs}${winPluginArgs}${winSessionIdArgs}${winResumeSessionArgs}${winModelArgs}`,
         ],
       };
     }
@@ -293,7 +304,7 @@ export class ClaudeSessionManager {
       file: shell,
       args: [
         "-ilc",
-        `exec claude${skipPermissionsArgs}${pluginArgs}${sessionIdArgs}${modelArgs}`,
+        `exec claude${skipPermissionsArgs}${pluginArgs}${sessionIdArgs}${resumeSessionArgs}${modelArgs}`,
       ],
     };
   }

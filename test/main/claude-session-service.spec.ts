@@ -306,6 +306,50 @@ describe("ClaudeSessionService", () => {
     );
   });
 
+  it("resumes an existing stopped session with resumeSessionId", async () => {
+    const harness = createHarness();
+
+    await harness.service.startSession(START_INPUT);
+    harness.managerMocks[0]?.callbacks.emitStatus("stopped");
+
+    const result = await harness.service.startSession({
+      ...START_INPUT,
+      resumeSessionId: "session-1",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    expect(result.sessionId).toBe("session-1");
+    expect(harness.managerMocks).toHaveLength(1);
+    expect(harness.managerMocks[0]?.start).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        cwd: "/workspace",
+      }),
+      expect.objectContaining({
+        resumeSessionId: "session-1",
+      }),
+    );
+  });
+
+  it("returns a failure when resuming a missing session", async () => {
+    const harness = createHarness();
+
+    const result = await harness.service.startSession({
+      ...START_INPUT,
+      resumeSessionId: "missing-session",
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      message: "Session does not exist: missing-session",
+    });
+    expect(harness.managerMocks).toHaveLength(0);
+  });
+
   it("stops only the requested session", async () => {
     const harness = createHarness();
 

@@ -84,6 +84,17 @@ function App() {
           onStopSession={(sessionId) => {
             void actions.stopSession(sessionId);
           }}
+          onResumeSession={(sessionId) => {
+            const terminalSize = terminalRef.current?.getSize() ?? {
+              cols: 80,
+              rows: 24,
+            };
+
+            void actions.resumeSession(sessionId, {
+              cols: terminalSize.cols,
+              rows: terminalSize.rows,
+            });
+          }}
           onDeleteSession={(sessionId) => {
             void actions.deleteSession(sessionId);
           }}

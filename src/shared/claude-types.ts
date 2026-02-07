@@ -83,6 +83,7 @@ export interface StartClaudeSessionInput {
   cwd: string;
   cols: number;
   rows: number;
+  resumeSessionId?: SessionId;
   sessionName?: string | null;
   dangerouslySkipPermissions?: boolean;
   model?: ClaudeModel;

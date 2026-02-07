@@ -35,6 +35,7 @@ interface SessionSidebarProps {
   onOpenNewSessionDialog: (projectPath: string) => void;
   onSelectSession: (sessionId: SessionId) => void;
   onStopSession: (sessionId: SessionId) => void;
+  onResumeSession: (sessionId: SessionId) => void;
   onDeleteSession: (sessionId: SessionId) => void;
 }
 
@@ -94,6 +95,7 @@ export function SessionSidebar({
   onOpenNewSessionDialog,
   onSelectSession,
   onStopSession,
+  onResumeSession,
   onDeleteSession,
 }: SessionSidebarProps) {
   return (
@@ -177,6 +179,15 @@ export function SessionSidebar({
                       const canStop =
                         session.status === "starting" ||
                         session.status === "running";
+                      const canResume = session.status === "stopped";
+                      const canControl = canStop || canResume;
+                      const ControlIcon = canResume ? Play : Square;
+                      const controlTitle = canResume
+                        ? "Resume session"
+                        : "Stop session";
+                      const controlAriaLabel = canResume
+                        ? `Resume ${sessionTitle}`
+                        : `Stop ${sessionTitle}`;
 
                       return (
                         <li key={session.sessionId} className="group/session relative">
@@ -212,19 +223,23 @@ export function SessionSidebar({
                               type="button"
                               onClick={(event) => {
                                 event.stopPropagation();
+                                if (canResume) {
+                                  void onResumeSession(session.sessionId);
+                                  return;
+                                }
                                 void onStopSession(session.sessionId);
                               }}
                               className={cn(
                                 "pointer-events-auto inline-flex size-5 items-center justify-center rounded text-zinc-300 transition",
-                                canStop
+                                canControl
                                   ? "hover:bg-white/10 hover:text-white"
                                   : "cursor-not-allowed opacity-40",
                               )}
-                              aria-label={`Stop ${sessionTitle}`}
-                              title="Stop session"
-                              disabled={!canStop}
+                              aria-label={controlAriaLabel}
+                              title={controlTitle}
+                              disabled={!canControl}
                             >
-                              <Square className="size-3" />
+                              <ControlIcon className="size-3" />
                             </button>
                             <button
                               type="button"

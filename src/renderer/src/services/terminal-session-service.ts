@@ -6,6 +6,7 @@ import type {
   ClaudeSessionSnapshot,
   ClaudeSessionsSnapshot,
   SessionId,
+  StartClaudeSessionInput,
 } from "@shared/claude-types";
 export type { ClaudeProject as SidebarProject } from "@shared/claude-types";
 
@@ -385,6 +386,22 @@ export class TerminalSessionService {
         }));
       }
     },
+    resumeSession: async (
+      sessionId: SessionId,
+      input: { cols: number; rows: number },
+    ): Promise<void> => {
+      const session = this.state.sessionsById[sessionId];
+      if (!session || session.status !== "stopped" || this.state.isStarting) {
+        return;
+      }
+
+      await this.startSessionInProject({
+        cwd: session.cwd,
+        cols: input.cols,
+        rows: input.rows,
+        resumeSessionId: sessionId,
+      });
+    },
     deleteSession: async (sessionId: SessionId): Promise<void> => {
       if (!(sessionId in this.state.sessionsById)) {
         return;
@@ -470,11 +487,12 @@ export class TerminalSessionService {
 
   private async startSessionInProject(input: {
     cwd: string;
-    sessionName: string;
-    model: ClaudeModel;
-    dangerouslySkipPermissions: boolean;
     cols: number;
     rows: number;
+    sessionName?: string;
+    model?: ClaudeModel;
+    dangerouslySkipPermissions?: boolean;
+    resumeSessionId?: SessionId;
   }): Promise<void> {
     this.updateState((prev) => ({
       ...prev,
@@ -483,16 +501,31 @@ export class TerminalSessionService {
     }));
 
     try {
-      const normalizedSessionName = input.sessionName.trim();
-      const result = await claudeIpc.startClaudeSession({
+      const startInput: StartClaudeSessionInput = {
         cwd: input.cwd,
-        sessionName:
-          normalizedSessionName.length > 0 ? normalizedSessionName : null,
-        model: input.model,
-        dangerouslySkipPermissions: input.dangerouslySkipPermissions,
         cols: input.cols,
         rows: input.rows,
-      });
+      };
+
+      if (typeof input.resumeSessionId === "string") {
+        startInput.resumeSessionId = input.resumeSessionId;
+      }
+
+      if (typeof input.sessionName === "string") {
+        const normalizedSessionName = input.sessionName.trim();
+        startInput.sessionName =
+          normalizedSessionName.length > 0 ? normalizedSessionName : null;
+      }
+
+      if (typeof input.model !== "undefined") {
+        startInput.model = input.model;
+      }
+
+      if (typeof input.dangerouslySkipPermissions === "boolean") {
+        startInput.dangerouslySkipPermissions = input.dangerouslySkipPermissions;
+      }
+
+      const result = await claudeIpc.startClaudeSession(startInput);
 
       if (!result.ok) {
         this.updateState((prev) => ({

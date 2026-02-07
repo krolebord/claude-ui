@@ -236,6 +236,11 @@ export class ClaudeSessionService {
   async startSession(
     input: StartClaudeSessionInput,
   ): Promise<StartClaudeSessionResult> {
+    const resumeSessionId = this.normalizeResumeSessionId(input.resumeSessionId);
+    if (resumeSessionId) {
+      return this.resumeStoppedSession(resumeSessionId, input);
+    }
+
     const sessionId = this.sessionIdFactory();
     const record = this.createRecord(
       sessionId,
@@ -287,6 +292,69 @@ export class ClaudeSessionService {
           error instanceof Error
             ? `Failed to start session: ${error.message}`
             : "Failed to start session due to an unknown error.",
+      };
+    }
+  }
+
+  private async resumeStoppedSession(
+    sessionId: SessionId,
+    input: StartClaudeSessionInput,
+  ): Promise<StartClaudeSessionResult> {
+    const record = this.sessions.get(sessionId);
+    if (!record) {
+      return {
+        ok: false,
+        message: `Session does not exist: ${sessionId}`,
+      };
+    }
+
+    if (record.status === "starting" || record.status === "running") {
+      this.setActiveSessionInternal(record.sessionId);
+      return {
+        ok: true,
+        sessionId: record.sessionId,
+        snapshot: this.getSessionsSnapshot(),
+      };
+    }
+
+    try {
+      const stateFilePath = await this.stateFileFactory();
+      record.monitor.startMonitoring(stateFilePath);
+
+      const result = await record.manager.start(
+        {
+          cwd: record.cwd,
+          cols: input.cols,
+          rows: input.rows,
+          dangerouslySkipPermissions: input.dangerouslySkipPermissions,
+          model: input.model,
+        },
+        {
+          pluginDir: this.pluginDir,
+          stateFilePath,
+          resumeSessionId: record.sessionId,
+        },
+      );
+
+      if (!result.ok) {
+        record.monitor.stopMonitoring();
+        return result;
+      }
+
+      this.setActiveSessionInternal(record.sessionId);
+      return {
+        ok: true,
+        sessionId: record.sessionId,
+        snapshot: this.getSessionsSnapshot(),
+      };
+    } catch (error) {
+      record.monitor.stopMonitoring();
+      return {
+        ok: false,
+        message:
+          error instanceof Error
+            ? `Failed to resume session: ${error.message}`
+            : "Failed to resume session due to an unknown error.",
       };
     }
   }
@@ -531,6 +599,17 @@ export class ClaudeSessionService {
     }
 
     const trimmed = sessionName.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  private normalizeResumeSessionId(
+    sessionId?: SessionId,
+  ): SessionId | null {
+    if (typeof sessionId !== "string") {
+      return null;
+    }
+
+    const trimmed = sessionId.trim();
     return trimmed.length > 0 ? trimmed : null;
   }
 

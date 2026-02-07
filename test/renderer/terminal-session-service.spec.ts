@@ -612,6 +612,63 @@ describe("TerminalSessionService", () => {
     service.release();
   });
 
+  it("resumes a stopped session by passing resumeSessionId through start IPC", async () => {
+    ipcHarness.claudeIpc.getSessions.mockResolvedValueOnce({
+      projects: [],
+      activeSessionId: "session-2",
+      sessions: [
+        {
+          sessionId: "session-2",
+          cwd: "/workspace/two",
+          sessionName: null,
+          status: "stopped",
+          activityState: "idle",
+          activityWarning: null,
+          lastError: null,
+          createdAt: "2026-02-06T00:00:01.000Z",
+        },
+      ],
+    });
+    ipcHarness.claudeIpc.startClaudeSession.mockResolvedValueOnce({
+      ok: true,
+      sessionId: "session-2",
+      snapshot: {
+        projects: [],
+        activeSessionId: "session-2",
+        sessions: [
+          {
+            sessionId: "session-2",
+            cwd: "/workspace/two",
+            sessionName: null,
+            status: "running",
+            activityState: "working",
+            activityWarning: null,
+            lastError: null,
+            createdAt: "2026-02-06T00:00:01.000Z",
+          },
+        ],
+      },
+    });
+
+    const service = new TerminalSessionService();
+    service.retain();
+
+    await vi.waitFor(() => {
+      expect(ipcHarness.claudeIpc.getSessions).toHaveBeenCalledTimes(1);
+    });
+
+    await service.actions.resumeSession("session-2", { cols: 132, rows: 44 });
+
+    expect(ipcHarness.claudeIpc.startClaudeSession).toHaveBeenCalledWith({
+      cwd: "/workspace/two",
+      cols: 132,
+      rows: 44,
+      resumeSessionId: "session-2",
+    });
+
+    service.release();
+  });
+
   it("deletes a specific session and refreshes sessions", async () => {
     ipcHarness.claudeIpc.getSessions
       .mockResolvedValueOnce(makeSnapshot())
