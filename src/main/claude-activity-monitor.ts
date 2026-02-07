@@ -1,3 +1,4 @@
+import { type FSWatcher, watch } from "node:fs";
 import { open, stat } from "node:fs/promises";
 import type {
   ClaudeActivityState,
@@ -5,6 +6,7 @@ import type {
 } from "../shared/claude-types";
 
 const POLL_INTERVAL_MS = 180;
+const POLL_CHECK_MIN_ELAPSED_MS = 250;
 
 interface ActivityMonitorCallbacks {
   emitActivityState: (state: ClaudeActivityState) => void;
@@ -17,8 +19,12 @@ export class ClaudeActivityMonitor {
   private stateFilePath: string | null = null;
   private fileOffset = 0;
   private buffer = "";
-  private intervalId: NodeJS.Timeout | null = null;
+  private watcher: FSWatcher | null = null;
+  private pollingIntervalId: NodeJS.Timeout | null = null;
   private isPolling = false;
+  private pollRequested = false;
+  private lastPollingCheckAt = 0;
+  private usingPollingFallback = false;
 
   constructor(callbacks: ActivityMonitorCallbacks) {
     this.callbacks = callbacks;
@@ -36,30 +42,75 @@ export class ClaudeActivityMonitor {
     this.buffer = "";
     this.setState("unknown");
 
-    this.intervalId = setInterval(() => {
-      void this.poll();
-    }, POLL_INTERVAL_MS);
+    this.startWatcher(stateFilePath);
 
-    void this.poll();
+    void this.requestPoll();
   }
 
   stopMonitoring(options?: { preserveState?: boolean }): void {
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = null;
-    }
+    this.stopWatcher();
 
     this.stateFilePath = null;
     this.fileOffset = 0;
     this.buffer = "";
     this.isPolling = false;
+    this.pollRequested = false;
+    this.lastPollingCheckAt = 0;
+    this.usingPollingFallback = false;
 
     if (!options?.preserveState) {
       this.setState("unknown");
     }
   }
 
-  private async poll(): Promise<void> {
+  private startPollingInterval(): void {
+    if (this.pollingIntervalId) {
+      return;
+    }
+
+    this.pollingIntervalId = setInterval(() => {
+      const now = Date.now();
+      const isPollingCheckStale =
+        now - this.lastPollingCheckAt > POLL_CHECK_MIN_ELAPSED_MS;
+      if (isPollingCheckStale || this.usingPollingFallback) {
+        void this.requestPoll();
+      }
+    }, POLL_INTERVAL_MS);
+  }
+
+  private startWatcher(stateFilePath: string): void {
+    this.startPollingInterval();
+
+    try {
+      this.watcher = watch(stateFilePath, () => {
+        void this.requestPoll();
+      });
+
+      this.watcher.on("error", (e) => {
+        console.error("File watcher error:", e);
+        this.usingPollingFallback = true;
+      });
+    } catch (e) {
+      console.error("Failed to start file watcher:", e);
+      this.usingPollingFallback = true;
+    }
+  }
+
+  private stopWatcher(): void {
+    if (this.watcher) {
+      this.watcher.close();
+      this.watcher = null;
+    }
+
+    if (this.pollingIntervalId) {
+      clearInterval(this.pollingIntervalId);
+      this.pollingIntervalId = null;
+    }
+  }
+
+  private async requestPoll(): Promise<void> {
+    this.pollRequested = true;
+
     if (this.isPolling || !this.stateFilePath) {
       return;
     }
@@ -67,43 +118,58 @@ export class ClaudeActivityMonitor {
     this.isPolling = true;
 
     try {
-      const fileStats = await stat(this.stateFilePath).catch(() => null);
-      if (!fileStats) {
-        return;
-      }
-
-      if (fileStats.size < this.fileOffset) {
-        this.fileOffset = 0;
-        this.buffer = "";
-      }
-
-      if (fileStats.size === this.fileOffset) {
-        return;
-      }
-
-      const bytesToRead = Number(fileStats.size - this.fileOffset);
-      const handle = await open(this.stateFilePath, "r");
-
-      try {
-        const chunkBuffer = Buffer.alloc(bytesToRead);
-        const { bytesRead } = await handle.read(
-          chunkBuffer,
-          0,
-          bytesToRead,
-          this.fileOffset,
-        );
-
-        if (!bytesRead) {
-          return;
-        }
-
-        this.fileOffset += bytesRead;
-        this.processChunk(chunkBuffer.toString("utf8", 0, bytesRead));
-      } finally {
-        await handle.close();
+      while (this.pollRequested && this.stateFilePath) {
+        this.pollRequested = false;
+        await this.pollOnce();
       }
     } finally {
       this.isPolling = false;
+    }
+  }
+
+  private async pollOnce(): Promise<void> {
+    if (!this.stateFilePath) {
+      return;
+    }
+
+    this.lastPollingCheckAt = Date.now();
+
+    const stateFilePath = this.stateFilePath;
+
+    const fileStats = await stat(stateFilePath).catch(() => null);
+    if (!fileStats) {
+      return;
+    }
+
+    if (fileStats.size < this.fileOffset) {
+      this.fileOffset = 0;
+      this.buffer = "";
+    }
+
+    if (fileStats.size === this.fileOffset) {
+      return;
+    }
+
+    const bytesToRead = Number(fileStats.size - this.fileOffset);
+    const handle = await open(stateFilePath, "r");
+
+    try {
+      const chunkBuffer = Buffer.alloc(bytesToRead);
+      const { bytesRead } = await handle.read(
+        chunkBuffer,
+        0,
+        bytesToRead,
+        this.fileOffset
+      );
+
+      if (!bytesRead) {
+        return;
+      }
+
+      this.fileOffset += bytesRead;
+      this.processChunk(chunkBuffer.toString("utf8", 0, bytesRead));
+    } finally {
+      await handle.close();
     }
   }
 
