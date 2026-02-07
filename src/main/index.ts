@@ -1,6 +1,9 @@
+import fixPath from "fix-path";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { BrowserWindow, app, dialog, ipcMain, shell } from "electron";
+
+fixPath();
 import type {
   AddClaudeProjectInput,
   DeleteClaudeProjectInput,
