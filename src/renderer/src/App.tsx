@@ -107,14 +107,12 @@ function App() {
           </div>
         ) : null}
 
-        <div className="min-h-0 flex-1">
-          <div className="h-full overflow-hidden border border-white/10 bg-[#080a0e]">
+        <div className="min-h-0 flex-1 overflow-hidden">
             <TerminalPane
               ref={handleTerminalRef}
               onInput={handleTerminalInput}
               onResize={handleTerminalResize}
             />
-          </div>
         </div>
       </main>
 

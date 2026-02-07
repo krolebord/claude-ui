@@ -261,8 +261,32 @@ describe("getSessionLastActivityLabel", () => {
     ).toBe("1h");
   });
 
-  it("returns now for very recent activity", () => {
+  it("returns seconds for very recent activity", () => {
     const now = Date.parse("2026-02-06T01:00:30.000Z");
+    const label = getSessionLastActivityLabel(
+      makeIndicatorSession({
+        lastActivityAt: "2026-02-06T01:00:00.000Z",
+      }),
+      now,
+    );
+
+    expect(label).toBe("30s");
+  });
+
+  it("rounds recent activity seconds to 10-second increments", () => {
+    const now = Date.parse("2026-02-06T01:00:36.000Z");
+    const label = getSessionLastActivityLabel(
+      makeIndicatorSession({
+        lastActivityAt: "2026-02-06T01:00:00.000Z",
+      }),
+      now,
+    );
+
+    expect(label).toBe("40s");
+  });
+
+  it("shows now when rounded seconds is zero", () => {
+    const now = Date.parse("2026-02-06T01:00:04.000Z");
     const label = getSessionLastActivityLabel(
       makeIndicatorSession({
         lastActivityAt: "2026-02-06T01:00:00.000Z",

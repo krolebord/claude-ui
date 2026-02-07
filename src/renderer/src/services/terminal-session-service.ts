@@ -249,7 +249,11 @@ export function getSessionLastActivityLabel(
 
   const deltaSeconds = Math.max(0, Math.floor((now - timestamp) / 1000));
   if (deltaSeconds < 60) {
-    return "now";
+    const roundedSeconds = Math.round(deltaSeconds / 10) * 10;
+    if (roundedSeconds === 0) {
+      return "now";
+    }
+    return `${roundedSeconds}s`;
   }
 
   const minutes = Math.floor(deltaSeconds / 60);
