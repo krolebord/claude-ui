@@ -4,6 +4,7 @@ import path from "node:path";
 import type {
   ClaudeActiveSessionChangedEvent,
   ClaudeActivityState,
+  ClaudeHookEvent,
   ClaudeSessionActivityStateEvent,
   ClaudeSessionActivityWarningEvent,
   ClaudeSessionDataEvent,
@@ -55,6 +56,7 @@ interface ClaudeSessionServiceOptions {
   stateFileFactory?: () => Promise<string>;
   sessionIdFactory?: () => SessionId;
   nowFactory?: () => string;
+  generateTitleFactory?: (prompt: string) => Promise<string>;
 }
 
 interface SessionManagerLike {
@@ -85,6 +87,7 @@ interface SessionRecord {
   monitor: ActivityMonitorLike;
   ready: boolean;
   pendingEvents: Array<() => void>;
+  titleGenerationTriggered: boolean;
 }
 
 export class ClaudeSessionService {
@@ -107,6 +110,9 @@ export class ClaudeSessionService {
   private readonly nowFactory: NonNullable<
     ClaudeSessionServiceOptions["nowFactory"]
   >;
+  private readonly generateTitleFactory: NonNullable<
+    ClaudeSessionServiceOptions["generateTitleFactory"]
+  >;
   private readonly sessions = new Map<SessionId, SessionRecord>();
   private activeSessionId: SessionId | null = null;
 
@@ -125,6 +131,8 @@ export class ClaudeSessionService {
       options.stateFileFactory ?? (() => this.createStateFile());
     this.sessionIdFactory = options.sessionIdFactory ?? (() => randomUUID());
     this.nowFactory = options.nowFactory ?? (() => new Date().toISOString());
+    this.generateTitleFactory =
+      options.generateTitleFactory ?? generateSessionTitle;
   }
 
   getSessionsSnapshot(): ClaudeSessionsSnapshot {
@@ -311,6 +319,7 @@ export class ClaudeSessionService {
       monitor: null as unknown as ActivityMonitorLike,
       ready: false,
       pendingEvents: [],
+      titleGenerationTriggered: sessionName !== null,
     };
 
     const monitor = this.activityMonitorFactory({
@@ -324,6 +333,7 @@ export class ClaudeSessionService {
         });
       },
       emitHookEvent: (event) => {
+        this.maybeGenerateTitleFromHook(record, event);
         this.emitOrQueue(record, () => {
           this.callbacks.emitSessionHookEvent?.({
             sessionId: record.sessionId,
@@ -438,6 +448,43 @@ export class ClaudeSessionService {
 
     const trimmed = sessionName.trim();
     return trimmed.length > 0 ? trimmed : null;
+  }
+
+  private maybeGenerateTitleFromHook(
+    record: SessionRecord,
+    event: ClaudeHookEvent,
+  ): void {
+    if (record.titleGenerationTriggered) {
+      return;
+    }
+
+    if (event.hook_event_name !== "UserPromptSubmit") {
+      return;
+    }
+
+    const prompt = event.prompt?.trim();
+
+    if (!prompt) {
+      return;
+    }
+
+    record.titleGenerationTriggered = true;
+
+    void this.generateTitleFactory(prompt)
+      .then((title) => {
+        if (!this.sessions.has(record.sessionId)) {
+          return;
+        }
+
+        record.sessionName = title;
+        this.callbacks.emitSessionTitleChanged({
+          sessionId: record.sessionId,
+          title,
+        });
+      })
+      .catch(() => {
+        // Title generation failures are non-fatal and should not impact sessions.
+      });
   }
 
   private async createStateFile(): Promise<string> {

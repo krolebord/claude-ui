@@ -607,6 +607,12 @@ export class TerminalSessionService {
           void this.refreshSessions();
         }
       }),
+      claudeIpc.onClaudeSessionTitleChanged((payload) => {
+        this.updateSession(payload.sessionId, (session) => ({
+          ...session,
+          sessionName: payload.title,
+        }));
+      }),
       claudeIpc.onClaudeActiveSessionChanged((payload) => {
         if (this.state.activeSessionId !== payload.activeSessionId) {
           this.updateState((prev) => ({

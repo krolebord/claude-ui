@@ -10,6 +10,7 @@ import {
   type ClaudeSessionExitEvent,
   type ClaudeSessionHookEvent,
   type ClaudeSessionStatusEvent,
+  type ClaudeSessionTitleChangedEvent,
   type ClaudeSessionsSnapshot,
   type DeleteClaudeSessionInput,
   type DeleteClaudeSessionResult,
@@ -89,6 +90,11 @@ const claudeApi: ClaudeDesktopApi = {
   onClaudeSessionActivityWarning: (callback) =>
     subscribe<ClaudeSessionActivityWarningEvent>(
       CLAUDE_IPC_CHANNELS.sessionActivityWarning,
+      callback,
+    ),
+  onClaudeSessionTitleChanged: (callback) =>
+    subscribe<ClaudeSessionTitleChangedEvent>(
+      CLAUDE_IPC_CHANNELS.sessionTitleChanged,
       callback,
     ),
   onClaudeActiveSessionChanged: (callback) =>

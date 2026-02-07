@@ -7,6 +7,7 @@ import type {
   ClaudeSessionExitEvent,
   ClaudeSessionHookEvent,
   ClaudeSessionStatusEvent,
+  ClaudeSessionTitleChangedEvent,
   ClaudeSessionsSnapshot,
   DeleteClaudeSessionInput,
   DeleteClaudeSessionResult,
@@ -58,6 +59,9 @@ export const claudeIpc = {
   onClaudeSessionActivityWarning: (
     callback: (payload: ClaudeSessionActivityWarningEvent) => void,
   ): (() => void) => window.claude.onClaudeSessionActivityWarning(callback),
+  onClaudeSessionTitleChanged: (
+    callback: (payload: ClaudeSessionTitleChangedEvent) => void,
+  ): (() => void) => window.claude.onClaudeSessionTitleChanged(callback),
   onClaudeActiveSessionChanged: (
     callback: (payload: ClaudeActiveSessionChangedEvent) => void,
   ): (() => void) => window.claude.onClaudeActiveSessionChanged(callback),

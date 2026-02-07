@@ -148,6 +148,7 @@ export interface ClaudeHookEvent {
   session_id: string;
   hook_event_name: string;
   cwd?: string;
+  prompt?: string;
   transcript_path?: string;
   notification_type?: string;
   tool_name?: string;

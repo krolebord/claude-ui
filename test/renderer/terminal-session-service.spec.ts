@@ -8,6 +8,7 @@ import type {
   ClaudeSessionHookEvent,
   ClaudeSessionSnapshot,
   ClaudeSessionStatusEvent,
+  ClaudeSessionTitleChangedEvent,
   ClaudeSessionsSnapshot,
 } from "../../src/shared/claude-types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -29,6 +30,7 @@ const ipcHarness = vi.hoisted(() => {
     activityWarning: new Set<
       (payload: ClaudeSessionActivityWarningEvent) => void
     >(),
+    titleChanged: new Set<(payload: ClaudeSessionTitleChangedEvent) => void>(),
     activeChanged: new Set<(payload: ClaudeActiveSessionChangedEvent) => void>(),
     hookEvent: new Set<(payload: ClaudeSessionHookEvent) => void>(),
   };
@@ -56,6 +58,7 @@ const ipcHarness = vi.hoisted(() => {
     onClaudeSessionStatus: register(listeners.status),
     onClaudeSessionActivityState: register(listeners.activityState),
     onClaudeSessionActivityWarning: register(listeners.activityWarning),
+    onClaudeSessionTitleChanged: register(listeners.titleChanged),
     onClaudeActiveSessionChanged: register(listeners.activeChanged),
     onClaudeSessionHookEvent: register(listeners.hookEvent),
   };

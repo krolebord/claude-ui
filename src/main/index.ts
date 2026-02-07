@@ -175,6 +175,8 @@ app.whenReady().then(async () => {
         sendToRenderer(CLAUDE_IPC_CHANNELS.sessionActivityState, payload),
       emitSessionActivityWarning: (payload) =>
         sendToRenderer(CLAUDE_IPC_CHANNELS.sessionActivityWarning, payload),
+      emitSessionTitleChanged: (payload) =>
+        sendToRenderer(CLAUDE_IPC_CHANNELS.sessionTitleChanged, payload),
       emitActiveSessionChanged: (payload) =>
         sendToRenderer(CLAUDE_IPC_CHANNELS.activeSessionChanged, payload),
       emitSessionHookEvent: (payload) =>

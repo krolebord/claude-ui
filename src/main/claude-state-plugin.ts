@@ -102,6 +102,7 @@ async function main() {
     session_id: payload.session_id,
     hook_event_name: payload.hook_event_name,
     cwd: typeof payload.cwd === "string" ? payload.cwd : undefined,
+    prompt: typeof payload.prompt === "string" ? payload.prompt : undefined,
     transcript_path:
       typeof payload.transcript_path === "string"
         ? payload.transcript_path

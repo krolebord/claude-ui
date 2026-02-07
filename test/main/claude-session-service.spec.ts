@@ -46,6 +46,7 @@ function createHarness() {
       activityState: ClaudeActivityState;
     }>,
     sessionActivityWarning: [] as Array<{ sessionId: string; warning: string | null }>,
+    sessionTitleChanged: [] as Array<{ sessionId: string; title: string }>,
     activeChanged: [] as Array<{ activeSessionId: string | null }>,
   };
 
@@ -75,10 +76,14 @@ function createHarness() {
       emitSessionActivityWarning: (payload) => {
         eventLog.sessionActivityWarning.push(payload);
       },
+      emitSessionTitleChanged: (payload) => {
+        eventLog.sessionTitleChanged.push(payload);
+      },
       emitActiveSessionChanged: (payload) => {
         eventLog.activeChanged.push(payload);
       },
     },
+    generateTitleFactory: vi.fn(async () => "Generated Title"),
     sessionManagerFactory: (callbacks) => {
       const manager: MockSessionManager = {
         callbacks,
@@ -312,5 +317,106 @@ describe("ClaudeSessionService", () => {
       { activeSessionId: "session-2" },
       { activeSessionId: "session-1" },
     ]);
+  });
+
+  it("generates a title from UserPromptSubmit for unnamed sessions", async () => {
+    const harness = createHarness();
+
+    await harness.service.startSession(START_INPUT);
+
+    harness.monitorMocks[0]?.callbacks.emitHookEvent({
+      timestamp: "2026-02-07T00:00:01.000Z",
+      hook_event_name: "UserPromptSubmit",
+      session_id: "session-1",
+      prompt: "fix the login bug",
+    });
+
+    await vi.waitFor(() => {
+      expect(harness.eventLog.sessionTitleChanged).toHaveLength(1);
+    });
+
+    expect(harness.eventLog.sessionTitleChanged[0]).toEqual({
+      sessionId: "session-1",
+      title: "Generated Title",
+    });
+
+    const snapshot = harness.service.getSessionsSnapshot();
+    expect(snapshot.sessions[0]?.sessionName).toBe("Generated Title");
+  });
+
+  it("does not generate a title for sessions with explicit names", async () => {
+    const harness = createHarness();
+
+    await harness.service.startSession({
+      ...START_INPUT,
+      sessionName: "My Session",
+    });
+
+    harness.monitorMocks[0]?.callbacks.emitHookEvent({
+      timestamp: "2026-02-07T00:00:01.000Z",
+      hook_event_name: "UserPromptSubmit",
+      session_id: "session-1",
+      prompt: "hello",
+    });
+    await Promise.resolve();
+
+    expect(harness.eventLog.sessionTitleChanged).toHaveLength(0);
+  });
+
+  it("waits for a non-empty UserPromptSubmit prompt before generating title", async () => {
+    const harness = createHarness();
+
+    await harness.service.startSession(START_INPUT);
+
+    harness.monitorMocks[0]?.callbacks.emitHookEvent({
+      timestamp: "2026-02-07T00:00:01.000Z",
+      hook_event_name: "UserPromptSubmit",
+      session_id: "session-1",
+      prompt: "   ",
+    });
+    await Promise.resolve();
+
+    expect(harness.eventLog.sessionTitleChanged).toHaveLength(0);
+
+    harness.monitorMocks[0]?.callbacks.emitHookEvent({
+      timestamp: "2026-02-07T00:00:02.000Z",
+      hook_event_name: "UserPromptSubmit",
+      session_id: "session-1",
+      prompt: "real prompt",
+    });
+    await vi.waitFor(() => {
+      expect(harness.eventLog.sessionTitleChanged).toHaveLength(1);
+    });
+
+    expect(harness.eventLog.sessionTitleChanged[0]).toEqual({
+      sessionId: "session-1",
+      title: "Generated Title",
+    });
+  });
+
+  it("only generates a title once per session", async () => {
+    const harness = createHarness();
+
+    await harness.service.startSession(START_INPUT);
+
+    harness.monitorMocks[0]?.callbacks.emitHookEvent({
+      timestamp: "2026-02-07T00:00:01.000Z",
+      hook_event_name: "UserPromptSubmit",
+      session_id: "session-1",
+      prompt: "first prompt",
+    });
+    await vi.waitFor(() => {
+      expect(harness.eventLog.sessionTitleChanged).toHaveLength(1);
+    });
+
+    harness.monitorMocks[0]?.callbacks.emitHookEvent({
+      timestamp: "2026-02-07T00:00:02.000Z",
+      hook_event_name: "UserPromptSubmit",
+      session_id: "session-1",
+      prompt: "second prompt",
+    });
+    await Promise.resolve();
+
+    expect(harness.eventLog.sessionTitleChanged).toHaveLength(1);
   });
 });
