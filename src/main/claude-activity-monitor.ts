@@ -159,7 +159,7 @@ export class ClaudeActivityMonitor {
         chunkBuffer,
         0,
         bytesToRead,
-        this.fileOffset
+        this.fileOffset,
       );
 
       if (!bytesRead) {
