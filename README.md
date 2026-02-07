@@ -42,6 +42,26 @@ pnpm build
 pnpm preview
 ```
 
+## Install In Applications (macOS)
+
+Build a macOS app bundle and install it to your Applications folder:
+
+```sh
+pnpm app:install
+```
+
+Update later (rebuild + replace installed app):
+
+```sh
+pnpm app:update
+```
+
+Notes:
+
+- Default install path is `/Applications`.
+- If `/Applications` is not writable, it falls back to `~/Applications`.
+- Override install destination with `CLAUDE_UI_INSTALL_DIR=/path/to/folder`.
+
 ## Quality Checks
 
 ```sh
