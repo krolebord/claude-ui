@@ -13,6 +13,7 @@ import "@xterm/xterm/css/xterm.css";
 export interface TerminalPaneHandle {
   write: (chunk: string) => void;
   clear: () => void;
+  focus: () => void;
   getSize: () => { cols: number; rows: number };
 }
 
@@ -46,6 +47,9 @@ function TerminalPaneComponent(
     clear: () => {
       terminalRef.current?.clear();
       terminalRef.current?.reset();
+    },
+    focus: () => {
+      terminalRef.current?.focus();
     },
     getSize: () => ({
       cols: terminalRef.current?.cols ?? 80,

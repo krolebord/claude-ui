@@ -537,6 +537,7 @@ export class TerminalSessionService {
 
       this.applySnapshot(result.snapshot);
       this.terminal?.clear();
+      this.focusTerminal();
     } catch (error) {
       this.updateState((prev) => ({
         ...prev,
@@ -641,6 +642,9 @@ export class TerminalSessionService {
             activeSessionId: payload.activeSessionId,
           }));
           this.renderActiveSessionOutput(true);
+          if (payload.activeSessionId) {
+            this.focusTerminal();
+          }
         }
 
         if (
@@ -800,6 +804,9 @@ export class TerminalSessionService {
     this.terminal.write(output);
     this.renderedSessionId = activeSessionId;
     this.renderedOutputLength = output.length;
+
+  private focusTerminal(): void {
+    this.terminal?.focus();
   }
 }
 

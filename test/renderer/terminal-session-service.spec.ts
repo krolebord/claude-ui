@@ -455,6 +455,15 @@ describe("TerminalSessionService", () => {
 
     service.actions.openNewSessionDialog("/workspace");
     service.actions.setNewSessionName("Refactor runner");
+
+    const terminalFocus = vi.fn();
+    service.actions.attachTerminal({
+      write: vi.fn(),
+      clear: vi.fn(),
+      focus: terminalFocus,
+      getSize: () => ({ cols: 80, rows: 24 }),
+    });
+
     await service.actions.confirmNewSession({ cols: 80, rows: 24 });
 
     expect(ipcHarness.claudeIpc.stopClaudeSession).not.toHaveBeenCalled();
@@ -468,6 +477,7 @@ describe("TerminalSessionService", () => {
     });
 
     expect(service.getSnapshot().activeSessionId).toBe("session-3");
+    expect(terminalFocus).toHaveBeenCalledTimes(1);
     service.release();
   });
 
@@ -724,6 +734,7 @@ describe("TerminalSessionService", () => {
     service.actions.attachTerminal({
       write: terminalWrite,
       clear: vi.fn(),
+      focus: vi.fn(),
       getSize: () => ({ cols: 80, rows: 24 }),
     });
 
@@ -748,9 +759,11 @@ describe("TerminalSessionService", () => {
 
     const terminalWrite = vi.fn();
     const terminalClear = vi.fn();
+    const terminalFocus = vi.fn();
     service.actions.attachTerminal({
       write: terminalWrite,
       clear: terminalClear,
+      focus: terminalFocus,
       getSize: () => ({ cols: 80, rows: 24 }),
     });
 
@@ -767,12 +780,14 @@ describe("TerminalSessionService", () => {
     expect(service.getSnapshot().activeSessionId).toBe("session-1");
     expect(terminalWrite).not.toHaveBeenCalled();
     expect(terminalClear).toHaveBeenCalledTimes(1);
+    expect(terminalFocus).not.toHaveBeenCalled();
 
     ipcHarness.emit.activeChanged({ activeSessionId: "session-2" });
     expect(service.getSnapshot().activeSessionId).toBe("session-2");
     expect(terminalClear).toHaveBeenCalledTimes(2);
     expect(terminalWrite).toHaveBeenCalledTimes(1);
     expect(terminalWrite).toHaveBeenCalledWith("buffered output");
+    expect(terminalFocus).toHaveBeenCalledTimes(1);
 
     ipcHarness.emit.sessionData({
       sessionId: "session-2",
@@ -785,6 +800,103 @@ describe("TerminalSessionService", () => {
     expect(terminalWrite).toHaveBeenCalledTimes(2);
 
     expect(terminalClear).toHaveBeenCalledTimes(2);
+
+    service.release();
+  });
+
+  it("replays only the retained 10,000 lines when activating an inactive session", async () => {
+    const maxLines = 10_000;
+    ipcHarness.claudeIpc.getSessions.mockResolvedValueOnce(makeSnapshot());
+
+    const service = new TerminalSessionService();
+    service.retain();
+
+    await vi.waitFor(() => {
+      expect(ipcHarness.claudeIpc.getSessions).toHaveBeenCalledTimes(1);
+    });
+
+    const terminalWrite = vi.fn();
+    service.actions.attachTerminal({
+      write: terminalWrite,
+      clear: vi.fn(),
+      focus: vi.fn(),
+      getSize: () => ({ cols: 80, rows: 24 }),
+    });
+
+    const largeLineChunk = Array.from(
+      { length: maxLines + 5 },
+      (_, index) => `line-${index}\n`,
+    ).join("");
+
+    ipcHarness.emit.sessionData({
+      sessionId: "session-2",
+      chunk: largeLineChunk,
+    });
+
+    expect(terminalWrite).not.toHaveBeenCalled();
+
+    ipcHarness.emit.activeChanged({ activeSessionId: "session-2" });
+
+    expect(terminalWrite).toHaveBeenCalledTimes(1);
+
+    const replayed = terminalWrite.mock.calls[0]?.[0];
+    expect(typeof replayed).toBe("string");
+    if (typeof replayed !== "string") {
+      throw new Error("Expected replayed terminal output to be a string.");
+    }
+
+    const replayedLines = replayed.split("\n");
+    expect(replayedLines).toHaveLength(maxLines + 1);
+    expect(replayedLines[0]).toBe("line-5");
+    expect(replayedLines[maxLines - 1]).toBe("line-10004");
+    expect(replayed).not.toContain("line-0\n");
+    expect(replayed.endsWith("line-10004\n")).toBe(true);
+
+    service.release();
+  });
+
+  it("replays only the retained 2MB byte suffix when activating an inactive session", async () => {
+    const maxBytes = 2 * 1024 * 1024;
+    ipcHarness.claudeIpc.getSessions.mockResolvedValueOnce(makeSnapshot());
+
+    const service = new TerminalSessionService();
+    service.retain();
+
+    await vi.waitFor(() => {
+      expect(ipcHarness.claudeIpc.getSessions).toHaveBeenCalledTimes(1);
+    });
+
+    const terminalWrite = vi.fn();
+    service.actions.attachTerminal({
+      write: terminalWrite,
+      clear: vi.fn(),
+      focus: vi.fn(),
+      getSize: () => ({ cols: 80, rows: 24 }),
+    });
+
+    const token = "0123456789abcdef";
+    const oversizedChunk = token.repeat(
+      Math.ceil((maxBytes + token.length) / token.length),
+    );
+
+    ipcHarness.emit.sessionData({
+      sessionId: "session-2",
+      chunk: oversizedChunk,
+    });
+
+    ipcHarness.emit.activeChanged({ activeSessionId: "session-2" });
+
+    expect(terminalWrite).toHaveBeenCalledTimes(1);
+
+    const replayed = terminalWrite.mock.calls[0]?.[0];
+    expect(typeof replayed).toBe("string");
+    if (typeof replayed !== "string") {
+      throw new Error("Expected replayed terminal output to be a string.");
+    }
+
+    const replayedBytes = new TextEncoder().encode(replayed).length;
+    expect(replayedBytes).toBeLessThanOrEqual(maxBytes);
+    expect(replayed).toBe(oversizedChunk.slice(-maxBytes));
 
     service.release();
   });
