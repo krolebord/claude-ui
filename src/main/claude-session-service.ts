@@ -88,6 +88,7 @@ interface SessionRecord {
   cwd: string;
   sessionName: string | null;
   createdAt: string;
+  lastActivityAt: string;
   status: ClaudeSessionStatus;
   activityState: ClaudeActivityState;
   activityWarning: string | null;
@@ -98,6 +99,10 @@ interface SessionRecord {
   pendingEvents: Array<() => void>;
   titleGenerationTriggered: boolean;
 }
+
+type SessionActivityPersistMode = "immediate" | "debounced";
+
+const SESSION_ACTIVITY_PERSIST_DEBOUNCE_MS = 1000;
 
 export class ClaudeSessionService {
   private readonly userDataPath: string;
@@ -127,6 +132,7 @@ export class ClaudeSessionService {
   private readonly sessions = new Map<SessionId, SessionRecord>();
   private projects: ClaudeProject[] = [];
   private activeSessionId: SessionId | null = null;
+  private pendingSessionSnapshotPersist: NodeJS.Timeout | null = null;
 
   constructor(options: ClaudeSessionServiceOptions) {
     this.userDataPath = options.userDataPath;
@@ -432,6 +438,7 @@ export class ClaudeSessionService {
       return;
     }
 
+    this.touchSessionActivity(record, undefined, "debounced");
     record.manager.write(data);
   }
 
@@ -445,6 +452,8 @@ export class ClaudeSessionService {
   }
 
   dispose(): void {
+    this.clearPendingSessionSnapshotPersist();
+
     const uniqueRecords = new Set(this.sessions.values());
     for (const record of uniqueRecords) {
       record.monitor.stopMonitoring();
@@ -465,6 +474,7 @@ export class ClaudeSessionService {
       activityWarning: record.activityWarning,
       lastError: record.lastError,
       createdAt: record.createdAt,
+      lastActivityAt: record.lastActivityAt,
     };
   }
 
@@ -473,11 +483,13 @@ export class ClaudeSessionService {
     cwd: string,
     sessionName: string | null,
   ): SessionRecord {
+    const createdAt = this.nowFactory();
     const record: SessionRecord = {
       sessionId,
       cwd,
       sessionName,
-      createdAt: this.nowFactory(),
+      createdAt,
+      lastActivityAt: createdAt,
       status: "idle",
       activityState: "unknown",
       activityWarning: this.pluginWarning,
@@ -492,6 +504,7 @@ export class ClaudeSessionService {
     const monitor = this.activityMonitorFactory({
       emitActivityState: (activityState) => {
         record.activityState = activityState;
+        this.touchSessionActivity(record);
         this.emitOrQueue(record, () => {
           this.callbacks.emitSessionActivityState({
             sessionId: record.sessionId,
@@ -500,6 +513,7 @@ export class ClaudeSessionService {
         });
       },
       emitHookEvent: (event) => {
+        this.touchSessionActivity(record, event.timestamp);
         this.maybeGenerateTitleFromHook(record, event);
         this.emitOrQueue(record, () => {
           this.callbacks.emitSessionHookEvent?.({
@@ -521,6 +535,7 @@ export class ClaudeSessionService {
       },
       emitExit: (payload) => {
         monitor.stopMonitoring({ preserveState: true });
+        this.touchSessionActivity(record);
         this.emitOrQueue(record, () => {
           this.callbacks.emitSessionExit({
             sessionId: record.sessionId,
@@ -530,6 +545,7 @@ export class ClaudeSessionService {
       },
       emitError: (payload) => {
         record.lastError = payload.message;
+        this.touchSessionActivity(record);
         this.emitOrQueue(record, () => {
           this.callbacks.emitSessionError({
             sessionId: record.sessionId,
@@ -542,6 +558,7 @@ export class ClaudeSessionService {
         if (status !== "error") {
           record.lastError = null;
         }
+        this.touchSessionActivity(record);
         this.emitOrQueue(record, () => {
           this.callbacks.emitSessionStatus({
             sessionId: record.sessionId,
@@ -724,6 +741,10 @@ export class ClaudeSessionService {
       );
 
       record.createdAt = this.normalizeCreatedAt(snapshot.createdAt);
+      record.lastActivityAt = this.normalizeLastActivityAt(
+        snapshot.lastActivityAt,
+        record.createdAt,
+      );
       record.status = "stopped";
       record.activityState = "idle";
       record.activityWarning = this.pluginWarning;
@@ -748,6 +769,62 @@ export class ClaudeSessionService {
     return normalized.length > 0 ? normalized : this.nowFactory();
   }
 
+  private normalizeLastActivityAt(
+    lastActivityAt: string,
+    fallbackTimestamp: string,
+  ): string {
+    const normalized = lastActivityAt.trim();
+    return normalized.length > 0 ? normalized : fallbackTimestamp;
+  }
+
+  private touchSessionActivity(
+    record: SessionRecord,
+    sourceTimestamp?: string | null,
+    persistMode: SessionActivityPersistMode = "immediate",
+  ): void {
+    const nextTimestamp =
+      typeof sourceTimestamp === "string"
+        ? this.normalizeLastActivityAt(sourceTimestamp, this.nowFactory())
+        : this.nowFactory();
+
+    if (!this.isTimestampNewer(nextTimestamp, record.lastActivityAt)) {
+      return;
+    }
+
+    record.lastActivityAt = nextTimestamp;
+    if (persistMode === "debounced") {
+      this.scheduleSessionSnapshotPersist();
+      return;
+    }
+
+    this.persistSessionSnapshotsImmediately();
+  }
+
+  private isTimestampNewer(next: string, current: string): boolean {
+    if (next === current) {
+      return false;
+    }
+
+    const nextTimestamp = Date.parse(next);
+    const currentTimestamp = Date.parse(current);
+    const nextIsValid = !Number.isNaN(nextTimestamp);
+    const currentIsValid = !Number.isNaN(currentTimestamp);
+
+    if (nextIsValid && currentIsValid) {
+      return nextTimestamp > currentTimestamp;
+    }
+
+    if (nextIsValid && !currentIsValid) {
+      return true;
+    }
+
+    if (!nextIsValid && currentIsValid) {
+      return false;
+    }
+
+    return true;
+  }
+
   private createUniqueSessionId(): SessionId {
     for (let attempt = 0; attempt < 100; attempt += 1) {
       const sessionId = this.normalizeResumeSessionId(this.sessionIdFactory());
@@ -765,6 +842,8 @@ export class ClaudeSessionService {
   }
 
   private persistSessionSnapshots(): void {
+    this.clearPendingSessionSnapshotPersist();
+
     this.sessionSnapshotStore.writeSessionSnapshotState({
       sessions: Array.from(this.sessions.values()).map((record) =>
         this.toSnapshot(record),
@@ -774,5 +853,29 @@ export class ClaudeSessionService {
           ? this.activeSessionId
           : null,
     });
+  }
+
+  private persistSessionSnapshotsImmediately(): void {
+    this.persistSessionSnapshots();
+  }
+
+  private scheduleSessionSnapshotPersist(): void {
+    if (this.pendingSessionSnapshotPersist) {
+      return;
+    }
+
+    this.pendingSessionSnapshotPersist = setTimeout(() => {
+      this.pendingSessionSnapshotPersist = null;
+      this.persistSessionSnapshots();
+    }, SESSION_ACTIVITY_PERSIST_DEBOUNCE_MS);
+  }
+
+  private clearPendingSessionSnapshotPersist(): void {
+    if (!this.pendingSessionSnapshotPersist) {
+      return;
+    }
+
+    clearTimeout(this.pendingSessionSnapshotPersist);
+    this.pendingSessionSnapshotPersist = null;
   }
 }

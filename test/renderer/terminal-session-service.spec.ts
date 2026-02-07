@@ -15,6 +15,7 @@ import type {
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildProjectSessionGroups,
+  getSessionLastActivityLabel,
   getSessionSidebarIndicatorState,
   getSessionTitle,
   TerminalSessionService,
@@ -26,12 +27,16 @@ const ipcHarness = vi.hoisted(() => {
     exit: new Set<(payload: ClaudeSessionExitEvent) => void>(),
     error: new Set<(payload: ClaudeSessionErrorEvent) => void>(),
     status: new Set<(payload: ClaudeSessionStatusEvent) => void>(),
-    activityState: new Set<(payload: ClaudeSessionActivityStateEvent) => void>(),
+    activityState: new Set<
+      (payload: ClaudeSessionActivityStateEvent) => void
+    >(),
     activityWarning: new Set<
       (payload: ClaudeSessionActivityWarningEvent) => void
     >(),
     titleChanged: new Set<(payload: ClaudeSessionTitleChangedEvent) => void>(),
-    activeChanged: new Set<(payload: ClaudeActiveSessionChangedEvent) => void>(),
+    activeChanged: new Set<
+      (payload: ClaudeActiveSessionChangedEvent) => void
+    >(),
     hookEvent: new Set<(payload: ClaudeSessionHookEvent) => void>(),
   };
 
@@ -109,6 +114,7 @@ function makeSnapshot(): ClaudeSessionsSnapshot {
         activityWarning: null,
         lastError: null,
         createdAt: "2026-02-06T00:00:00.000Z",
+        lastActivityAt: "2026-02-06T00:00:00.000Z",
       },
       {
         sessionId: "session-2",
@@ -119,6 +125,7 @@ function makeSnapshot(): ClaudeSessionsSnapshot {
         activityWarning: null,
         lastError: null,
         createdAt: "2026-02-06T00:00:01.000Z",
+        lastActivityAt: "2026-02-06T00:00:01.000Z",
       },
     ],
   };
@@ -136,6 +143,7 @@ function makeIndicatorSession(
     activityWarning: null,
     lastError: null,
     createdAt: "2026-02-06T00:00:00.000Z",
+    lastActivityAt: "2026-02-06T00:00:00.000Z",
     ...overrides,
   };
 }
@@ -230,6 +238,58 @@ describe("getSessionSidebarIndicatorState", () => {
   });
 });
 
+describe("getSessionLastActivityLabel", () => {
+  it("formats minute and hour deltas with short labels", () => {
+    const now = Date.parse("2026-02-06T01:00:00.000Z");
+
+    expect(
+      getSessionLastActivityLabel(
+        makeIndicatorSession({
+          lastActivityAt: "2026-02-06T00:56:00.000Z",
+        }),
+        now,
+      ),
+    ).toBe("4m");
+
+    expect(
+      getSessionLastActivityLabel(
+        makeIndicatorSession({
+          lastActivityAt: "2026-02-06T00:00:00.000Z",
+        }),
+        now,
+      ),
+    ).toBe("1h");
+  });
+
+  it("returns now for very recent activity", () => {
+    const now = Date.parse("2026-02-06T01:00:30.000Z");
+    const label = getSessionLastActivityLabel(
+      makeIndicatorSession({
+        lastActivityAt: "2026-02-06T01:00:00.000Z",
+      }),
+      now,
+    );
+
+    expect(label).toBe("now");
+  });
+
+  it("uses month labels for sub-year gaps", () => {
+    const now = Date.parse("2026-01-01T00:00:00.000Z");
+    const lastActivityAt = new Date(
+      now - 360 * 24 * 60 * 60 * 1000,
+    ).toISOString();
+
+    const label = getSessionLastActivityLabel(
+      makeIndicatorSession({
+        lastActivityAt,
+      }),
+      now,
+    );
+
+    expect(label).toBe("12mo");
+  });
+});
+
 describe("TerminalSessionService", () => {
   beforeEach(() => {
     ipcHarness.reset();
@@ -249,13 +309,7 @@ describe("TerminalSessionService", () => {
       }),
     );
     ipcHarness.claudeIpc.setClaudeProjectCollapsed.mockImplementation(
-      async ({
-        path,
-        collapsed,
-      }: {
-        path: string;
-        collapsed: boolean;
-      }) => ({
+      async ({ path, collapsed }: { path: string; collapsed: boolean }) => ({
         ok: true,
         snapshot: {
           projects: [{ path, collapsed }],
@@ -431,6 +485,7 @@ describe("TerminalSessionService", () => {
             activityWarning: null,
             lastError: null,
             createdAt: "2026-02-06T00:00:00.000Z",
+            lastActivityAt: "2026-02-06T00:00:00.000Z",
           },
           {
             sessionId: "session-3",
@@ -441,6 +496,7 @@ describe("TerminalSessionService", () => {
             activityWarning: null,
             lastError: null,
             createdAt: "2026-02-06T00:00:02.000Z",
+            lastActivityAt: "2026-02-06T00:00:02.000Z",
           },
         ],
       },
@@ -498,6 +554,7 @@ describe("TerminalSessionService", () => {
             activityWarning: null,
             lastError: null,
             createdAt: "2026-02-06T00:00:02.000Z",
+            lastActivityAt: "2026-02-06T00:00:02.000Z",
           },
         ],
       },
@@ -535,6 +592,7 @@ describe("TerminalSessionService", () => {
             activityWarning: null,
             lastError: null,
             createdAt: "2026-02-06T00:00:02.000Z",
+            lastActivityAt: "2026-02-06T00:00:02.000Z",
           },
         ],
       },
@@ -566,6 +624,7 @@ describe("TerminalSessionService", () => {
         activityWarning: null,
         lastError: null,
         createdAt: "2026-02-06T00:00:00.000Z",
+        lastActivityAt: "2026-02-06T00:00:00.000Z",
       },
       "session-2": {
         sessionId: "session-2",
@@ -576,6 +635,7 @@ describe("TerminalSessionService", () => {
         activityWarning: null,
         lastError: null,
         createdAt: "2026-02-06T00:00:01.000Z",
+        lastActivityAt: "2026-02-06T00:00:01.000Z",
       },
       "session-3": {
         sessionId: "session-3",
@@ -586,6 +646,7 @@ describe("TerminalSessionService", () => {
         activityWarning: null,
         lastError: null,
         createdAt: "2026-02-06T00:00:02.000Z",
+        lastActivityAt: "2026-02-06T00:00:02.000Z",
       },
     };
 
@@ -636,6 +697,7 @@ describe("TerminalSessionService", () => {
           activityWarning: null,
           lastError: null,
           createdAt: "2026-02-06T00:00:01.000Z",
+          lastActivityAt: "2026-02-06T00:00:01.000Z",
         },
       ],
     });
@@ -655,6 +717,7 @@ describe("TerminalSessionService", () => {
             activityWarning: null,
             lastError: null,
             createdAt: "2026-02-06T00:00:01.000Z",
+            lastActivityAt: "2026-02-06T00:00:01.000Z",
           },
         ],
       },
@@ -695,6 +758,7 @@ describe("TerminalSessionService", () => {
             activityWarning: null,
             lastError: null,
             createdAt: "2026-02-06T00:00:00.000Z",
+            lastActivityAt: "2026-02-06T00:00:00.000Z",
           },
         ],
       });
@@ -912,6 +976,7 @@ describe("TerminalSessionService", () => {
         activityWarning: null,
         lastError: null,
         createdAt: "2026-02-06T00:00:00.000Z",
+        lastActivityAt: "2026-02-06T00:00:00.000Z",
       }),
     ).toBe("Session session-");
   });

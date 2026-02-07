@@ -52,6 +52,7 @@ export interface ClaudeSessionSnapshot {
   activityWarning: string | null;
   lastError: string | null;
   createdAt: string;
+  lastActivityAt: string;
 }
 
 export interface ClaudeSessionsSnapshot {

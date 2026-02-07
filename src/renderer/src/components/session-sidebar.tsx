@@ -4,10 +4,12 @@ import type {
   SessionSidebarIndicatorState,
 } from "@renderer/services/terminal-session-service";
 import {
+  getSessionLastActivityLabel,
   getSessionSidebarIndicatorState,
   getSessionTitle,
 } from "@renderer/services/terminal-session-service";
 import type { SessionId } from "@shared/claude-types";
+import { useEffect, useState } from "react";
 import {
   CircleDot,
   ChevronDown,
@@ -98,6 +100,18 @@ export function SessionSidebar({
   onResumeSession,
   onDeleteSession,
 }: SessionSidebarProps) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timerId = setInterval(() => {
+      setNow(Date.now());
+    }, 30_000);
+
+    return () => {
+      clearInterval(timerId);
+    };
+  }, []);
+
   return (
     <aside className="flex h-full w-[304px] shrink-0 flex-col border-r border-border/70 bg-black/35 backdrop-blur-xl">
       <div className="border-b border-border/70 p-2">
@@ -175,6 +189,10 @@ export function SessionSidebar({
                       const statusMeta = statusIndicatorMeta[statusState];
                       const StatusIcon = statusMeta.icon;
                       const sessionTitle = getSessionTitle(session);
+                      const lastActivity = getSessionLastActivityLabel(
+                        session,
+                        now,
+                      );
                       const ariaLabel = `${sessionTitle} (${statusMeta.label})`;
                       const canStop =
                         session.status === "starting" ||
@@ -218,6 +236,9 @@ export function SessionSidebar({
                               {sessionTitle}
                             </span>
                           </button>
+                          <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs tabular-nums text-zinc-400 transition group-hover/session:opacity-0 group-focus-within/session:opacity-0">
+                            {lastActivity}
+                          </span>
                           <div className="pointer-events-none absolute inset-y-0 right-1 flex items-center gap-0.5 opacity-0 transition group-hover/session:opacity-100 group-focus-within/session:opacity-100">
                             <button
                               type="button"

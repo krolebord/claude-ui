@@ -42,6 +42,7 @@ function createHarness(options?: {
     sessions: ClaudeSessionSnapshot[];
     activeSessionId: SessionId | null;
   };
+  nowFactory?: () => string;
 }) {
   const managerMocks: MockSessionManager[] = [];
   const monitorMocks: MockActivityMonitor[] = [];
@@ -49,12 +50,18 @@ function createHarness(options?: {
     sessionData: [] as Array<{ sessionId: string; chunk: string }>,
     sessionExit: [] as Array<{ sessionId: string; exitCode: number | null }>,
     sessionError: [] as Array<{ sessionId: string; message: string }>,
-    sessionStatus: [] as Array<{ sessionId: string; status: ClaudeSessionStatus }>,
+    sessionStatus: [] as Array<{
+      sessionId: string;
+      status: ClaudeSessionStatus;
+    }>,
     sessionActivityState: [] as Array<{
       sessionId: string;
       activityState: ClaudeActivityState;
     }>,
-    sessionActivityWarning: [] as Array<{ sessionId: string; warning: string | null }>,
+    sessionActivityWarning: [] as Array<{
+      sessionId: string;
+      warning: string | null;
+    }>,
     sessionTitleChanged: [] as Array<{ sessionId: string; title: string }>,
     activeChanged: [] as Array<{ activeSessionId: string | null }>,
   };
@@ -147,8 +154,9 @@ function createHarness(options?: {
       return monitor;
     },
     stateFileFactory: async () => "/tmp/claude-state.ndjson",
-    sessionIdFactory: () => sessionIds[sessionIdIndex++] ?? `session-${sessionIdIndex}`,
-    nowFactory: () => "2026-02-06T00:00:00.000Z",
+    sessionIdFactory: () =>
+      sessionIds[sessionIdIndex++] ?? `session-${sessionIdIndex}`,
+    nowFactory: options?.nowFactory ?? (() => "2026-02-06T00:00:00.000Z"),
     projectStore,
     sessionSnapshotStore,
   });
@@ -252,6 +260,7 @@ describe("ClaudeSessionService", () => {
             activityWarning: null,
             lastError: null,
             createdAt: "2026-02-05T00:00:00.000Z",
+            lastActivityAt: "2026-02-05T00:00:00.000Z",
           },
         ],
         activeSessionId: "session-1",
@@ -270,6 +279,7 @@ describe("ClaudeSessionService", () => {
         activityWarning: null,
         lastError: null,
         createdAt: "2026-02-05T00:00:00.000Z",
+        lastActivityAt: "2026-02-05T00:00:00.000Z",
       },
     ]);
   });
@@ -287,6 +297,7 @@ describe("ClaudeSessionService", () => {
             activityWarning: null,
             lastError: null,
             createdAt: "2026-02-05T00:00:00.000Z",
+            lastActivityAt: "2026-02-05T00:00:00.000Z",
           },
         ],
         activeSessionId: "session-1",
@@ -320,6 +331,7 @@ describe("ClaudeSessionService", () => {
             activityWarning: null,
             lastError: null,
             createdAt: "2026-02-05T00:00:00.000Z",
+            lastActivityAt: "2026-02-05T00:00:00.000Z",
           },
         ],
         activeSessionId: "session-1",
@@ -368,7 +380,9 @@ describe("ClaudeSessionService", () => {
     expect(second.snapshot.sessions[0]?.sessionName).toBeNull();
     expect(second.snapshot.sessions[1]?.sessionName).toBeNull();
     expect(harness.storedSessionSnapshotState.sessions).toHaveLength(2);
-    expect(harness.storedSessionSnapshotState.activeSessionId).toBe("session-2");
+    expect(harness.storedSessionSnapshotState.activeSessionId).toBe(
+      "session-2",
+    );
   });
 
   it("stores session name when provided", async () => {
@@ -386,6 +400,79 @@ describe("ClaudeSessionService", () => {
 
     expect(result.snapshot.sessions[0]?.sessionName).toBe(
       "Refactor terminal service",
+    );
+  });
+
+  it("updates lastActivityAt on write and persists it with debounce", async () => {
+    vi.useFakeTimers();
+
+    let nowIndex = 0;
+    const nowValues = [
+      "2026-02-06T00:00:00.000Z",
+      "2026-02-06T00:00:30.000Z",
+      "2026-02-06T00:01:00.000Z",
+    ];
+
+    try {
+      const harness = createHarness({
+        nowFactory: () => nowValues[nowIndex++] ?? nowValues.at(-1)!,
+      });
+
+      const result = await harness.service.startSession(START_INPUT);
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        return;
+      }
+
+      const writesBeforeWrite =
+        harness.sessionSnapshotStore.writeSessionSnapshotState.mock.calls.length;
+      harness.service.writeToSession("session-1", "hello");
+
+      expect(harness.managerMocks[0]?.write).toHaveBeenCalledWith("hello");
+      expect(
+        harness.service.getSessionsSnapshot().sessions[0]?.lastActivityAt,
+      ).toBe("2026-02-06T00:00:30.000Z");
+      expect(
+        harness.storedSessionSnapshotState.sessions[0]?.lastActivityAt,
+      ).not.toBe("2026-02-06T00:00:30.000Z");
+      expect(
+        harness.sessionSnapshotStore.writeSessionSnapshotState,
+      ).toHaveBeenCalledTimes(writesBeforeWrite);
+
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      expect(
+        harness.sessionSnapshotStore.writeSessionSnapshotState,
+      ).toHaveBeenCalledTimes(writesBeforeWrite + 1);
+      expect(
+        harness.storedSessionSnapshotState.sessions[0]?.lastActivityAt,
+      ).toBe("2026-02-06T00:00:30.000Z");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("uses hook event timestamp for lastActivityAt", async () => {
+    const harness = createHarness();
+
+    const result = await harness.service.startSession(START_INPUT);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+
+    harness.monitorMocks[0]?.callbacks.emitHookEvent({
+      timestamp: "2026-02-06T00:10:00.000Z",
+      hook_event_name: "PostToolUse",
+      session_id: "session-1",
+    });
+
+    const snapshot = harness.service.getSessionsSnapshot();
+    expect(snapshot.sessions[0]?.lastActivityAt).toBe(
+      "2026-02-06T00:10:00.000Z",
+    );
+    expect(harness.storedSessionSnapshotState.sessions[0]?.lastActivityAt).toBe(
+      "2026-02-06T00:10:00.000Z",
     );
   });
 
@@ -549,7 +636,9 @@ describe("ClaudeSessionService", () => {
     expect(harness.eventLog.sessionStatus[0]?.sessionId).toBe("session-1");
     expect(harness.eventLog.sessionError[0]?.sessionId).toBe("session-1");
     expect(harness.eventLog.sessionExit[0]?.sessionId).toBe("session-1");
-    expect(harness.eventLog.sessionActivityState[0]?.sessionId).toBe("session-1");
+    expect(harness.eventLog.sessionActivityState[0]?.sessionId).toBe(
+      "session-1",
+    );
   });
 
   it("continues routing by generated session IDs after hook events", async () => {

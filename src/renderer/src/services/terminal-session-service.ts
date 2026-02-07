@@ -39,6 +39,171 @@ export interface TerminalSessionState {
 
 type Listener = () => void;
 
+const SESSION_OUTPUT_MAX_LINES = 10_000;
+const SESSION_OUTPUT_MAX_BYTES = 2 * 1024 * 1024;
+const SESSION_OUTPUT_COMPACT_THRESHOLD = 1_024;
+
+const UTF8_ENCODER = new TextEncoder();
+const UTF8_DECODER = new TextDecoder();
+
+interface BufferedOutputLine {
+  text: string;
+  byteLength: number;
+  charLength: number;
+}
+
+function getUtf8ByteLength(value: string): number {
+  return UTF8_ENCODER.encode(value).length;
+}
+
+function trimToUtf8ByteSuffix(value: string, maxBytes: number): string {
+  if (maxBytes <= 0 || !value) {
+    return "";
+  }
+
+  const encoded = UTF8_ENCODER.encode(value);
+  if (encoded.length <= maxBytes) {
+    return value;
+  }
+
+  let start = encoded.length - maxBytes;
+
+  while (
+    start < encoded.length &&
+    (encoded[start] & 0b1100_0000) === 0b1000_0000
+  ) {
+    start += 1;
+  }
+
+  return UTF8_DECODER.decode(encoded.subarray(start));
+}
+
+class SessionOutputRingBuffer {
+  private readonly maxLines: number;
+  private readonly maxBytes: number;
+  private readonly lines: BufferedOutputLine[] = [];
+  private firstLineIndex = 0;
+  private trailingFragment = "";
+  private trailingFragmentBytes = 0;
+  private trailingFragmentChars = 0;
+  private totalBytes = 0;
+  private totalChars = 0;
+
+  constructor(maxLines: number, maxBytes: number) {
+    this.maxLines = maxLines;
+    this.maxBytes = maxBytes;
+  }
+
+  append(chunk: string): void {
+    if (!chunk) {
+      return;
+    }
+
+    const combined = this.trailingFragment + chunk;
+    this.clearTrailingFragment();
+
+    const segments = combined.split("\n");
+    const nextTrailingFragment = segments.pop() ?? "";
+
+    for (const segment of segments) {
+      const lineText = `${segment}\n`;
+      const byteLength = getUtf8ByteLength(lineText);
+      const charLength = lineText.length;
+      this.lines.push({
+        text: lineText,
+        byteLength,
+        charLength,
+      });
+      this.totalBytes += byteLength;
+      this.totalChars += charLength;
+    }
+
+    this.setTrailingFragment(nextTrailingFragment);
+    this.evictByLineLimit();
+    this.evictByByteLimit();
+  }
+
+  getCharLength(): number {
+    return this.totalChars;
+  }
+
+  toString(): string {
+    const visibleLines = this.lines.slice(this.firstLineIndex);
+    if (visibleLines.length === 0) {
+      return this.trailingFragment;
+    }
+
+    return (
+      visibleLines.map((line) => line.text).join("") + this.trailingFragment
+    );
+  }
+
+  private getLineCount(): number {
+    return this.lines.length - this.firstLineIndex;
+  }
+
+  private clearTrailingFragment(): void {
+    this.totalBytes -= this.trailingFragmentBytes;
+    this.totalChars -= this.trailingFragmentChars;
+    this.trailingFragment = "";
+    this.trailingFragmentBytes = 0;
+    this.trailingFragmentChars = 0;
+  }
+
+  private setTrailingFragment(value: string): void {
+    this.trailingFragment = value;
+    this.trailingFragmentBytes = getUtf8ByteLength(value);
+    this.trailingFragmentChars = value.length;
+    this.totalBytes += this.trailingFragmentBytes;
+    this.totalChars += this.trailingFragmentChars;
+  }
+
+  private removeOldestLine(): void {
+    if (this.getLineCount() <= 0) {
+      return;
+    }
+
+    const oldest = this.lines[this.firstLineIndex];
+    this.firstLineIndex += 1;
+    this.totalBytes -= oldest.byteLength;
+    this.totalChars -= oldest.charLength;
+    this.compactLinesIfNeeded();
+  }
+
+  private compactLinesIfNeeded(): void {
+    if (
+      this.firstLineIndex >= SESSION_OUTPUT_COMPACT_THRESHOLD &&
+      this.firstLineIndex * 2 >= this.lines.length
+    ) {
+      this.lines.splice(0, this.firstLineIndex);
+      this.firstLineIndex = 0;
+    }
+  }
+
+  private evictByLineLimit(): void {
+    while (this.getLineCount() > this.maxLines) {
+      this.removeOldestLine();
+    }
+  }
+
+  private evictByByteLimit(): void {
+    while (this.totalBytes > this.maxBytes && this.getLineCount() > 0) {
+      this.removeOldestLine();
+    }
+
+    if (this.totalBytes <= this.maxBytes || this.getLineCount() > 0) {
+      return;
+    }
+
+    const trimmedFragment = trimToUtf8ByteSuffix(
+      this.trailingFragment,
+      this.maxBytes,
+    );
+    this.clearTrailingFragment();
+    this.setTrailingFragment(trimmedFragment);
+  }
+}
+
 function toTimestamp(value: string): number {
   const timestamp = Date.parse(value);
   return Number.isNaN(timestamp) ? 0 : timestamp;
@@ -48,6 +213,12 @@ function compareSessionsByCreatedAtDesc(
   a: ClaudeSessionSnapshot,
   b: ClaudeSessionSnapshot,
 ): number {
+  const byLastActivity =
+    toTimestamp(b.lastActivityAt) - toTimestamp(a.lastActivityAt);
+  if (byLastActivity !== 0) {
+    return byLastActivity;
+  }
+
   return toTimestamp(b.createdAt) - toTimestamp(a.createdAt);
 }
 
@@ -65,6 +236,48 @@ export function getSessionTitle(session: ClaudeSessionSnapshot): string {
   }
 
   return `Session ${session.sessionId.slice(0, 8)}`;
+}
+
+export function getSessionLastActivityLabel(
+  session: ClaudeSessionSnapshot,
+  now = Date.now(),
+): string {
+  const timestamp = toTimestamp(session.lastActivityAt);
+  if (timestamp <= 0) {
+    return "";
+  }
+
+  const deltaSeconds = Math.max(0, Math.floor((now - timestamp) / 1000));
+  if (deltaSeconds < 60) {
+    return "now";
+  }
+
+  const minutes = Math.floor(deltaSeconds / 60);
+  if (minutes < 60) {
+    return `${minutes}m`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return `${hours}h`;
+  }
+
+  const days = Math.floor(hours / 24);
+  if (days < 7) {
+    return `${days}d`;
+  }
+
+  const weeks = Math.floor(days / 7);
+  if (weeks < 5) {
+    return `${weeks}w`;
+  }
+
+  const months = Math.floor(days / 30);
+  if (months < 12 || days < 365) {
+    return `${months}mo`;
+  }
+
+  return `${Math.floor(days / 365)}y`;
 }
 
 export type SessionSidebarIndicatorState =
@@ -157,7 +370,7 @@ export function buildProjectSessionGroups(
 
 export class TerminalSessionService {
   private state: TerminalSessionState;
-  private sessionOutputById: Record<SessionId, string> = {};
+  private sessionOutputById: Record<SessionId, SessionOutputRingBuffer> = {};
   private renderedSessionId: SessionId | null = null;
   private renderedOutputLength = 0;
 
@@ -443,6 +656,11 @@ export class TerminalSessionService {
         return;
       }
 
+      const now = new Date().toISOString();
+      this.updateSession(sessionId, (session) => ({
+        ...session,
+        lastActivityAt: now,
+      }));
       claudeIpc.writeToClaudeSession({ sessionId, data });
     },
     resizeActiveSession: (cols: number, rows: number): void => {
@@ -522,7 +740,8 @@ export class TerminalSessionService {
       }
 
       if (typeof input.dangerouslySkipPermissions === "boolean") {
-        startInput.dangerouslySkipPermissions = input.dangerouslySkipPermissions;
+        startInput.dangerouslySkipPermissions =
+          input.dangerouslySkipPermissions;
       }
 
       const result = await claudeIpc.startClaudeSession(startInput);
@@ -565,26 +784,31 @@ export class TerminalSessionService {
         if (payload.sessionId === this.state.activeSessionId) {
           this.terminal?.write(payload.chunk);
           this.renderedSessionId = payload.sessionId;
-          this.renderedOutputLength =
-            this.sessionOutputById[payload.sessionId]?.length ?? 0;
+          this.renderedOutputLength = this.getSessionOutputLength(
+            payload.sessionId,
+          );
         }
       }),
       claudeIpc.onClaudeSessionExit((payload) => {
+        const now = new Date().toISOString();
         if (
           !this.updateSession(payload.sessionId, (session) => ({
             ...session,
             status: "stopped",
+            lastActivityAt: now,
           }))
         ) {
           void this.refreshSessions();
         }
       }),
       claudeIpc.onClaudeSessionError((payload) => {
+        const now = new Date().toISOString();
         if (
           !this.updateSession(payload.sessionId, (session) => ({
             ...session,
             lastError: payload.message,
             status: "error",
+            lastActivityAt: now,
           }))
         ) {
           void this.refreshSessions();
@@ -599,31 +823,37 @@ export class TerminalSessionService {
         }
       }),
       claudeIpc.onClaudeSessionStatus((payload) => {
+        const now = new Date().toISOString();
         if (
           !this.updateSession(payload.sessionId, (session) => ({
             ...session,
             status: payload.status,
             lastError: payload.status === "error" ? session.lastError : null,
+            lastActivityAt: now,
           }))
         ) {
           void this.refreshSessions();
         }
       }),
       claudeIpc.onClaudeSessionActivityState((payload) => {
+        const now = new Date().toISOString();
         if (
           !this.updateSession(payload.sessionId, (session) => ({
             ...session,
             activityState: payload.activityState,
+            lastActivityAt: now,
           }))
         ) {
           void this.refreshSessions();
         }
       }),
       claudeIpc.onClaudeSessionActivityWarning((payload) => {
+        const now = new Date().toISOString();
         if (
           !this.updateSession(payload.sessionId, (session) => ({
             ...session,
             activityWarning: payload.warning,
+            lastActivityAt: now,
           }))
         ) {
           void this.refreshSessions();
@@ -654,8 +884,17 @@ export class TerminalSessionService {
           void this.refreshSessions();
         }
       }),
-      claudeIpc.onClaudeSessionHookEvent(() => {
-        // Hook events are available for future UI surfaces; no-op for now.
+      claudeIpc.onClaudeSessionHookEvent((payload) => {
+        const fallbackTimestamp = new Date().toISOString();
+        const hookTimestamp =
+          typeof payload.event.timestamp === "string" &&
+          payload.event.timestamp.trim().length > 0
+            ? payload.event.timestamp
+            : fallbackTimestamp;
+        this.updateSession(payload.sessionId, (session) => ({
+          ...session,
+          lastActivityAt: hookTimestamp,
+        }));
       }),
     ];
 
@@ -758,21 +997,48 @@ export class TerminalSessionService {
   }
 
   private appendSessionOutput(sessionId: SessionId, chunk: string): void {
-    const previous = this.sessionOutputById[sessionId] ?? "";
-    this.sessionOutputById = {
-      ...this.sessionOutputById,
-      [sessionId]: previous + chunk,
-    };
+    let outputBuffer = this.sessionOutputById[sessionId];
+    if (!outputBuffer) {
+      outputBuffer = new SessionOutputRingBuffer(
+        SESSION_OUTPUT_MAX_LINES,
+        SESSION_OUTPUT_MAX_BYTES,
+      );
+      this.sessionOutputById = {
+        ...this.sessionOutputById,
+        [sessionId]: outputBuffer,
+      };
+    }
+
+    outputBuffer.append(chunk);
   }
 
   private pruneSessionOutput(sessionIds: SessionId[]): void {
-    const nextOutputById: Record<SessionId, string> = {};
+    const nextOutputById: Record<SessionId, SessionOutputRingBuffer> = {};
 
     for (const sessionId of sessionIds) {
-      nextOutputById[sessionId] = this.sessionOutputById[sessionId] ?? "";
+      const existingOutput = this.sessionOutputById[sessionId];
+      if (existingOutput) {
+        nextOutputById[sessionId] = existingOutput;
+      }
     }
 
     this.sessionOutputById = nextOutputById;
+  }
+
+  private getSessionOutput(sessionId: SessionId | null): string {
+    if (!sessionId) {
+      return "";
+    }
+
+    return this.sessionOutputById[sessionId]?.toString() ?? "";
+  }
+
+  private getSessionOutputLength(sessionId: SessionId | null): number {
+    if (!sessionId) {
+      return 0;
+    }
+
+    return this.sessionOutputById[sessionId]?.getCharLength() ?? 0;
   }
 
   private renderActiveSessionOutput(force = false): void {
@@ -781,14 +1047,13 @@ export class TerminalSessionService {
     }
 
     const activeSessionId = this.state.activeSessionId;
-    const output = activeSessionId
-      ? (this.sessionOutputById[activeSessionId] ?? "")
-      : "";
+    const output = this.getSessionOutput(activeSessionId);
+    const outputLength = this.getSessionOutputLength(activeSessionId);
 
     if (
       !force &&
       this.renderedSessionId === activeSessionId &&
-      this.renderedOutputLength === output.length
+      this.renderedOutputLength === outputLength
     ) {
       return;
     }
@@ -797,13 +1062,14 @@ export class TerminalSessionService {
 
     if (!activeSessionId || !output) {
       this.renderedSessionId = activeSessionId;
-      this.renderedOutputLength = output.length;
+      this.renderedOutputLength = outputLength;
       return;
     }
 
     this.terminal.write(output);
     this.renderedSessionId = activeSessionId;
-    this.renderedOutputLength = output.length;
+    this.renderedOutputLength = outputLength;
+  }
 
   private focusTerminal(): void {
     this.terminal?.focus();

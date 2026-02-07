@@ -65,60 +65,58 @@ function App() {
   }, [actions]);
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(120%_90%_at_0%_0%,#242b36_0%,#111419_45%,#090b10_100%)]">
-      <div className="mx-auto flex h-[calc(100vh-2rem)] max-w-[1600px] overflow-hidden border border-white/10 bg-black/25 shadow-[0_30px_80px_rgba(0,0,0,0.5)]">
-        <SessionSidebar
-          groups={groups}
-          activeSessionId={state.activeSessionId}
-          isAddingProject={state.isSelecting}
-          onAddProject={() => {
-            void actions.addProject();
-          }}
-          onToggleProject={(projectPath) => {
-            void actions.toggleProjectCollapsed(projectPath);
-          }}
-          onOpenNewSessionDialog={actions.openNewSessionDialog}
-          onSelectSession={(sessionId) => {
-            void actions.setActiveSession(sessionId);
-          }}
-          onStopSession={(sessionId) => {
-            void actions.stopSession(sessionId);
-          }}
-          onResumeSession={(sessionId) => {
-            const terminalSize = terminalRef.current?.getSize() ?? {
-              cols: 80,
-              rows: 24,
-            };
+    <div className="flex h-screen overflow-hidden">
+      <SessionSidebar
+        groups={groups}
+        activeSessionId={state.activeSessionId}
+        isAddingProject={state.isSelecting}
+        onAddProject={() => {
+          void actions.addProject();
+        }}
+        onToggleProject={(projectPath) => {
+          void actions.toggleProjectCollapsed(projectPath);
+        }}
+        onOpenNewSessionDialog={actions.openNewSessionDialog}
+        onSelectSession={(sessionId) => {
+          void actions.setActiveSession(sessionId);
+        }}
+        onStopSession={(sessionId) => {
+          void actions.stopSession(sessionId);
+        }}
+        onResumeSession={(sessionId) => {
+          const terminalSize = terminalRef.current?.getSize() ?? {
+            cols: 80,
+            rows: 24,
+          };
 
-            void actions.resumeSession(sessionId, {
-              cols: terminalSize.cols,
-              rows: terminalSize.rows,
-            });
-          }}
-          onDeleteSession={(sessionId) => {
-            void actions.deleteSession(sessionId);
-          }}
-        />
+          void actions.resumeSession(sessionId, {
+            cols: terminalSize.cols,
+            rows: terminalSize.rows,
+          });
+        }}
+        onDeleteSession={(sessionId) => {
+          void actions.deleteSession(sessionId);
+        }}
+      />
 
-        <main className="flex min-w-0 flex-1 flex-col bg-black/15">
-          {errorMessage ? (
-            <div className="mx-4 mt-4 flex items-center gap-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
-              <AlertCircle className="size-4" />
-              <span>{errorMessage}</span>
-            </div>
-          ) : null}
-
-          <div className="min-h-0 flex-1">
-            <div className="h-full overflow-hidden border border-white/10 bg-[#080a0e]">
-              <TerminalPane
-                ref={handleTerminalRef}
-                onInput={handleTerminalInput}
-                onResize={handleTerminalResize}
-              />
-            </div>
+      <main className="flex min-w-0 flex-1 flex-col bg-black/15">
+        {errorMessage ? (
+          <div className="mx-4 mt-4 flex items-center gap-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
+            <AlertCircle className="size-4" />
+            <span>{errorMessage}</span>
           </div>
-        </main>
-      </div>
+        ) : null}
+
+        <div className="min-h-0 flex-1">
+          <div className="h-full overflow-hidden border border-white/10 bg-[#080a0e]">
+            <TerminalPane
+              ref={handleTerminalRef}
+              onInput={handleTerminalInput}
+              onResize={handleTerminalResize}
+            />
+          </div>
+        </div>
+      </main>
 
       <NewSessionDialog
         open={state.newSessionDialog.open}

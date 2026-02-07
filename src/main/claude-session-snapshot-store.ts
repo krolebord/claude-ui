@@ -59,6 +59,15 @@ function parseOptionalString(raw: unknown): string | null {
   return normalized.length > 0 ? normalized : null;
 }
 
+function parseTimestampWithFallback(raw: unknown, fallback: string): string {
+  if (typeof raw !== "string") {
+    return fallback;
+  }
+
+  const normalized = raw.trim();
+  return normalized.length > 0 ? normalized : fallback;
+}
+
 function parseSessionSnapshots(rawSessions: unknown): ClaudeSessionSnapshot[] {
   if (!Array.isArray(rawSessions)) {
     return [];
@@ -85,6 +94,11 @@ function parseSessionSnapshots(rawSessions: unknown): ClaudeSessionSnapshot[] {
       continue;
     }
 
+    const createdAt = parseTimestampWithFallback(
+      "createdAt" in candidate ? candidate.createdAt : null,
+      new Date(0).toISOString(),
+    );
+
     seenSessionIds.add(sessionId);
     snapshots.push({
       sessionId,
@@ -109,10 +123,11 @@ function parseSessionSnapshots(rawSessions: unknown): ClaudeSessionSnapshot[] {
         "lastError" in candidate
           ? parseOptionalString(candidate.lastError)
           : null,
-      createdAt:
-        "createdAt" in candidate && typeof candidate.createdAt === "string"
-          ? candidate.createdAt.trim() || new Date(0).toISOString()
-          : new Date(0).toISOString(),
+      createdAt,
+      lastActivityAt: parseTimestampWithFallback(
+        "lastActivityAt" in candidate ? candidate.lastActivityAt : null,
+        createdAt,
+      ),
     });
   }
 
