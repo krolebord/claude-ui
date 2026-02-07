@@ -11,6 +11,8 @@ import type {
   ClaudeSessionStatusEvent,
   ClaudeSessionTitleChangedEvent,
   ClaudeSessionsSnapshot,
+  DeleteClaudeProjectInput,
+  DeleteClaudeProjectResult,
   DeleteClaudeSessionInput,
   DeleteClaudeSessionResult,
   ResizeClaudeSessionInput,
@@ -35,6 +37,10 @@ export const claudeIpc = {
     input: SetClaudeProjectCollapsedInput,
   ): Promise<SetClaudeProjectCollapsedResult> =>
     window.claude.setClaudeProjectCollapsed(input),
+  deleteClaudeProject: (
+    input: DeleteClaudeProjectInput,
+  ): Promise<DeleteClaudeProjectResult> =>
+    window.claude.deleteClaudeProject(input),
   startClaudeSession: (
     input: StartClaudeSessionInput,
   ): Promise<StartClaudeSessionResult> =>

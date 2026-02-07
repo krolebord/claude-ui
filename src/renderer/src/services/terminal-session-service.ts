@@ -20,6 +20,7 @@ export type { ClaudeProject as SidebarProject } from "@shared/claude-types";
 export interface NewSessionDialogState {
   open: boolean;
   projectPath: string | null;
+  initialPrompt: string;
   sessionName: string;
   model: ClaudeModel;
   dangerouslySkipPermissions: boolean;
@@ -42,6 +43,7 @@ function getDefaultDialogState(): NewSessionDialogState {
   return {
     open: false,
     projectPath: null,
+    initialPrompt: "",
     sessionName: "",
     model: "opus",
     dangerouslySkipPermissions: false,

@@ -1,6 +1,7 @@
 import type {
   AddClaudeProjectInput,
   ClaudeProject,
+  DeleteClaudeProjectInput,
   SetClaudeProjectCollapsedInput,
 } from "../shared/claude-types";
 
@@ -58,6 +59,38 @@ export function addProjectToList(
         collapsed: false,
       },
     ],
+    didChange: true,
+  };
+}
+
+export function removeProjectFromList(
+  projects: ClaudeProject[],
+  input: DeleteClaudeProjectInput,
+): {
+  projects: ClaudeProject[];
+  didChange: boolean;
+} {
+  const projectPath = normalizeProjectPath(input.path);
+  if (!projectPath) {
+    return {
+      projects,
+      didChange: false,
+    };
+  }
+
+  const nextProjects = projects.filter(
+    (project) => project.path !== projectPath,
+  );
+
+  if (nextProjects.length === projects.length) {
+    return {
+      projects,
+      didChange: false,
+    };
+  }
+
+  return {
+    projects: nextProjects,
     didChange: true,
   };
 }

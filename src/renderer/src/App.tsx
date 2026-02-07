@@ -97,6 +97,9 @@ function App() {
         onDeleteSession={(sessionId) => {
           void actions.deleteSession(sessionId);
         }}
+        onDeleteProject={(projectPath) => {
+          void actions.deleteProject(projectPath);
+        }}
       />
 
       <main className="flex min-w-0 flex-1 flex-col bg-black/15">
@@ -119,12 +122,14 @@ function App() {
       <NewSessionDialog
         open={state.newSessionDialog.open}
         projectPath={state.newSessionDialog.projectPath}
+        initialPrompt={state.newSessionDialog.initialPrompt}
         sessionName={state.newSessionDialog.sessionName}
         model={state.newSessionDialog.model}
         dangerouslySkipPermissions={
           state.newSessionDialog.dangerouslySkipPermissions
         }
         isStarting={state.isStarting}
+        onInitialPromptChange={actions.setNewSessionInitialPrompt}
         onSessionNameChange={actions.setNewSessionName}
         onModelChange={actions.setNewSessionModel}
         onDangerouslySkipPermissionsChange={

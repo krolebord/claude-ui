@@ -4,6 +4,7 @@ import type {
   ClaudeActivityState,
   ClaudeHookEvent,
 } from "../shared/claude-types";
+import log from "./logger";
 
 const POLL_INTERVAL_MS = 180;
 const POLL_CHECK_MIN_ELAPSED_MS = 250;
@@ -46,7 +47,7 @@ export class ClaudeActivityMonitor {
     try {
       this.startWatcher(stateFilePath);
     } catch (e) {
-      console.error("Failed to start file watcher:", e);
+      log.error("Failed to start file watcher:", e);
       this.usingPollingFallback = true;
     }
 
@@ -91,11 +92,11 @@ export class ClaudeActivityMonitor {
       });
 
       this.watcher.on("error", (e) => {
-        console.error("File watcher error:", e);
+        log.error("File watcher error:", e);
         this.usingPollingFallback = true;
       });
     } catch (e) {
-      console.error("Failed to start file watcher:", e);
+      log.error("Failed to start file watcher:", e);
       this.usingPollingFallback = true;
     }
   }

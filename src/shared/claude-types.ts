@@ -6,6 +6,7 @@ export const CLAUDE_IPC_CHANNELS = {
   startSession: "claude:start-session",
   stopSession: "claude:stop-session",
   deleteSession: "claude:delete-session",
+  deleteProject: "claude:delete-project",
   setActiveSession: "claude:set-active-session",
   writeSession: "claude:write-session",
   resizeSession: "claude:resize-session",
@@ -88,6 +89,7 @@ export interface StartClaudeSessionInput {
   sessionName?: string | null;
   dangerouslySkipPermissions?: boolean;
   model?: ClaudeModel;
+  initialPrompt?: string;
 }
 
 export type StartClaudeSessionResult =
@@ -107,6 +109,15 @@ export interface StopClaudeSessionInput {
 
 export interface StopClaudeSessionResult {
   ok: true;
+}
+
+export interface DeleteClaudeProjectInput {
+  path: string;
+}
+
+export interface DeleteClaudeProjectResult {
+  ok: true;
+  snapshot: ClaudeSessionsSnapshot;
 }
 
 export interface DeleteClaudeSessionInput {
@@ -205,6 +216,9 @@ export interface ClaudeDesktopApi {
   stopClaudeSession: (
     input: StopClaudeSessionInput,
   ) => Promise<StopClaudeSessionResult>;
+  deleteClaudeProject: (
+    input: DeleteClaudeProjectInput,
+  ) => Promise<DeleteClaudeProjectResult>;
   deleteClaudeSession: (
     input: DeleteClaudeSessionInput,
   ) => Promise<DeleteClaudeSessionResult>;

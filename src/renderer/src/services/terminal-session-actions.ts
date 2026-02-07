@@ -15,6 +15,7 @@ interface StartSessionInProjectInput {
   model?: ClaudeModel;
   dangerouslySkipPermissions?: boolean;
   resumeSessionId?: SessionId;
+  initialPrompt?: string;
 }
 
 interface CreateTerminalSessionActionsDeps {
@@ -42,6 +43,7 @@ function getDefaultDialogState(projectPath: string | null, open: boolean) {
   return {
     open,
     projectPath,
+    initialPrompt: "",
     sessionName: "",
     model: "opus" as const,
     dangerouslySkipPermissions: false,
@@ -81,6 +83,10 @@ async function startSessionInProject(
 
     if (typeof input.dangerouslySkipPermissions === "boolean") {
       startInput.dangerouslySkipPermissions = input.dangerouslySkipPermissions;
+    }
+
+    if (typeof input.initialPrompt === "string") {
+      startInput.initialPrompt = input.initialPrompt;
     }
 
     const result = await claudeIpc.startClaudeSession(startInput);
@@ -214,6 +220,15 @@ export function createTerminalSessionActions(
         },
       }));
     },
+    setNewSessionInitialPrompt: (value: string): void => {
+      deps.updateState((prev) => ({
+        ...prev,
+        newSessionDialog: {
+          ...prev.newSessionDialog,
+          initialPrompt: value,
+        },
+      }));
+    },
     setNewSessionDangerouslySkipPermissions: (value: boolean): void => {
       deps.updateState((prev) => ({
         ...prev,
@@ -237,6 +252,9 @@ export function createTerminalSessionActions(
       const model = current.newSessionDialog.model;
       const dangerouslySkipPermissions =
         current.newSessionDialog.dangerouslySkipPermissions;
+      const rawInitialPrompt = current.newSessionDialog.initialPrompt.trim();
+      const initialPrompt =
+        rawInitialPrompt.length > 0 ? rawInitialPrompt : undefined;
 
       deps.updateState((prev) => ({
         ...prev,
@@ -248,6 +266,7 @@ export function createTerminalSessionActions(
         sessionName,
         model,
         dangerouslySkipPermissions,
+        initialPrompt,
         cols: input.cols,
         rows: input.rows,
       });
@@ -313,6 +332,20 @@ export function createTerminalSessionActions(
         rows: input.rows,
         resumeSessionId: sessionId,
       });
+    },
+    deleteProject: async (projectPath: string): Promise<void> => {
+      try {
+        await claudeIpc.deleteClaudeProject({ path: projectPath });
+        await deps.refreshSessions();
+      } catch (error) {
+        deps.updateState((prev) => ({
+          ...prev,
+          errorMessage:
+            error instanceof Error
+              ? error.message
+              : "Failed to delete project.",
+        }));
+      }
     },
     deleteSession: async (sessionId: SessionId): Promise<void> => {
       if (!(sessionId in deps.getState().sessionsById)) {

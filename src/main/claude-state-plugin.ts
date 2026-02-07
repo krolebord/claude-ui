@@ -1,5 +1,6 @@
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import log from "./logger";
 
 const PLUGIN_VERSION = 1;
 
@@ -164,5 +165,6 @@ export async function ensureManagedClaudeStatePlugin(
     await chmod(scriptPath, 0o755);
   }
 
+  log.info("Managed plugin created", { pluginRoot });
   return pluginRoot;
 }

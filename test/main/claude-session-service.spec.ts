@@ -731,4 +731,146 @@ describe("ClaudeSessionService", () => {
 
     expect(harness.eventLog.sessionTitleChanged).toHaveLength(1);
   });
+
+  it("deletes an empty project and persists the change", () => {
+    const harness = createHarness();
+
+    harness.service.addProject({ path: "/workspace" });
+    const result = harness.service.deleteProject({ path: "/workspace" });
+
+    expect(result.ok).toBe(true);
+    expect(result.snapshot.projects).toEqual([]);
+    expect(harness.storedProjects).toEqual([]);
+  });
+
+  it("rejects deleting a project that still has sessions", async () => {
+    const harness = createHarness();
+
+    harness.service.addProject({ path: "/workspace" });
+    await harness.service.startSession(START_INPUT);
+
+    expect(() => {
+      harness.service.deleteProject({ path: "/workspace" });
+    }).toThrow("Cannot delete project that still has sessions");
+  });
+
+  it("writes initial prompt to PTY on SessionStart hook event", async () => {
+    const harness = createHarness();
+
+    await harness.service.startSession({
+      ...START_INPUT,
+      initialPrompt: "fix the login bug",
+    });
+
+    harness.monitorMocks[0]?.callbacks.emitHookEvent({
+      timestamp: "2026-02-07T00:00:01.000Z",
+      hook_event_name: "SessionStart",
+      session_id: "session-1",
+    });
+
+    expect(harness.managerMocks[0]?.write).toHaveBeenCalledWith(
+      "fix the login bug\r",
+    );
+  });
+
+  it("does not write initial prompt on non-SessionStart hook events", async () => {
+    const harness = createHarness();
+
+    await harness.service.startSession({
+      ...START_INPUT,
+      initialPrompt: "fix the login bug",
+    });
+
+    harness.monitorMocks[0]?.callbacks.emitHookEvent({
+      timestamp: "2026-02-07T00:00:01.000Z",
+      hook_event_name: "UserPromptSubmit",
+      session_id: "session-1",
+      prompt: "something else",
+    });
+
+    expect(harness.managerMocks[0]?.write).not.toHaveBeenCalledWith(
+      "fix the login bug\r",
+    );
+  });
+
+  it("writes initial prompt only once", async () => {
+    const harness = createHarness();
+
+    await harness.service.startSession({
+      ...START_INPUT,
+      initialPrompt: "fix the login bug",
+    });
+
+    harness.monitorMocks[0]?.callbacks.emitHookEvent({
+      timestamp: "2026-02-07T00:00:01.000Z",
+      hook_event_name: "SessionStart",
+      session_id: "session-1",
+    });
+
+    harness.monitorMocks[0]?.callbacks.emitHookEvent({
+      timestamp: "2026-02-07T00:00:02.000Z",
+      hook_event_name: "SessionStart",
+      session_id: "session-1",
+    });
+
+    expect(harness.managerMocks[0]?.write).toHaveBeenCalledTimes(1);
+  });
+
+  it("triggers immediate title generation from initial prompt for unnamed sessions", async () => {
+    const harness = createHarness();
+
+    await harness.service.startSession({
+      ...START_INPUT,
+      initialPrompt: "fix the login bug",
+    });
+
+    await vi.waitFor(() => {
+      expect(harness.eventLog.sessionTitleChanged).toHaveLength(1);
+    });
+
+    expect(harness.eventLog.sessionTitleChanged[0]).toEqual({
+      sessionId: "session-1",
+      title: "Generated Title",
+    });
+
+    const snapshot = harness.service.getSessionsSnapshot();
+    expect(snapshot.sessions[0]?.sessionName).toBe("Generated Title");
+  });
+
+  it("does not trigger title generation from initial prompt when session has explicit name", async () => {
+    const harness = createHarness();
+
+    await harness.service.startSession({
+      ...START_INPUT,
+      sessionName: "My Session",
+      initialPrompt: "fix the login bug",
+    });
+
+    await Promise.resolve();
+
+    expect(harness.eventLog.sessionTitleChanged).toHaveLength(0);
+  });
+
+  it("does not re-trigger title generation from UserPromptSubmit after initial prompt already triggered it", async () => {
+    const harness = createHarness();
+
+    await harness.service.startSession({
+      ...START_INPUT,
+      initialPrompt: "fix the login bug",
+    });
+
+    await vi.waitFor(() => {
+      expect(harness.eventLog.sessionTitleChanged).toHaveLength(1);
+    });
+
+    harness.monitorMocks[0]?.callbacks.emitHookEvent({
+      timestamp: "2026-02-07T00:00:02.000Z",
+      hook_event_name: "UserPromptSubmit",
+      session_id: "session-1",
+      prompt: "another prompt",
+    });
+    await Promise.resolve();
+
+    expect(harness.eventLog.sessionTitleChanged).toHaveLength(1);
+  });
 });

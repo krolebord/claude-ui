@@ -6,10 +6,12 @@ import { useEffect } from "react";
 interface NewSessionDialogProps {
   open: boolean;
   projectPath: string | null;
+  initialPrompt: string;
   sessionName: string;
   model: ClaudeModel;
   dangerouslySkipPermissions: boolean;
   isStarting: boolean;
+  onInitialPromptChange: (value: string) => void;
   onSessionNameChange: (value: string) => void;
   onModelChange: (value: ClaudeModel) => void;
   onDangerouslySkipPermissionsChange: (value: boolean) => void;
@@ -33,10 +35,12 @@ const MODEL_OPTIONS: { value: ClaudeModel; label: string }[] = [
 export function NewSessionDialog({
   open,
   projectPath,
+  initialPrompt,
   sessionName,
   model,
   dangerouslySkipPermissions,
   isStarting,
+  onInitialPromptChange,
   onSessionNameChange,
   onModelChange,
   onDangerouslySkipPermissionsChange,
@@ -96,12 +100,34 @@ export function NewSessionDialog({
           }}
         >
           <div className="space-y-2">
+            <label htmlFor="new-session-initial-prompt" className="text-sm text-zinc-300">
+              Initial prompt (optional)
+            </label>
+            <textarea
+              id="new-session-initial-prompt"
+              autoFocus
+              placeholder="What would you like Claude to do?"
+              value={initialPrompt}
+              onChange={(event) => {
+                onInitialPromptChange(event.target.value);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  onConfirm();
+                }
+              }}
+              rows={3}
+              className="w-full rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-white/30"
+            />
+          </div>
+
+          <div className="space-y-2">
             <label htmlFor="new-session-name" className="text-sm text-zinc-300">
               Session name (optional)
             </label>
             <Input
               id="new-session-name"
-              autoFocus
               placeholder="Leave blank for generated name"
               value={sessionName}
               onChange={(event) => {

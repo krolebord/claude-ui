@@ -8,6 +8,7 @@ import type {
   StartClaudeSessionInput,
   StopClaudeSessionResult,
 } from "../shared/claude-types";
+import log from "./logger";
 
 interface SessionCallbacks {
   emitData: (chunk: string) => void;
@@ -84,6 +85,11 @@ export class ClaudeSessionManager {
         launchOptions?.resumeSessionId,
         input.model,
       );
+      log.info("PTY spawn", {
+        file: launch.file,
+        args: launch.args,
+        cwd: input.cwd,
+      });
       const pty = spawn(launch.file, launch.args, {
         name: "xterm-256color",
         cols,
@@ -112,6 +118,7 @@ export class ClaudeSessionManager {
           if (exitCode === 127) {
             const message =
               "`claude` was not found in PATH for the interactive shell session.";
+            log.error("PTY exit: claude not found (exit code 127)");
             this.setStatus("error");
             this.callbacks.emitError({ message });
           } else {
@@ -130,6 +137,7 @@ export class ClaudeSessionManager {
     } catch (error) {
       this.activeSession = null;
       const message = this.getStartErrorMessage(error);
+      log.error("PTY spawn failed", { message, error });
       this.setStatus("error");
       this.callbacks.emitError({ message });
       return { ok: false, message };

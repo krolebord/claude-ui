@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { BrowserWindow, app, dialog, ipcMain, shell } from "electron";
 import type {
   AddClaudeProjectInput,
+  DeleteClaudeProjectInput,
   DeleteClaudeSessionInput,
   ResizeClaudeSessionInput,
   SetActiveSessionInput,
@@ -16,6 +17,7 @@ import { ClaudeProjectStore } from "./claude-project-store";
 import { ClaudeSessionService } from "./claude-session-service";
 import { ClaudeSessionSnapshotStore } from "./claude-session-snapshot-store";
 import { ensureManagedClaudeStatePlugin } from "./claude-state-plugin";
+import log from "./logger";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -145,6 +147,19 @@ function registerIpcHandlers(): void {
   );
 
   ipcMain.handle(
+    CLAUDE_IPC_CHANNELS.deleteProject,
+    (_event, input: DeleteClaudeProjectInput) =>
+      sessionService?.deleteProject(input) ?? {
+        ok: true,
+        snapshot: {
+          projects: [],
+          sessions: [],
+          activeSessionId: null,
+        },
+      },
+  );
+
+  ipcMain.handle(
     CLAUDE_IPC_CHANNELS.startSession,
     async (_event, input: StartClaudeSessionInput) => {
       if (!sessionService) {
@@ -193,7 +208,16 @@ function registerIpcHandlers(): void {
 
 app.whenReady().then(async () => {
   const userDataPath = app.getPath("userData");
+  log.info("App starting", {
+    platform: process.platform,
+    userDataPath,
+  });
+
   await initializeManagedPlugin(userDataPath);
+  log.info("Plugin initialization result", {
+    pluginDir: managedPluginDir,
+    pluginWarning,
+  });
 
   sessionService = new ClaudeSessionService({
     userDataPath,
@@ -222,6 +246,8 @@ app.whenReady().then(async () => {
         sendToRenderer(CLAUDE_IPC_CHANNELS.sessionHookEvent, payload),
     },
   });
+
+  log.info("Session service created");
 
   registerIpcHandlers();
   await createWindow();

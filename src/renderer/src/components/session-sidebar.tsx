@@ -39,6 +39,7 @@ interface SessionSidebarProps {
   onStopSession: (sessionId: SessionId) => void;
   onResumeSession: (sessionId: SessionId) => void;
   onDeleteSession: (sessionId: SessionId) => void;
+  onDeleteProject: (projectPath: string) => void;
 }
 
 const statusIndicatorMeta: Record<
@@ -99,6 +100,7 @@ export function SessionSidebar({
   onStopSession,
   onResumeSession,
   onDeleteSession,
+  onDeleteProject,
 }: SessionSidebarProps) {
   const [now, setNow] = useState(() => Date.now());
 
@@ -166,16 +168,30 @@ export function SessionSidebar({
                 </button>
 
                 {group.fromProjectList ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onOpenNewSessionDialog(group.path);
-                    }}
-                    className="inline-flex size-6 items-center justify-center rounded-md text-zinc-300 opacity-0 transition hover:bg-white/10 hover:text-white focus-visible:opacity-100 group-hover/project:opacity-100"
-                    aria-label={`New session in ${group.name}`}
-                  >
-                    <Plus className="size-3.5" />
-                  </button>
+                  <>
+                    {group.sessions.length === 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onDeleteProject(group.path);
+                        }}
+                        className="inline-flex size-6 items-center justify-center rounded-md text-zinc-300 opacity-0 transition hover:bg-white/10 hover:text-rose-300 focus-visible:opacity-100 group-hover/project:opacity-100"
+                        aria-label={`Delete project ${group.name}`}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onOpenNewSessionDialog(group.path);
+                      }}
+                      className="inline-flex size-6 items-center justify-center rounded-md text-zinc-300 opacity-0 transition hover:bg-white/10 hover:text-white focus-visible:opacity-100 group-hover/project:opacity-100"
+                      aria-label={`New session in ${group.name}`}
+                    >
+                      <Plus className="size-3.5" />
+                    </button>
+                  </>
                 ) : null}
               </div>
 

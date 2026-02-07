@@ -6,6 +6,8 @@ import type {
   AddClaudeProjectResult,
   ClaudeProject,
   ClaudeSessionsSnapshot,
+  DeleteClaudeProjectInput,
+  DeleteClaudeProjectResult,
   DeleteClaudeSessionInput,
   DeleteClaudeSessionResult,
   SessionId,
@@ -22,6 +24,7 @@ import {
   addProjectToList,
   normalizeProjectPath,
   normalizeProjects,
+  removeProjectFromList,
   setProjectCollapsedInList,
 } from "./claude-session-projects";
 import {
@@ -46,6 +49,7 @@ import { resumeStoppedSession } from "./claude-session-resume";
 import type { ClaudeProjectStoreLike } from "./claude-project-store";
 import type { ClaudeSessionSnapshotStoreLike } from "./claude-session-snapshot-store";
 import { generateSessionTitle } from "./generate-session-title";
+import log from "./logger";
 
 interface ClaudeSessionServiceOptions {
   userDataPath: string;
@@ -168,6 +172,29 @@ export class ClaudeSessionService {
     };
   }
 
+  deleteProject(input: DeleteClaudeProjectInput): DeleteClaudeProjectResult {
+    const normalizedPath = normalizeProjectPath(input.path);
+    const hasSession = Array.from(this.sessions.values()).some(
+      (record) => record.cwd === normalizedPath,
+    );
+    if (hasSession) {
+      throw new Error(
+        "Cannot delete project that still has sessions. Delete all sessions first.",
+      );
+    }
+
+    const next = removeProjectFromList(this.projects, input);
+    if (next.didChange) {
+      this.projects = next.projects;
+      this.persistProjects();
+    }
+
+    return {
+      ok: true,
+      snapshot: this.getSessionsSnapshot(),
+    };
+  }
+
   async startSession(
     input: StartClaudeSessionInput,
   ): Promise<StartClaudeSessionResult> {
@@ -189,10 +216,12 @@ export class ClaudeSessionService {
     }
 
     const sessionId = this.createUniqueSessionId();
+    const initialPrompt = input.initialPrompt?.trim() || null;
     const record = this.createRecord(
       sessionId,
       input.cwd,
       normalizeSessionName(input.sessionName),
+      initialPrompt,
     );
     this.sessions.set(sessionId, record);
     this.persistSessionSnapshots();
@@ -220,6 +249,36 @@ export class ClaudeSessionService {
       record.ready = true;
       this.setActiveSessionInternal(record.sessionId);
       flushPendingSessionEvents(record);
+
+      if (initialPrompt && !record.titleGenerationTriggered) {
+        record.titleGenerationTriggered = true;
+        log.info("Title generation triggered from startSession", {
+          sessionId: record.sessionId,
+        });
+        void this.generateTitleFactory(initialPrompt)
+          .then((title) => {
+            if (!this.sessions.has(record.sessionId)) {
+              return;
+            }
+
+            log.info("Title generation completed from startSession", {
+              sessionId: record.sessionId,
+              title,
+            });
+            record.sessionName = title;
+            this.persistSessionSnapshots();
+            this.callbacks.emitSessionTitleChanged({
+              sessionId: record.sessionId,
+              title,
+            });
+          })
+          .catch((error) => {
+            log.error("Title generation failed from startSession", {
+              sessionId: record.sessionId,
+              error,
+            });
+          });
+      }
 
       return {
         ok: true,
@@ -332,11 +391,13 @@ export class ClaudeSessionService {
     sessionId: SessionId,
     cwd: string,
     sessionName: string | null,
+    initialPrompt: string | null = null,
   ): SessionRecord {
     return createSessionRecord({
       sessionId,
       cwd,
       sessionName,
+      initialPrompt,
       pluginWarning: this.pluginWarning,
       nowFactory: this.nowFactory,
       callbacks: this.callbacks,

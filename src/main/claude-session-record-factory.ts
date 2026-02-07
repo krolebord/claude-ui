@@ -16,6 +16,7 @@ import type {
 import { ClaudeActivityMonitor } from "./claude-activity-monitor";
 import { ClaudeSessionManager } from "./claude-session";
 import { normalizeLastActivityAt } from "./claude-session-snapshot-utils";
+import log from "./logger";
 
 export type SessionActivityPersistMode = "immediate" | "debounced";
 
@@ -71,12 +72,14 @@ export interface SessionRecord {
   ready: boolean;
   pendingEvents: Array<() => void>;
   titleGenerationTriggered: boolean;
+  initialPrompt: string | null;
 }
 
 interface CreateSessionRecordOptions {
   sessionId: SessionId;
   cwd: string;
   sessionName: string | null;
+  initialPrompt: string | null;
   pluginWarning: string | null;
   nowFactory: () => string;
   callbacks: ClaudeSessionServiceCallbacks;
@@ -99,6 +102,23 @@ interface MaybeGenerateTitleOptions {
   hasSession: (sessionId: SessionId) => boolean;
 }
 
+function maybeWriteInitialPrompt(
+  record: SessionRecord,
+  event: ClaudeHookEvent,
+): void {
+  if (record.initialPrompt === null) {
+    return;
+  }
+
+  if (event.hook_event_name !== "SessionStart") {
+    return;
+  }
+
+  const prompt = record.initialPrompt;
+  record.initialPrompt = null;
+  record.manager.write(`${prompt}\r`);
+}
+
 function maybeGenerateTitleFromHook(
   record: SessionRecord,
   event: ClaudeHookEvent,
@@ -119,6 +139,11 @@ function maybeGenerateTitleFromHook(
 
   record.titleGenerationTriggered = true;
 
+  log.info("Title generation triggered from hook", {
+    sessionId: record.sessionId,
+    hookEvent: event.hook_event_name,
+  });
+
   void options
     .generateTitleFactory(prompt)
     .then((title) => {
@@ -126,6 +151,10 @@ function maybeGenerateTitleFromHook(
         return;
       }
 
+      log.info("Title generation completed from hook", {
+        sessionId: record.sessionId,
+        title,
+      });
       record.sessionName = title;
       options.persistSessionSnapshots();
       options.callbacks.emitSessionTitleChanged({
@@ -133,8 +162,11 @@ function maybeGenerateTitleFromHook(
         title,
       });
     })
-    .catch(() => {
-      // Title generation failures are non-fatal and should not impact sessions.
+    .catch((error) => {
+      log.error("Title generation failed from hook", {
+        sessionId: record.sessionId,
+        error,
+      });
     });
 }
 
@@ -178,6 +210,7 @@ export function createSessionRecord(
     ready: false,
     pendingEvents: [],
     titleGenerationTriggered: options.sessionName !== null,
+    initialPrompt: options.initialPrompt,
   };
 
   const monitor = options.activityMonitorFactory({
@@ -196,6 +229,7 @@ export function createSessionRecord(
         record,
         normalizeLastActivityAt(event.timestamp, options.nowFactory()),
       );
+      maybeWriteInitialPrompt(record, event);
       maybeGenerateTitleFromHook(record, event, {
         generateTitleFactory: options.generateTitleFactory,
         persistSessionSnapshots: options.persistSessionSnapshots,
