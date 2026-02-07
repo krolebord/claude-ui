@@ -22,6 +22,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.join(__dirname, "../..");
 const rendererDist = path.join(appRoot, "dist");
 const viteDevServerUrl = process.env.VITE_DEV_SERVER_URL;
+const shouldOpenDevTools =
+  Boolean(viteDevServerUrl) || process.env.ELECTRON_OPEN_DEVTOOLS === "1";
 
 process.env.APP_ROOT = appRoot;
 process.env.VITE_PUBLIC = viteDevServerUrl
@@ -71,6 +73,10 @@ async function createWindow(): Promise<void> {
     await mainWindow.loadURL(viteDevServerUrl);
   } else {
     await mainWindow.loadFile(indexHtml);
+  }
+
+  if (shouldOpenDevTools) {
+    mainWindow.webContents.openDevTools({ mode: "detach" });
   }
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
