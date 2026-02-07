@@ -110,6 +110,11 @@ src/
 - `test/renderer/terminal-session-service.spec.ts`
   - Renderer state actions, IPC bridging, active-session replay semantics, output ring-buffer limits.
 
+## Logs
+- App logs (via `electron-log`): `~/Library/Logs/claude-ui/main.log`
+- Both dev (`pnpm dev`) and production (built app) logs go to the same file.
+- Unit tests also write to this log file.
+
 ## Common Commands
 - Install deps: `pnpm install`
 - Run app (dev): `pnpm dev`
