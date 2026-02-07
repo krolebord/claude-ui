@@ -1,6 +1,6 @@
 {
   "name": "claude-ui",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "main": "dist-electron/main/index.js",
@@ -16,7 +16,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "format:check": "biome format ."
+    "format:check": "biome format .",
+    "test": "vitest run"
   },
   "dependencies": {
     "@radix-ui/react-separator": "^1.1.7",

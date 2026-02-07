@@ -76,6 +76,11 @@ export class ClaudeSessionManager {
       Number.isFinite(input.rows) && input.rows > 0
         ? Math.floor(input.rows)
         : 24;
+    const normalizedInitialPrompt = input.initialPrompt?.trim();
+    const initialPrompt =
+      normalizedInitialPrompt && normalizedInitialPrompt.length > 0
+        ? normalizedInitialPrompt
+        : undefined;
 
     try {
       const launch = this.getInteractiveLaunchCommand(
@@ -84,6 +89,7 @@ export class ClaudeSessionManager {
         launchOptions?.sessionId,
         launchOptions?.resumeSessionId,
         input.model,
+        initialPrompt,
       );
       log.info("PTY spawn", {
         file: launch.file,
@@ -261,6 +267,7 @@ export class ClaudeSessionManager {
     sessionId?: string,
     resumeSessionId?: string,
     model?: ClaudeModel,
+    initialPrompt?: string,
   ): LaunchCommand {
     const skipPermissionsArgs = dangerouslySkipPermissions
       ? " --dangerously-skip-permissions"
@@ -276,6 +283,9 @@ export class ClaudeSessionManager {
       ? ` --resume ${this.shellQuote(resumeSessionId)}`
       : "";
     const modelArgs = model ? ` --model ${model}` : "";
+    const initialPromptArgs = initialPrompt
+      ? ` ${this.shellQuote(initialPrompt)}`
+      : "";
 
     if (process.platform === "win32") {
       const shell = process.env.COMSPEC ?? "cmd.exe";
@@ -293,13 +303,16 @@ export class ClaudeSessionManager {
         ? ` --resume "${resumeSessionId.replace(/\"/g, '""')}"`
         : "";
       const winModelArgs = model ? ` --model ${model}` : "";
+      const winInitialPromptArgs = initialPrompt
+        ? ` "${initialPrompt.replace(/\"/g, '""')}"`
+        : "";
       return {
         file: shell,
         args: [
           "/d",
           "/s",
           "/c",
-          `claude${winSkipPermissionsArgs}${winPluginArgs}${winSessionIdArgs}${winResumeSessionArgs}${winModelArgs}`,
+          `claude${winSkipPermissionsArgs}${winPluginArgs}${winSessionIdArgs}${winResumeSessionArgs}${winModelArgs}${winInitialPromptArgs}`,
         ],
       };
     }
@@ -312,7 +325,7 @@ export class ClaudeSessionManager {
       file: shell,
       args: [
         "-ilc",
-        `exec claude${skipPermissionsArgs}${pluginArgs}${sessionIdArgs}${resumeSessionArgs}${modelArgs}`,
+        `exec claude${skipPermissionsArgs}${pluginArgs}${sessionIdArgs}${resumeSessionArgs}${modelArgs}${initialPromptArgs}`,
       ],
     };
   }

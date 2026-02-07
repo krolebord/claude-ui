@@ -82,7 +82,8 @@ export class TerminalSessionService {
       updateState: (updater) => {
         this.updateState(updater);
       },
-      updateSession: (sessionId, mutate) => this.updateSession(sessionId, mutate),
+      updateSession: (sessionId, mutate) =>
+        this.updateSession(sessionId, mutate),
       applySnapshot: (snapshot) => {
         this.applySnapshot(snapshot);
       },
@@ -147,8 +148,10 @@ export class TerminalSessionService {
         this.renderedSessionId = sessionId;
         this.renderedOutputLength = outputLength;
       },
-      getSessionOutputLength: (sessionId) => this.getSessionOutputLength(sessionId),
-      updateSession: (sessionId, mutate) => this.updateSession(sessionId, mutate),
+      getSessionOutputLength: (sessionId) =>
+        this.getSessionOutputLength(sessionId),
+      updateSession: (sessionId, mutate) =>
+        this.updateSession(sessionId, mutate),
       refreshSessions: async () => this.refreshSessions(),
       updateState: (updater) => {
         this.updateState(updater);
@@ -190,7 +193,9 @@ export class TerminalSessionService {
       return acc;
     }, {});
 
-    this.pruneSessionOutput(snapshot.sessions.map((session) => session.sessionId));
+    this.pruneSessionOutput(
+      snapshot.sessions.map((session) => session.sessionId),
+    );
 
     this.updateState((prev) => ({
       ...prev,

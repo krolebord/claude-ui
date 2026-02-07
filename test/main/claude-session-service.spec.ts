@@ -754,7 +754,7 @@ describe("ClaudeSessionService", () => {
     }).toThrow("Cannot delete project that still has sessions");
   });
 
-  it("writes initial prompt to PTY on SessionStart hook event", async () => {
+  it("passes initial prompt to session start", async () => {
     const harness = createHarness();
 
     await harness.service.startSession({
@@ -762,58 +762,45 @@ describe("ClaudeSessionService", () => {
       initialPrompt: "fix the login bug",
     });
 
-    harness.monitorMocks[0]?.callbacks.emitHookEvent({
-      timestamp: "2026-02-07T00:00:01.000Z",
-      hook_event_name: "SessionStart",
-      session_id: "session-1",
-    });
-
-    expect(harness.managerMocks[0]?.write).toHaveBeenCalledWith(
-      "fix the login bug\r",
+    expect(harness.managerMocks[0]?.start).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialPrompt: "fix the login bug",
+      }),
+      expect.objectContaining({
+        sessionId: "session-1",
+      }),
     );
   });
 
-  it("does not write initial prompt on non-SessionStart hook events", async () => {
+  it("trims initial prompt before session start", async () => {
     const harness = createHarness();
 
     await harness.service.startSession({
       ...START_INPUT,
-      initialPrompt: "fix the login bug",
+      initialPrompt: "  fix the login bug  ",
     });
 
-    harness.monitorMocks[0]?.callbacks.emitHookEvent({
-      timestamp: "2026-02-07T00:00:01.000Z",
-      hook_event_name: "UserPromptSubmit",
-      session_id: "session-1",
-      prompt: "something else",
-    });
-
-    expect(harness.managerMocks[0]?.write).not.toHaveBeenCalledWith(
-      "fix the login bug\r",
+    expect(harness.managerMocks[0]?.start).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialPrompt: "fix the login bug",
+      }),
+      expect.objectContaining({
+        sessionId: "session-1",
+      }),
     );
   });
 
-  it("writes initial prompt only once", async () => {
+  it("does not pass empty initial prompt to session start", async () => {
     const harness = createHarness();
 
     await harness.service.startSession({
       ...START_INPUT,
-      initialPrompt: "fix the login bug",
+      initialPrompt: "   ",
     });
 
-    harness.monitorMocks[0]?.callbacks.emitHookEvent({
-      timestamp: "2026-02-07T00:00:01.000Z",
-      hook_event_name: "SessionStart",
-      session_id: "session-1",
-    });
-
-    harness.monitorMocks[0]?.callbacks.emitHookEvent({
-      timestamp: "2026-02-07T00:00:02.000Z",
-      hook_event_name: "SessionStart",
-      session_id: "session-1",
-    });
-
-    expect(harness.managerMocks[0]?.write).toHaveBeenCalledTimes(1);
+    const startCallInput = harness.managerMocks[0]?.start.mock.calls[0]?.[0];
+    expect(startCallInput).toBeDefined();
+    expect(startCallInput).not.toHaveProperty("initialPrompt");
   });
 
   it("triggers immediate title generation from initial prompt for unnamed sessions", async () => {

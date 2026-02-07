@@ -128,7 +128,10 @@ export function registerTerminalSessionIpcSubscriptions(
       }
 
       const sessionsById = deps.getState().sessionsById;
-      if (payload.activeSessionId && !(payload.activeSessionId in sessionsById)) {
+      if (
+        payload.activeSessionId &&
+        !(payload.activeSessionId in sessionsById)
+      ) {
         void deps.refreshSessions();
       }
     }),

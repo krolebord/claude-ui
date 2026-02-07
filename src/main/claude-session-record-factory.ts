@@ -13,8 +13,8 @@ import type {
   ClaudeSessionTitleChangedEvent,
   SessionId,
 } from "../shared/claude-types";
-import { ClaudeActivityMonitor } from "./claude-activity-monitor";
-import { ClaudeSessionManager } from "./claude-session";
+import type { ClaudeActivityMonitor } from "./claude-activity-monitor";
+import type { ClaudeSessionManager } from "./claude-session";
 import { normalizeLastActivityAt } from "./claude-session-snapshot-utils";
 import log from "./logger";
 
@@ -72,14 +72,12 @@ export interface SessionRecord {
   ready: boolean;
   pendingEvents: Array<() => void>;
   titleGenerationTriggered: boolean;
-  initialPrompt: string | null;
 }
 
 interface CreateSessionRecordOptions {
   sessionId: SessionId;
   cwd: string;
   sessionName: string | null;
-  initialPrompt: string | null;
   pluginWarning: string | null;
   nowFactory: () => string;
   callbacks: ClaudeSessionServiceCallbacks;
@@ -100,23 +98,6 @@ interface MaybeGenerateTitleOptions {
   persistSessionSnapshots: () => void;
   callbacks: ClaudeSessionServiceCallbacks;
   hasSession: (sessionId: SessionId) => boolean;
-}
-
-function maybeWriteInitialPrompt(
-  record: SessionRecord,
-  event: ClaudeHookEvent,
-): void {
-  if (record.initialPrompt === null) {
-    return;
-  }
-
-  if (event.hook_event_name !== "SessionStart") {
-    return;
-  }
-
-  const prompt = record.initialPrompt;
-  record.initialPrompt = null;
-  record.manager.write(`${prompt}\r`);
 }
 
 function maybeGenerateTitleFromHook(
@@ -210,7 +191,6 @@ export function createSessionRecord(
     ready: false,
     pendingEvents: [],
     titleGenerationTriggered: options.sessionName !== null,
-    initialPrompt: options.initialPrompt,
   };
 
   const monitor = options.activityMonitorFactory({
@@ -229,7 +209,6 @@ export function createSessionRecord(
         record,
         normalizeLastActivityAt(event.timestamp, options.nowFactory()),
       );
-      maybeWriteInitialPrompt(record, event);
       maybeGenerateTitleFromHook(record, event, {
         generateTitleFactory: options.generateTitleFactory,
         persistSessionSnapshots: options.persistSessionSnapshots,

@@ -19,6 +19,8 @@ import type {
   StopClaudeSessionResult,
 } from "../shared/claude-types";
 import { ClaudeActivityMonitor } from "./claude-activity-monitor";
+import type { ClaudeProjectStoreLike } from "./claude-project-store";
+import { ClaudeSessionManager } from "./claude-session";
 import { SessionSnapshotPersistScheduler } from "./claude-session-persist-scheduler";
 import {
   addProjectToList,
@@ -36,7 +38,8 @@ import {
   createSessionRecord,
   flushPendingSessionEvents,
 } from "./claude-session-record-factory";
-import { ClaudeSessionManager } from "./claude-session";
+import { resumeStoppedSession } from "./claude-session-resume";
+import type { ClaudeSessionSnapshotStoreLike } from "./claude-session-snapshot-store";
 import {
   isTimestampNewer,
   normalizeCreatedAt,
@@ -45,9 +48,6 @@ import {
   normalizeSessionName,
   toSnapshot,
 } from "./claude-session-snapshot-utils";
-import { resumeStoppedSession } from "./claude-session-resume";
-import type { ClaudeProjectStoreLike } from "./claude-project-store";
-import type { ClaudeSessionSnapshotStoreLike } from "./claude-session-snapshot-store";
 import { generateSessionTitle } from "./generate-session-title";
 import log from "./logger";
 
@@ -217,11 +217,14 @@ export class ClaudeSessionService {
 
     const sessionId = this.createUniqueSessionId();
     const initialPrompt = input.initialPrompt?.trim() || null;
+    const { initialPrompt: _rawInitialPrompt, ...startInputBase } = input;
+    const startInput: StartClaudeSessionInput = initialPrompt
+      ? { ...startInputBase, initialPrompt }
+      : startInputBase;
     const record = this.createRecord(
       sessionId,
       input.cwd,
       normalizeSessionName(input.sessionName),
-      initialPrompt,
     );
     this.sessions.set(sessionId, record);
     this.persistSessionSnapshots();
@@ -230,7 +233,7 @@ export class ClaudeSessionService {
       const stateFilePath = await this.stateFileFactory();
       record.monitor.startMonitoring(stateFilePath);
 
-      const result = await record.manager.start(input, {
+      const result = await record.manager.start(startInput, {
         pluginDir: this.pluginDir,
         stateFilePath,
         sessionId: record.sessionId,
@@ -391,13 +394,11 @@ export class ClaudeSessionService {
     sessionId: SessionId,
     cwd: string,
     sessionName: string | null,
-    initialPrompt: string | null = null,
   ): SessionRecord {
     return createSessionRecord({
       sessionId,
       cwd,
       sessionName,
-      initialPrompt,
       pluginWarning: this.pluginWarning,
       nowFactory: this.nowFactory,
       callbacks: this.callbacks,
@@ -473,7 +474,10 @@ export class ClaudeSessionService {
         normalizeSessionName(snapshot.sessionName),
       );
 
-      record.createdAt = normalizeCreatedAt(snapshot.createdAt, this.nowFactory);
+      record.createdAt = normalizeCreatedAt(
+        snapshot.createdAt,
+        this.nowFactory,
+      );
       record.lastActivityAt = normalizeLastActivityAt(
         snapshot.lastActivityAt,
         record.createdAt,

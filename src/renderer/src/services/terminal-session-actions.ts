@@ -376,7 +376,9 @@ export function createTerminalSessionActions(
         deps.updateState((prev) => ({
           ...prev,
           errorMessage:
-            error instanceof Error ? error.message : "Failed to switch session.",
+            error instanceof Error
+              ? error.message
+              : "Failed to switch session.",
         }));
       }
     },

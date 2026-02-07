@@ -33,7 +33,9 @@ export function toSnapshot(
   };
 }
 
-export function normalizeSessionName(sessionName?: string | null): string | null {
+export function normalizeSessionName(
+  sessionName?: string | null,
+): string | null {
   if (typeof sessionName !== "string") {
     return null;
   }
