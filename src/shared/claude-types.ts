@@ -1,6 +1,8 @@
 export const CLAUDE_IPC_CHANNELS = {
   selectFolder: "claude:select-folder",
   getSessions: "claude:get-sessions",
+  addProject: "claude:add-project",
+  setProjectCollapsed: "claude:set-project-collapsed",
   startSession: "claude:start-session",
   stopSession: "claude:stop-session",
   deleteSession: "claude:delete-session",
@@ -36,6 +38,11 @@ export type ClaudeActivityState =
   | "awaiting_user_response"
   | "unknown";
 
+export interface ClaudeProject {
+  path: string;
+  collapsed: boolean;
+}
+
 export interface ClaudeSessionSnapshot {
   sessionId: SessionId;
   cwd: string;
@@ -48,8 +55,28 @@ export interface ClaudeSessionSnapshot {
 }
 
 export interface ClaudeSessionsSnapshot {
+  projects: ClaudeProject[];
   sessions: ClaudeSessionSnapshot[];
   activeSessionId: SessionId | null;
+}
+
+export interface AddClaudeProjectInput {
+  path: string;
+}
+
+export interface AddClaudeProjectResult {
+  ok: true;
+  snapshot: ClaudeSessionsSnapshot;
+}
+
+export interface SetClaudeProjectCollapsedInput {
+  path: string;
+  collapsed: boolean;
+}
+
+export interface SetClaudeProjectCollapsedResult {
+  ok: true;
+  snapshot: ClaudeSessionsSnapshot;
 }
 
 export interface StartClaudeSessionInput {
@@ -164,6 +191,12 @@ export interface ClaudeSessionHookEvent {
 export interface ClaudeDesktopApi {
   selectFolder: () => Promise<string | null>;
   getSessions: () => Promise<ClaudeSessionsSnapshot>;
+  addClaudeProject: (
+    input: AddClaudeProjectInput,
+  ) => Promise<AddClaudeProjectResult>;
+  setClaudeProjectCollapsed: (
+    input: SetClaudeProjectCollapsedInput,
+  ) => Promise<SetClaudeProjectCollapsedResult>;
   startClaudeSession: (
     input: StartClaudeSessionInput,
   ) => Promise<StartClaudeSessionResult>;

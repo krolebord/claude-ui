@@ -2,14 +2,17 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { BrowserWindow, app, dialog, ipcMain, shell } from "electron";
 import type {
+  AddClaudeProjectInput,
   DeleteClaudeSessionInput,
   ResizeClaudeSessionInput,
   SetActiveSessionInput,
+  SetClaudeProjectCollapsedInput,
   StartClaudeSessionInput,
   StopClaudeSessionInput,
   WriteClaudeSessionInput,
 } from "../shared/claude-types";
 import { CLAUDE_IPC_CHANNELS } from "../shared/claude-types";
+import { ClaudeProjectStore } from "./claude-project-store";
 import { ClaudeSessionService } from "./claude-session-service";
 import { ensureManagedClaudeStatePlugin } from "./claude-state-plugin";
 
@@ -102,8 +105,35 @@ function registerIpcHandlers(): void {
     CLAUDE_IPC_CHANNELS.getSessions,
     () =>
       sessionService?.getSessionsSnapshot() ?? {
+        projects: [],
         sessions: [],
         activeSessionId: null,
+      },
+  );
+
+  ipcMain.handle(
+    CLAUDE_IPC_CHANNELS.addProject,
+    (_event, input: AddClaudeProjectInput) =>
+      sessionService?.addProject(input) ?? {
+        ok: true,
+        snapshot: {
+          projects: [],
+          sessions: [],
+          activeSessionId: null,
+        },
+      },
+  );
+
+  ipcMain.handle(
+    CLAUDE_IPC_CHANNELS.setProjectCollapsed,
+    (_event, input: SetClaudeProjectCollapsedInput) =>
+      sessionService?.setProjectCollapsed(input) ?? {
+        ok: true,
+        snapshot: {
+          projects: [],
+          sessions: [],
+          activeSessionId: null,
+        },
       },
   );
 
@@ -162,6 +192,7 @@ app.whenReady().then(async () => {
     userDataPath,
     pluginDir: managedPluginDir,
     pluginWarning,
+    projectStore: new ClaudeProjectStore(),
     callbacks: {
       emitSessionData: (payload) =>
         sendToRenderer(CLAUDE_IPC_CHANNELS.sessionData, payload),

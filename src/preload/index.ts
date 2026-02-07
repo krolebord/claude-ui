@@ -1,5 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import {
+  type AddClaudeProjectInput,
+  type AddClaudeProjectResult,
   CLAUDE_IPC_CHANNELS,
   type ClaudeActiveSessionChangedEvent,
   type ClaudeDesktopApi,
@@ -16,6 +18,8 @@ import {
   type DeleteClaudeSessionResult,
   type ResizeClaudeSessionInput,
   type SetActiveSessionInput,
+  type SetClaudeProjectCollapsedInput,
+  type SetClaudeProjectCollapsedResult,
   type StartClaudeSessionInput,
   type StartClaudeSessionResult,
   type StopClaudeSessionInput,
@@ -42,6 +46,14 @@ const claudeApi: ClaudeDesktopApi = {
   selectFolder: () => ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.selectFolder),
   getSessions: (): Promise<ClaudeSessionsSnapshot> =>
     ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.getSessions),
+  addClaudeProject: (
+    input: AddClaudeProjectInput,
+  ): Promise<AddClaudeProjectResult> =>
+    ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.addProject, input),
+  setClaudeProjectCollapsed: (
+    input: SetClaudeProjectCollapsedInput,
+  ): Promise<SetClaudeProjectCollapsedResult> =>
+    ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.setProjectCollapsed, input),
   startClaudeSession: (
     input: StartClaudeSessionInput,
   ): Promise<StartClaudeSessionResult> =>

@@ -1,5 +1,6 @@
 import type {
   ClaudeActiveSessionChangedEvent,
+  ClaudeProject,
   ClaudeSessionActivityStateEvent,
   ClaudeSessionActivityWarningEvent,
   ClaudeSessionDataEvent,
@@ -12,7 +13,6 @@ import type {
   ClaudeSessionsSnapshot,
 } from "../../src/shared/claude-types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ProjectStorage } from "../../src/renderer/src/services/project-storage";
 import {
   buildProjectSessionGroups,
   getSessionSidebarIndicatorState,
@@ -46,6 +46,8 @@ const ipcHarness = vi.hoisted(() => {
   const claudeIpc = {
     selectFolder: vi.fn<() => Promise<string | null>>(),
     getSessions: vi.fn<() => Promise<ClaudeSessionsSnapshot>>(),
+    addClaudeProject: vi.fn(),
+    setClaudeProjectCollapsed: vi.fn(),
     startClaudeSession: vi.fn(),
     stopClaudeSession: vi.fn(),
     deleteClaudeSession: vi.fn(),
@@ -95,6 +97,7 @@ vi.mock("@renderer/lib/ipc", () => ({
 
 function makeSnapshot(): ClaudeSessionsSnapshot {
   return {
+    projects: [],
     activeSessionId: "session-1",
     sessions: [
       {
@@ -118,21 +121,6 @@ function makeSnapshot(): ClaudeSessionsSnapshot {
         createdAt: "2026-02-06T00:00:01.000Z",
       },
     ],
-  };
-}
-
-function createStorageMock(initialProjects?: Array<{ path: string; collapsed: boolean }>) {
-  const values = new Map<string, string>();
-
-  if (initialProjects) {
-    values.set("claude-ui.projects.v1", JSON.stringify(initialProjects));
-  }
-
-  return {
-    getItem: vi.fn((key: string) => values.get(key) ?? null),
-    setItem: vi.fn((key: string, value: string) => {
-      values.set(key, value);
-    }),
   };
 }
 
@@ -246,9 +234,36 @@ describe("TerminalSessionService", () => {
   beforeEach(() => {
     ipcHarness.reset();
     ipcHarness.claudeIpc.getSessions.mockResolvedValue({
+      projects: [],
       sessions: [],
       activeSessionId: null,
     });
+    ipcHarness.claudeIpc.addClaudeProject.mockImplementation(
+      async ({ path }: { path: string }) => ({
+        ok: true,
+        snapshot: {
+          projects: [{ path, collapsed: false }],
+          sessions: [],
+          activeSessionId: null,
+        },
+      }),
+    );
+    ipcHarness.claudeIpc.setClaudeProjectCollapsed.mockImplementation(
+      async ({
+        path,
+        collapsed,
+      }: {
+        path: string;
+        collapsed: boolean;
+      }) => ({
+        ok: true,
+        snapshot: {
+          projects: [{ path, collapsed }],
+          sessions: [],
+          activeSessionId: null,
+        },
+      }),
+    );
     ipcHarness.claudeIpc.selectFolder.mockResolvedValue("/workspace");
     ipcHarness.claudeIpc.stopClaudeSession.mockResolvedValue({ ok: true });
     ipcHarness.claudeIpc.deleteClaudeSession.mockResolvedValue({ ok: true });
@@ -273,42 +288,97 @@ describe("TerminalSessionService", () => {
     service.release();
   });
 
-  it("adds a project and persists project list", async () => {
-    const storage = createStorageMock();
-    const service = new TerminalSessionService({
-      projectStorage: new ProjectStorage({ storage }),
-    });
+  it("adds a project through IPC and refreshes state from snapshot", async () => {
+    const service = new TerminalSessionService();
 
     await service.actions.addProject();
 
     const state = service.getSnapshot();
+    expect(ipcHarness.claudeIpc.addClaudeProject).toHaveBeenCalledWith({
+      path: "/workspace",
+    });
     expect(state.projects).toEqual([
       {
         path: "/workspace",
         collapsed: false,
       },
     ]);
-    expect(storage.setItem).toHaveBeenCalledWith(
-      "claude-ui.projects.v1",
-      JSON.stringify(state.projects),
-    );
   });
 
-  it("ignores duplicate projects without changing persisted list", async () => {
-    const storage = createStorageMock([{ path: "/workspace", collapsed: false }]);
-    const service = new TerminalSessionService({
-      projectStorage: new ProjectStorage({ storage }),
-    });
-
-    await service.actions.addProject();
-
-    expect(service.getSnapshot().projects).toEqual([
+  it("ignores duplicate projects without calling add-project IPC", async () => {
+    const existingProjects: ClaudeProject[] = [
       {
         path: "/workspace",
         collapsed: false,
       },
+    ];
+    ipcHarness.claudeIpc.getSessions.mockResolvedValueOnce({
+      projects: existingProjects,
+      sessions: [],
+      activeSessionId: null,
+    });
+    const service = new TerminalSessionService();
+    service.retain();
+
+    await vi.waitFor(() => {
+      expect(ipcHarness.claudeIpc.getSessions).toHaveBeenCalledTimes(1);
+    });
+
+    await service.actions.addProject();
+
+    expect(service.getSnapshot().projects).toEqual(existingProjects);
+    expect(ipcHarness.claudeIpc.addClaudeProject).not.toHaveBeenCalled();
+
+    service.release();
+  });
+
+  it("toggles project collapsed state through IPC", async () => {
+    ipcHarness.claudeIpc.getSessions.mockResolvedValueOnce({
+      projects: [
+        {
+          path: "/workspace",
+          collapsed: false,
+        },
+      ],
+      sessions: [],
+      activeSessionId: null,
+    });
+    ipcHarness.claudeIpc.setClaudeProjectCollapsed.mockResolvedValueOnce({
+      ok: true,
+      snapshot: {
+        projects: [
+          {
+            path: "/workspace",
+            collapsed: true,
+          },
+        ],
+        sessions: [],
+        activeSessionId: null,
+      },
+    });
+    const service = new TerminalSessionService();
+    service.retain();
+
+    await vi.waitFor(() => {
+      expect(ipcHarness.claudeIpc.getSessions).toHaveBeenCalledTimes(1);
+    });
+
+    await service.actions.toggleProjectCollapsed("/workspace");
+
+    expect(ipcHarness.claudeIpc.setClaudeProjectCollapsed).toHaveBeenCalledWith(
+      {
+        path: "/workspace",
+        collapsed: true,
+      },
+    );
+    expect(service.getSnapshot().projects).toEqual([
+      {
+        path: "/workspace",
+        collapsed: true,
+      },
     ]);
-    expect(storage.setItem).not.toHaveBeenCalled();
+
+    service.release();
   });
 
   it("handles new-session dialog state transitions", () => {
@@ -349,6 +419,7 @@ describe("TerminalSessionService", () => {
       ok: true,
       sessionId: "session-3",
       snapshot: {
+        projects: [],
         activeSessionId: "session-3",
         sessions: [
           {
@@ -405,6 +476,7 @@ describe("TerminalSessionService", () => {
       ok: true,
       sessionId: "session-3",
       snapshot: {
+        projects: [],
         activeSessionId: "session-3",
         sessions: [
           {
@@ -441,6 +513,7 @@ describe("TerminalSessionService", () => {
       ok: true,
       sessionId: "session-3",
       snapshot: {
+        projects: [],
         activeSessionId: "session-3",
         sessions: [
           {
@@ -543,6 +616,7 @@ describe("TerminalSessionService", () => {
     ipcHarness.claudeIpc.getSessions
       .mockResolvedValueOnce(makeSnapshot())
       .mockResolvedValueOnce({
+        projects: [],
         activeSessionId: "session-1",
         sessions: [
           {

@@ -1,4 +1,6 @@
 import type {
+  AddClaudeProjectInput,
+  AddClaudeProjectResult,
   ClaudeActiveSessionChangedEvent,
   ClaudeSessionActivityStateEvent,
   ClaudeSessionActivityWarningEvent,
@@ -13,6 +15,8 @@ import type {
   DeleteClaudeSessionResult,
   ResizeClaudeSessionInput,
   SetActiveSessionInput,
+  SetClaudeProjectCollapsedInput,
+  SetClaudeProjectCollapsedResult,
   StartClaudeSessionInput,
   StartClaudeSessionResult,
   StopClaudeSessionInput,
@@ -24,6 +28,13 @@ export const claudeIpc = {
   selectFolder: (): Promise<string | null> => window.claude.selectFolder(),
   getSessions: (): Promise<ClaudeSessionsSnapshot> =>
     window.claude.getSessions(),
+  addClaudeProject: (
+    input: AddClaudeProjectInput,
+  ): Promise<AddClaudeProjectResult> => window.claude.addClaudeProject(input),
+  setClaudeProjectCollapsed: (
+    input: SetClaudeProjectCollapsedInput,
+  ): Promise<SetClaudeProjectCollapsedResult> =>
+    window.claude.setClaudeProjectCollapsed(input),
   startClaudeSession: (
     input: StartClaudeSessionInput,
   ): Promise<StartClaudeSessionResult> =>

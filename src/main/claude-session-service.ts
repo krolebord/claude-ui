@@ -2,9 +2,12 @@ import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type {
+  AddClaudeProjectInput,
+  AddClaudeProjectResult,
   ClaudeActiveSessionChangedEvent,
   ClaudeActivityState,
   ClaudeHookEvent,
+  ClaudeProject,
   ClaudeSessionActivityStateEvent,
   ClaudeSessionActivityWarningEvent,
   ClaudeSessionDataEvent,
@@ -19,12 +22,15 @@ import type {
   DeleteClaudeSessionInput,
   DeleteClaudeSessionResult,
   SessionId,
+  SetClaudeProjectCollapsedInput,
+  SetClaudeProjectCollapsedResult,
   StartClaudeSessionInput,
   StartClaudeSessionResult,
   StopClaudeSessionInput,
   StopClaudeSessionResult,
 } from "../shared/claude-types";
 import { ClaudeActivityMonitor } from "./claude-activity-monitor";
+import type { ClaudeProjectStoreLike } from "./claude-project-store";
 import { ClaudeSessionManager } from "./claude-session";
 import { generateSessionTitle } from "./generate-session-title";
 
@@ -57,6 +63,7 @@ interface ClaudeSessionServiceOptions {
   sessionIdFactory?: () => SessionId;
   nowFactory?: () => string;
   generateTitleFactory?: (prompt: string) => Promise<string>;
+  projectStore?: ClaudeProjectStoreLike;
 }
 
 interface SessionManagerLike {
@@ -113,7 +120,9 @@ export class ClaudeSessionService {
   private readonly generateTitleFactory: NonNullable<
     ClaudeSessionServiceOptions["generateTitleFactory"]
   >;
+  private readonly projectStore: ClaudeProjectStoreLike;
   private readonly sessions = new Map<SessionId, SessionRecord>();
+  private projects: ClaudeProject[] = [];
   private activeSessionId: SessionId | null = null;
 
   constructor(options: ClaudeSessionServiceOptions) {
@@ -133,6 +142,11 @@ export class ClaudeSessionService {
     this.nowFactory = options.nowFactory ?? (() => new Date().toISOString());
     this.generateTitleFactory =
       options.generateTitleFactory ?? generateSessionTitle;
+    this.projectStore = options.projectStore ?? {
+      readProjects: () => [],
+      writeProjects: () => undefined,
+    };
+    this.projects = this.normalizeProjects(this.projectStore.readProjects());
   }
 
   getSessionsSnapshot(): ClaudeSessionsSnapshot {
@@ -141,11 +155,81 @@ export class ClaudeSessionService {
     );
 
     return {
+      projects: this.projects.map((project) => ({ ...project })),
       sessions,
       activeSessionId:
         this.activeSessionId && this.sessions.has(this.activeSessionId)
           ? this.activeSessionId
           : null,
+    };
+  }
+
+  addProject(input: AddClaudeProjectInput): AddClaudeProjectResult {
+    const projectPath = this.normalizeProjectPath(input.path);
+    if (!projectPath) {
+      return {
+        ok: true,
+        snapshot: this.getSessionsSnapshot(),
+      };
+    }
+
+    if (this.projects.some((project) => project.path === projectPath)) {
+      return {
+        ok: true,
+        snapshot: this.getSessionsSnapshot(),
+      };
+    }
+
+    this.projects = [
+      ...this.projects,
+      {
+        path: projectPath,
+        collapsed: false,
+      },
+    ];
+    this.persistProjects();
+
+    return {
+      ok: true,
+      snapshot: this.getSessionsSnapshot(),
+    };
+  }
+
+  setProjectCollapsed(
+    input: SetClaudeProjectCollapsedInput,
+  ): SetClaudeProjectCollapsedResult {
+    const projectPath = this.normalizeProjectPath(input.path);
+    if (!projectPath) {
+      return {
+        ok: true,
+        snapshot: this.getSessionsSnapshot(),
+      };
+    }
+
+    let didChange = false;
+    this.projects = this.projects.map((project) => {
+      if (project.path !== projectPath) {
+        return project;
+      }
+
+      if (project.collapsed === input.collapsed) {
+        return project;
+      }
+
+      didChange = true;
+      return {
+        ...project,
+        collapsed: input.collapsed,
+      };
+    });
+
+    if (didChange) {
+      this.persistProjects();
+    }
+
+    return {
+      ok: true,
+      snapshot: this.getSessionsSnapshot(),
     };
   }
 
@@ -448,6 +532,34 @@ export class ClaudeSessionService {
 
     const trimmed = sessionName.trim();
     return trimmed.length > 0 ? trimmed : null;
+  }
+
+  private normalizeProjects(projects: ClaudeProject[]): ClaudeProject[] {
+    const seenPaths = new Set<string>();
+    const normalized: ClaudeProject[] = [];
+
+    for (const project of projects) {
+      const path = this.normalizeProjectPath(project.path);
+      if (!path || seenPaths.has(path)) {
+        continue;
+      }
+
+      seenPaths.add(path);
+      normalized.push({
+        path,
+        collapsed: project.collapsed === true,
+      });
+    }
+
+    return normalized;
+  }
+
+  private persistProjects(): void {
+    this.projectStore.writeProjects(this.projects);
+  }
+
+  private normalizeProjectPath(pathValue: string): string {
+    return pathValue.trim();
   }
 
   private maybeGenerateTitleFromHook(

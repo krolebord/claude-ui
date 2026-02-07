@@ -74,7 +74,9 @@ function App() {
           onAddProject={() => {
             void actions.addProject();
           }}
-          onToggleProject={actions.toggleProjectCollapsed}
+          onToggleProject={(projectPath) => {
+            void actions.toggleProjectCollapsed(projectPath);
+          }}
           onOpenNewSessionDialog={actions.openNewSessionDialog}
           onSelectSession={(sessionId) => {
             void actions.setActiveSession(sessionId);

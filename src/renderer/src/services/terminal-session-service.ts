@@ -2,13 +2,12 @@ import type { TerminalPaneHandle } from "@renderer/components/terminal-pane";
 import { claudeIpc } from "@renderer/lib/ipc";
 import type {
   ClaudeModel,
+  ClaudeProject,
   ClaudeSessionSnapshot,
   ClaudeSessionsSnapshot,
   SessionId,
 } from "@shared/claude-types";
-import { ProjectStorage, type SidebarProject } from "./project-storage";
-
-export type { SidebarProject } from "./project-storage";
+export type { ClaudeProject as SidebarProject } from "@shared/claude-types";
 
 export interface NewSessionDialogState {
   open: boolean;
@@ -27,7 +26,7 @@ export interface ProjectSessionGroup {
 }
 
 export interface TerminalSessionState {
-  projects: SidebarProject[];
+  projects: ClaudeProject[];
   sessionsById: Record<SessionId, ClaudeSessionSnapshot>;
   activeSessionId: SessionId | null;
   newSessionDialog: NewSessionDialogState;
@@ -38,10 +37,6 @@ export interface TerminalSessionState {
 }
 
 type Listener = () => void;
-
-interface TerminalSessionServiceOptions {
-  projectStorage?: ProjectStorage;
-}
 
 function toTimestamp(value: string): number {
   const timestamp = Date.parse(value);
@@ -160,8 +155,6 @@ export function buildProjectSessionGroups(
 }
 
 export class TerminalSessionService {
-  private readonly projectStorage: ProjectStorage;
-
   private state: TerminalSessionState;
   private sessionOutputById: Record<SessionId, string> = {};
   private renderedSessionId: SessionId | null = null;
@@ -174,10 +167,9 @@ export class TerminalSessionService {
   private subscribers = 0;
   private refreshInFlight: Promise<void> | null = null;
 
-  constructor(options?: TerminalSessionServiceOptions) {
-    this.projectStorage = options?.projectStorage ?? new ProjectStorage();
+  constructor() {
     this.state = {
-      projects: this.readProjects(),
+      projects: [],
       sessionsById: {},
       activeSessionId: null,
       newSessionDialog: {
@@ -222,18 +214,15 @@ export class TerminalSessionService {
           return;
         }
 
-        const nextProjects = [
-          ...this.state.projects,
-          {
-            path: normalizedPath,
-            collapsed: false,
-          },
-        ];
-
-        this.persistProjects(nextProjects);
+        const result = await claudeIpc.addClaudeProject({
+          path: normalizedPath,
+        });
+        this.applySnapshot(result.snapshot);
+      } catch (error) {
         this.updateState((prev) => ({
           ...prev,
-          projects: nextProjects,
+          errorMessage:
+            error instanceof Error ? error.message : "Failed to add project.",
         }));
       } finally {
         this.updateState((prev) => ({
@@ -242,30 +231,29 @@ export class TerminalSessionService {
         }));
       }
     },
-    toggleProjectCollapsed: (projectPath: string): void => {
-      let didToggle = false;
-
-      const nextProjects = this.state.projects.map((project) => {
-        if (project.path !== projectPath) {
-          return project;
-        }
-
-        didToggle = true;
-        return {
-          ...project,
-          collapsed: !project.collapsed,
-        };
-      });
-
-      if (!didToggle) {
+    toggleProjectCollapsed: async (projectPath: string): Promise<void> => {
+      const project = this.state.projects.find(
+        (candidate) => candidate.path === projectPath,
+      );
+      if (!project) {
         return;
       }
 
-      this.persistProjects(nextProjects);
-      this.updateState((prev) => ({
-        ...prev,
-        projects: nextProjects,
-      }));
+      try {
+        const result = await claudeIpc.setClaudeProjectCollapsed({
+          path: projectPath,
+          collapsed: !project.collapsed,
+        });
+        this.applySnapshot(result.snapshot);
+      } catch (error) {
+        this.updateState((prev) => ({
+          ...prev,
+          errorMessage:
+            error instanceof Error
+              ? error.message
+              : "Failed to update project state.",
+        }));
+      }
     },
     openNewSessionDialog: (projectPath: string): void => {
       this.updateState((prev) => ({
@@ -669,6 +657,7 @@ export class TerminalSessionService {
 
     this.updateState((prev) => ({
       ...prev,
+      projects: snapshot.projects,
       sessionsById,
       activeSessionId: snapshot.activeSessionId,
     }));
@@ -729,14 +718,6 @@ export class TerminalSessionService {
     this.terminal = null;
     this.renderedSessionId = null;
     this.renderedOutputLength = 0;
-  }
-
-  private readProjects(): SidebarProject[] {
-    return this.projectStorage.readProjects();
-  }
-
-  private persistProjects(projects: SidebarProject[]): void {
-    this.projectStorage.writeProjects(projects);
   }
 
   private appendSessionOutput(sessionId: SessionId, chunk: string): void {

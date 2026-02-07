@@ -1,5 +1,6 @@
 import type {
   ClaudeActivityState,
+  ClaudeProject,
   ClaudeSessionStatus,
   StartClaudeSessionInput,
 } from "../../src/shared/claude-types";
@@ -52,6 +53,14 @@ function createHarness() {
 
   const sessionIds = ["session-1", "session-2", "session-3"];
   let sessionIdIndex = 0;
+  const storedProjects: ClaudeProject[] = [];
+  const projectStore = {
+    readProjects: vi.fn(() => storedProjects),
+    writeProjects: vi.fn((projects: ClaudeProject[]) => {
+      storedProjects.length = 0;
+      storedProjects.push(...projects);
+    }),
+  };
 
   const service = new ClaudeSessionService({
     userDataPath: "/tmp",
@@ -110,6 +119,7 @@ function createHarness() {
     stateFileFactory: async () => "/tmp/claude-state.ndjson",
     sessionIdFactory: () => sessionIds[sessionIdIndex++] ?? `session-${sessionIdIndex}`,
     nowFactory: () => "2026-02-06T00:00:00.000Z",
+    projectStore,
   });
 
   return {
@@ -117,6 +127,8 @@ function createHarness() {
     managerMocks,
     monitorMocks,
     eventLog,
+    projectStore,
+    storedProjects,
   };
 }
 
@@ -127,6 +139,73 @@ const START_INPUT: StartClaudeSessionInput = {
 };
 
 describe("ClaudeSessionService", () => {
+  it("adds projects and persists them", () => {
+    const harness = createHarness();
+
+    const first = harness.service.addProject({
+      path: " /workspace ",
+    });
+    const second = harness.service.addProject({
+      path: "/workspace",
+    });
+
+    expect(first.snapshot.projects).toEqual([
+      {
+        path: "/workspace",
+        collapsed: false,
+      },
+    ]);
+    expect(second.snapshot.projects).toEqual([
+      {
+        path: "/workspace",
+        collapsed: false,
+      },
+    ]);
+    expect(harness.projectStore.writeProjects).toHaveBeenCalledTimes(1);
+    expect(harness.storedProjects).toEqual([
+      {
+        path: "/workspace",
+        collapsed: false,
+      },
+    ]);
+  });
+
+  it("toggles project collapsed state and persists changes", () => {
+    const harness = createHarness();
+
+    harness.service.addProject({ path: "/workspace" });
+    const result = harness.service.setProjectCollapsed({
+      path: "/workspace",
+      collapsed: true,
+    });
+
+    expect(result.snapshot.projects).toEqual([
+      {
+        path: "/workspace",
+        collapsed: true,
+      },
+    ]);
+    expect(harness.projectStore.writeProjects).toHaveBeenCalledTimes(2);
+    expect(harness.storedProjects).toEqual([
+      {
+        path: "/workspace",
+        collapsed: true,
+      },
+    ]);
+  });
+
+  it("ignores collapse updates for unknown projects", () => {
+    const harness = createHarness();
+
+    const result = harness.service.setProjectCollapsed({
+      path: "/workspace",
+      collapsed: true,
+    });
+
+    expect(result.snapshot.projects).toEqual([]);
+    expect(harness.projectStore.writeProjects).not.toHaveBeenCalled();
+  });
+
   it("creates distinct session IDs and keeps snapshots", async () => {
     const harness = createHarness();
 
