@@ -2,12 +2,12 @@ import { cn } from "@renderer/lib/utils";
 import type {
   ProjectSessionGroup,
   SessionSidebarIndicatorState,
-} from "@renderer/services/terminal-session-service";
+} from "@renderer/services/terminal-session-selectors";
 import {
   getSessionLastActivityLabel,
   getSessionSidebarIndicatorState,
   getSessionTitle,
-} from "@renderer/services/terminal-session-service";
+} from "@renderer/services/terminal-session-selectors";
 import type { SessionId } from "@shared/claude-types";
 import { useEffect, useState } from "react";
 import {

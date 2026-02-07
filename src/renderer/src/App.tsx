@@ -5,9 +5,9 @@ import {
   TerminalPane,
 } from "@renderer/components/terminal-pane";
 import {
-  buildProjectSessionGroups,
   useTerminalSession,
 } from "@renderer/services/use-terminal-session";
+import { buildProjectSessionGroups } from "@renderer/services/terminal-session-selectors";
 import { AlertCircle } from "lucide-react";
 import { useCallback, useMemo, useRef } from "react";
 

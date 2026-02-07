@@ -41,8 +41,14 @@ export class ClaudeActivityMonitor {
     this.fileOffset = 0;
     this.buffer = "";
     this.setState("unknown");
+    this.startPollingInterval();
 
-    this.startWatcher(stateFilePath);
+    try {
+      this.startWatcher(stateFilePath);
+    } catch (e) {
+      console.error("Failed to start file watcher:", e);
+      this.usingPollingFallback = true;
+    }
 
     void this.requestPoll();
   }
@@ -79,8 +85,6 @@ export class ClaudeActivityMonitor {
   }
 
   private startWatcher(stateFilePath: string): void {
-    this.startPollingInterval();
-
     try {
       this.watcher = watch(stateFilePath, () => {
         void this.requestPoll();

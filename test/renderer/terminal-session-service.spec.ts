@@ -14,12 +14,14 @@ import type {
 } from "../../src/shared/claude-types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  TerminalSessionService,
+} from "../../src/renderer/src/services/terminal-session-service";
+import {
   buildProjectSessionGroups,
   getSessionLastActivityLabel,
   getSessionSidebarIndicatorState,
   getSessionTitle,
-  TerminalSessionService,
-} from "../../src/renderer/src/services/terminal-session-service";
+} from "../../src/renderer/src/services/terminal-session-selectors";
 
 const ipcHarness = vi.hoisted(() => {
   const listeners = {
