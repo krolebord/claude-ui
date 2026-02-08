@@ -1,5 +1,5 @@
-import * as z from "zod";
 import spawn from "nano-spawn";
+import * as z from "zod";
 import log from "./logger";
 
 const CredentialsSchema = z.object({
@@ -47,7 +47,7 @@ export async function getUsage(): Promise<ClaudeUsageResult> {
     const { output } = await spawn(
       "security",
       ["find-generic-password", "-s", "Claude Code-credentials", "-w"],
-      { timeout: 5_000, stdin: "ignore" }
+      { timeout: 5_000, stdin: "ignore" },
     );
     credentialsJson = output.trim();
   } catch (e: unknown) {

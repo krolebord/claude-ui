@@ -1,10 +1,10 @@
 import { type FSWatcher, watch } from "node:fs";
 import { open, stat } from "node:fs/promises";
+import { claudeHookEventSchema } from "../shared/claude-schemas";
 import type {
   ClaudeActivityState,
   ClaudeHookEvent,
 } from "../shared/claude-types";
-import { claudeHookEventSchema } from "../shared/claude-schemas";
 import log from "./logger";
 
 const POLL_INTERVAL_MS = 180;

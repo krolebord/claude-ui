@@ -1,10 +1,10 @@
 import Store from "electron-store";
-import type { ClaudeSessionSnapshot, SessionId } from "../shared/claude-types";
 import {
   activeSessionIdSchema,
   claudeSessionSnapshotSchema,
   parseArraySafe,
 } from "../shared/claude-schemas";
+import type { ClaudeSessionSnapshot, SessionId } from "../shared/claude-types";
 
 const SESSIONS_KEY = "sessionSnapshots";
 const ACTIVE_SESSION_ID_KEY = "activeSessionId";

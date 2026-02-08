@@ -1,6 +1,6 @@
 import Store from "electron-store";
-import type { ClaudeProject } from "../shared/claude-types";
 import { claudeProjectSchema, parseArraySafe } from "../shared/claude-schemas";
+import type { ClaudeProject } from "../shared/claude-types";
 
 const PROJECTS_KEY = "projects";
 

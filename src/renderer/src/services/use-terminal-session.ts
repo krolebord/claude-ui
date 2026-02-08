@@ -1,10 +1,10 @@
 import { useEffect, useSyncExternalStore } from "react";
+import { buildProjectSessionGroups } from "./terminal-session-selectors";
 import {
   type TerminalSessionService,
   type TerminalSessionState,
   getTerminalSessionService,
 } from "./terminal-session-service";
-import { buildProjectSessionGroups } from "./terminal-session-selectors";
 
 interface UseTerminalSessionResult {
   state: TerminalSessionState;
