@@ -24,13 +24,6 @@ export async function generateSessionTitle(prompt: string): Promise<string> {
     "",
   ];
 
-  log.info("Title generation: spawning claude", {
-    args,
-    PATH: process.env.PATH,
-    SHELL: process.env.SHELL,
-    HOME: process.env.HOME,
-  });
-
   try {
     const { output } = await spawn("claude", args, {
       preferLocal: true,

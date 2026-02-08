@@ -67,6 +67,7 @@ export interface SessionRecord {
   activityState: ClaudeActivityState;
   activityWarning: string | null;
   lastError: string | null;
+  stateFilePath: string | null;
   manager: SessionManagerLike;
   monitor: ActivityMonitorLike;
   ready: boolean;
@@ -91,6 +92,7 @@ interface CreateSessionRecordOptions {
     sourceTimestamp?: string | null,
     persistMode?: SessionActivityPersistMode,
   ) => void;
+  cleanupStateFile?: (record: SessionRecord) => void;
 }
 
 interface MaybeGenerateTitleOptions {
@@ -186,6 +188,7 @@ export function createSessionRecord(
     activityState: "unknown",
     activityWarning: options.pluginWarning,
     lastError: null,
+    stateFilePath: null,
     manager: null as unknown as SessionManagerLike,
     monitor: null as unknown as ActivityMonitorLike,
     ready: false,
@@ -235,6 +238,7 @@ export function createSessionRecord(
     },
     emitExit: (payload) => {
       monitor.stopMonitoring({ preserveState: true });
+      options.cleanupStateFile?.(record);
       options.touchSessionActivity(record);
       emitOrQueueSessionEvent(record, () => {
         options.callbacks.emitSessionExit({

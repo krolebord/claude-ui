@@ -8,7 +8,8 @@ import type { SessionRecord } from "./claude-session-record-factory";
 
 interface ResumeStoppedSessionDeps {
   getRecord: (sessionId: SessionId) => SessionRecord | undefined;
-  stateFileFactory: () => Promise<string>;
+  stateFileFactory: (sessionId: SessionId) => Promise<string>;
+  cleanupStateFile: (record: SessionRecord) => void;
   pluginDir: string | null;
   setActiveSession: (sessionId: SessionId) => void;
   getSessionsSnapshot: () => ClaudeSessionsSnapshot;
@@ -37,7 +38,9 @@ export async function resumeStoppedSession(
   }
 
   try {
-    const stateFilePath = await deps.stateFileFactory();
+    deps.cleanupStateFile(record);
+    const stateFilePath = await deps.stateFileFactory(sessionId);
+    record.stateFilePath = stateFilePath;
     record.monitor.startMonitoring(stateFilePath);
 
     const result = await record.manager.start(

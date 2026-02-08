@@ -153,7 +153,8 @@ function createHarness(options?: {
       monitorMocks.push(monitor);
       return monitor;
     },
-    stateFileFactory: async () => "/tmp/claude-state.ndjson",
+    stateFileFactory: async (sessionId: string) =>
+      `/tmp/claude-state/${sessionId}.ndjson`,
     sessionIdFactory: () =>
       sessionIds[sessionIdIndex++] ?? `session-${sessionIdIndex}`,
     nowFactory: options?.nowFactory ?? (() => "2026-02-06T00:00:00.000Z"),
@@ -859,5 +860,29 @@ describe("ClaudeSessionService", () => {
     await Promise.resolve();
 
     expect(harness.eventLog.sessionTitleChanged).toHaveLength(1);
+  });
+
+  it("cleans up state file on session exit", async () => {
+    const harness = createHarness();
+
+    await harness.service.startSession(START_INPUT);
+
+    const snapshot = harness.service.getSessionsSnapshot();
+    const session = snapshot.sessions[0];
+    expect(session).toBeDefined();
+
+    harness.managerMocks[0]?.callbacks.emitExit({ exitCode: 0 });
+
+    expect(harness.monitorMocks[0]?.stopMonitoring).toHaveBeenCalled();
+  });
+
+  it("cleans up state file on deleteSession", async () => {
+    const harness = createHarness();
+
+    await harness.service.startSession(START_INPUT);
+    await harness.service.deleteSession({ sessionId: "session-1" });
+
+    const snapshot = harness.service.getSessionsSnapshot();
+    expect(snapshot.sessions).toHaveLength(0);
   });
 });
