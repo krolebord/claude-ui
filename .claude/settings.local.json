@@ -13,7 +13,9 @@
       "Bash(grep:*)",
       "WebFetch(domain:zod.dev)",
       "Bash(pnpm format:*)",
-      "Bash(pnpm dlx:*)"
+      "Bash(pnpm dlx:*)",
+      "Bash(pnpm lint:*)",
+      "Bash(pnpm add:*)"
     ]
   }
 }
