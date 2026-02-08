@@ -4,7 +4,7 @@ import log from "./logger";
 const FALLBACK_TITLE = "New Session";
 
 const systemPrompt =
-  "You are a summarization assistant. You are given a user prompt and you need to summarize it into a short session title (max 6 words). Output only the title, nothing else.";
+  "You are a summarization assistant. You are given a user prompt and you need to summarize it into a very short session title (2-4 words, max 30 characters). Be extremely concise. Output only the title, nothing else.";
 
 export async function generateSessionTitle(prompt: string): Promise<string> {
   const args = [
