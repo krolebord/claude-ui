@@ -499,40 +499,8 @@ describe("TerminalSessionService", () => {
     });
   });
 
-  it("confirms new session with session name without stopping the existing session", async () => {
+  it("applies snapshot, clears terminal, focuses, and resets dialog on newSessionStarted", async () => {
     ipcHarness.claudeIpc.getSessions.mockResolvedValueOnce(makeSnapshot());
-    ipcHarness.claudeIpc.startClaudeSession.mockResolvedValue({
-      ok: true,
-      sessionId: "session-3",
-      snapshot: {
-        projects: [],
-        activeSessionId: "session-3",
-        sessions: [
-          {
-            sessionId: "session-1",
-            cwd: "/workspace/one",
-            sessionName: "Session One",
-            status: "running",
-            activityState: "working",
-            activityWarning: null,
-            lastError: null,
-            createdAt: "2026-02-06T00:00:00.000Z",
-            lastActivityAt: "2026-02-06T00:00:00.000Z",
-          },
-          {
-            sessionId: "session-3",
-            cwd: "/workspace",
-            sessionName: "Refactor runner",
-            status: "running",
-            activityState: "working",
-            activityWarning: null,
-            lastError: null,
-            createdAt: "2026-02-06T00:00:02.000Z",
-            lastActivityAt: "2026-02-06T00:00:02.000Z",
-          },
-        ],
-      },
-    });
 
     const service = new TerminalSessionService();
     service.retain();
@@ -542,184 +510,41 @@ describe("TerminalSessionService", () => {
     });
 
     service.actions.openNewSessionDialog("/workspace");
-    service.actions.setNewSessionName("Refactor runner");
 
+    const terminalClear = vi.fn();
     const terminalFocus = vi.fn();
     service.actions.attachTerminal({
       write: vi.fn(),
-      clear: vi.fn(),
+      clear: terminalClear,
       focus: terminalFocus,
       getSize: () => ({ cols: 80, rows: 24 }),
     });
 
-    await service.actions.confirmNewSession({ cols: 80, rows: 24 });
-
-    expect(ipcHarness.claudeIpc.stopClaudeSession).not.toHaveBeenCalled();
-    expect(ipcHarness.claudeIpc.startClaudeSession).toHaveBeenCalledWith({
-      cwd: "/workspace",
-      sessionName: "Refactor runner",
-      model: "opus",
-      permissionMode: "default",
-      cols: 80,
-      rows: 24,
+    service.actions.newSessionStarted({
+      projects: [],
+      activeSessionId: "session-3",
+      sessions: [
+        {
+          sessionId: "session-3",
+          cwd: "/workspace",
+          sessionName: "Refactor runner",
+          status: "running",
+          activityState: "working",
+          activityWarning: null,
+          lastError: null,
+          createdAt: "2026-02-06T00:00:02.000Z",
+          lastActivityAt: "2026-02-06T00:00:02.000Z",
+        },
+      ],
     });
 
-    expect(service.getSnapshot().activeSessionId).toBe("session-3");
+    const state = service.getSnapshot();
+    expect(state.activeSessionId).toBe("session-3");
+    expect(state.newSessionDialog.open).toBe(false);
+    expect(terminalClear).toHaveBeenCalled();
     expect(terminalFocus).toHaveBeenCalledTimes(1);
+
     service.release();
-  });
-
-  it("passes initialPrompt through to IPC when confirming new session", async () => {
-    ipcHarness.claudeIpc.startClaudeSession.mockResolvedValue({
-      ok: true,
-      sessionId: "session-3",
-      snapshot: {
-        projects: [],
-        activeSessionId: "session-3",
-        sessions: [
-          {
-            sessionId: "session-3",
-            cwd: "/workspace",
-            sessionName: null,
-            status: "running",
-            activityState: "working",
-            activityWarning: null,
-            lastError: null,
-            createdAt: "2026-02-06T00:00:02.000Z",
-            lastActivityAt: "2026-02-06T00:00:02.000Z",
-          },
-        ],
-      },
-    });
-
-    const service = new TerminalSessionService();
-    service.actions.openNewSessionDialog("/workspace");
-    service.actions.setNewSessionInitialPrompt("fix the login bug");
-    await service.actions.confirmNewSession({ cols: 80, rows: 24 });
-
-    expect(ipcHarness.claudeIpc.startClaudeSession).toHaveBeenCalledWith({
-      cwd: "/workspace",
-      sessionName: null,
-      model: "opus",
-      permissionMode: "default",
-      initialPrompt: "fix the login bug",
-      cols: 80,
-      rows: 24,
-    });
-  });
-
-  it("does not send empty initialPrompt to IPC", async () => {
-    ipcHarness.claudeIpc.startClaudeSession.mockResolvedValue({
-      ok: true,
-      sessionId: "session-3",
-      snapshot: {
-        projects: [],
-        activeSessionId: "session-3",
-        sessions: [
-          {
-            sessionId: "session-3",
-            cwd: "/workspace",
-            sessionName: null,
-            status: "running",
-            activityState: "working",
-            activityWarning: null,
-            lastError: null,
-            createdAt: "2026-02-06T00:00:02.000Z",
-            lastActivityAt: "2026-02-06T00:00:02.000Z",
-          },
-        ],
-      },
-    });
-
-    const service = new TerminalSessionService();
-    service.actions.openNewSessionDialog("/workspace");
-    service.actions.setNewSessionInitialPrompt("   ");
-    await service.actions.confirmNewSession({ cols: 80, rows: 24 });
-
-    expect(ipcHarness.claudeIpc.startClaudeSession).toHaveBeenCalledWith({
-      cwd: "/workspace",
-      sessionName: null,
-      model: "opus",
-      permissionMode: "default",
-      cols: 80,
-      rows: 24,
-    });
-  });
-
-  it("passes model selection through to IPC when creating a session", async () => {
-    ipcHarness.claudeIpc.startClaudeSession.mockResolvedValue({
-      ok: true,
-      sessionId: "session-3",
-      snapshot: {
-        projects: [],
-        activeSessionId: "session-3",
-        sessions: [
-          {
-            sessionId: "session-3",
-            cwd: "/workspace",
-            sessionName: null,
-            status: "running",
-            activityState: "working",
-            activityWarning: null,
-            lastError: null,
-            createdAt: "2026-02-06T00:00:02.000Z",
-            lastActivityAt: "2026-02-06T00:00:02.000Z",
-          },
-        ],
-      },
-    });
-
-    const service = new TerminalSessionService();
-    service.actions.openNewSessionDialog("/workspace");
-    service.actions.setNewSessionModel("opus");
-    await service.actions.confirmNewSession({ cols: 80, rows: 24 });
-
-    expect(ipcHarness.claudeIpc.startClaudeSession).toHaveBeenCalledWith({
-      cwd: "/workspace",
-      sessionName: null,
-      model: "opus",
-      permissionMode: "default",
-      cols: 80,
-      rows: 24,
-    });
-  });
-
-  it("passes permission mode when selected in new-session dialog", async () => {
-    ipcHarness.claudeIpc.startClaudeSession.mockResolvedValue({
-      ok: true,
-      sessionId: "session-3",
-      snapshot: {
-        projects: [],
-        activeSessionId: "session-3",
-        sessions: [
-          {
-            sessionId: "session-3",
-            cwd: "/workspace",
-            sessionName: null,
-            status: "running",
-            activityState: "working",
-            activityWarning: null,
-            lastError: null,
-            createdAt: "2026-02-06T00:00:02.000Z",
-            lastActivityAt: "2026-02-06T00:00:02.000Z",
-          },
-        ],
-      },
-    });
-
-    const service = new TerminalSessionService();
-    service.actions.openNewSessionDialog("/workspace");
-    service.actions.setNewSessionPermissionMode("yolo");
-    await service.actions.confirmNewSession({ cols: 80, rows: 24 });
-
-    expect(ipcHarness.claudeIpc.startClaudeSession).toHaveBeenCalledWith({
-      cwd: "/workspace",
-      sessionName: null,
-      model: "opus",
-      permissionMode: "yolo",
-      cols: 80,
-      rows: 24,
-    });
   });
 
   it("sorts sessions newest-first inside each project group", () => {

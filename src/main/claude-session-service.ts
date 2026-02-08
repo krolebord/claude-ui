@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, unlink, writeFile } from "node:fs/promises";
+import { unlinkSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type {
   AddClaudeProjectInput,
@@ -261,6 +262,7 @@ export class ClaudeSessionService {
       });
 
       if (!result.ok) {
+        this.cleanupStateFile(record);
         this.removeSessionRecord(sessionId, record);
         record.monitor.stopMonitoring();
         record.manager.dispose();
@@ -310,6 +312,7 @@ export class ClaudeSessionService {
         snapshot: this.getSessionsSnapshot(),
       };
     } catch (error) {
+      this.cleanupStateFile(record);
       this.removeSessionRecord(sessionId, record);
       record.monitor.stopMonitoring();
       record.manager.dispose();
@@ -488,7 +491,11 @@ export class ClaudeSessionService {
 
     const filePath = record.stateFilePath;
     record.stateFilePath = null;
-    void unlink(filePath).catch(() => {});
+    try {
+      unlinkSync(filePath);
+    } catch {
+      // Ignore missing-file and cleanup errors.
+    }
   }
 
   private hydratePersistedSessions(): void {

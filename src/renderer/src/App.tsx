@@ -54,17 +54,14 @@ function App() {
     [actions]
   );
 
-  const handleConfirmNewSession = useCallback(() => {
-    const terminalSize = terminalRef.current?.getSize() ?? {
-      cols: 80,
-      rows: 24,
-    };
-
-    void actions.confirmNewSession({
-      cols: terminalSize.cols,
-      rows: terminalSize.rows,
-    });
-  }, [actions]);
+  const getTerminalSize = useCallback(
+    () =>
+      terminalRef.current?.getSize() ?? {
+        cols: 80,
+        rows: 24,
+      },
+    [],
+  );
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -129,13 +126,13 @@ function App() {
         sessionName={state.newSessionDialog.sessionName}
         model={state.newSessionDialog.model}
         permissionMode={state.newSessionDialog.permissionMode}
-        isStarting={state.isStarting}
+        getTerminalSize={getTerminalSize}
         onInitialPromptChange={actions.setNewSessionInitialPrompt}
         onSessionNameChange={actions.setNewSessionName}
         onModelChange={actions.setNewSessionModel}
         onPermissionModeChange={actions.setNewSessionPermissionMode}
         onCancel={actions.closeNewSessionDialog}
-        onConfirm={handleConfirmNewSession}
+        onStarted={actions.newSessionStarted}
       />
 
       <ProjectDefaultsDialog

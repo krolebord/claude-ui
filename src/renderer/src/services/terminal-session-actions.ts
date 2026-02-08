@@ -158,6 +158,19 @@ export function createTerminalSessionActions(
           path: normalizedPath,
         });
         deps.applySnapshot(result.snapshot);
+
+        const addedProject = deps
+          .getState()
+          .projects.find((candidate) => candidate.path === normalizedPath);
+        deps.updateState((prev) => ({
+          ...prev,
+          projectDefaultsDialog: {
+            open: true,
+            projectPath: normalizedPath,
+            defaultModel: addedProject?.defaultModel,
+            defaultPermissionMode: addedProject?.defaultPermissionMode,
+          },
+        }));
       } catch (error) {
         deps.updateState((prev) => ({
           ...prev,
@@ -246,37 +259,14 @@ export function createTerminalSessionActions(
         },
       }));
     },
-    confirmNewSession: async (input: {
-      cols: number;
-      rows: number;
-    }): Promise<void> => {
-      const current = deps.getState();
-      const projectPath = current.newSessionDialog.projectPath?.trim() ?? "";
-      if (!projectPath || current.isStarting) {
-        return;
-      }
-
-      const sessionName = current.newSessionDialog.sessionName;
-      const model = current.newSessionDialog.model;
-      const permissionMode = current.newSessionDialog.permissionMode;
-      const rawInitialPrompt = current.newSessionDialog.initialPrompt.trim();
-      const initialPrompt =
-        rawInitialPrompt.length > 0 ? rawInitialPrompt : undefined;
-
+    newSessionStarted: (snapshot: ClaudeSessionsSnapshot): void => {
+      deps.applySnapshot(snapshot);
+      deps.clearTerminal();
+      deps.focusTerminal();
       deps.updateState((prev) => ({
         ...prev,
         newSessionDialog: getDefaultDialogState(null, false),
       }));
-
-      await startSessionInProject(deps, {
-        cwd: projectPath,
-        sessionName,
-        model,
-        permissionMode,
-        initialPrompt,
-        cols: input.cols,
-        rows: input.rows,
-      });
     },
     stopActiveSession: async (): Promise<void> => {
       if (deps.getState().isStopping) {

@@ -60,6 +60,7 @@ export async function resumeStoppedSession(
 
     if (!result.ok) {
       record.monitor.stopMonitoring();
+      deps.cleanupStateFile(record);
       return result;
     }
 
@@ -71,6 +72,7 @@ export async function resumeStoppedSession(
     };
   } catch (error) {
     record.monitor.stopMonitoring();
+    deps.cleanupStateFile(record);
     return {
       ok: false,
       message:

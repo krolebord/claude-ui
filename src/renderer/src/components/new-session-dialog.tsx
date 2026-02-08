@@ -1,3 +1,4 @@
+import { useMutation } from "@tanstack/react-query";
 import { Button } from "@renderer/components/ui/button";
 import {
   Dialog,
@@ -21,7 +22,14 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from "@renderer/components/ui/toggle-group";
-import type { ClaudeModel, ClaudePermissionMode } from "@shared/claude-types";
+import { claudeIpc } from "@renderer/lib/ipc";
+import type {
+  ClaudeModel,
+  ClaudePermissionMode,
+  ClaudeSessionsSnapshot,
+  StartClaudeSessionInput,
+} from "@shared/claude-types";
+import { AlertCircle } from "lucide-react";
 
 interface NewSessionDialogProps {
   open: boolean;
@@ -30,13 +38,13 @@ interface NewSessionDialogProps {
   sessionName: string;
   model: ClaudeModel;
   permissionMode: ClaudePermissionMode;
-  isStarting: boolean;
+  getTerminalSize: () => { cols: number; rows: number };
   onInitialPromptChange: (value: string) => void;
   onSessionNameChange: (value: string) => void;
   onModelChange: (value: ClaudeModel) => void;
   onPermissionModeChange: (value: ClaudePermissionMode) => void;
   onCancel: () => void;
-  onConfirm: () => void;
+  onStarted: (snapshot: ClaudeSessionsSnapshot) => void;
 }
 
 function getProjectNameFromPath(path: string): string {
@@ -73,25 +81,61 @@ export function NewSessionDialog({
   sessionName,
   model,
   permissionMode,
-  isStarting,
+  getTerminalSize,
   onInitialPromptChange,
   onSessionNameChange,
   onModelChange,
   onPermissionModeChange,
   onCancel,
-  onConfirm,
+  onStarted,
 }: NewSessionDialogProps) {
+  const mutation = useMutation({
+    mutationFn: async (input: StartClaudeSessionInput) => {
+      const result = await claudeIpc.startClaudeSession(input);
+      if (!result.ok) throw new Error(result.message);
+      return result;
+    },
+    onSuccess: (result) => {
+      onStarted(result.snapshot);
+    },
+  });
+
+  const handleCancel = () => {
+    mutation.reset();
+    onCancel();
+  };
+
   if (!open || !projectPath) {
     return null;
   }
 
   const projectName = getProjectNameFromPath(projectPath);
 
+  const handleSubmit = () => {
+    if (mutation.isPending) {
+      return;
+    }
+
+    const trimmedName = sessionName.trim();
+    const trimmedPrompt = initialPrompt.trim();
+    const terminalSize = getTerminalSize();
+
+    mutation.mutate({
+      cwd: projectPath,
+      cols: terminalSize.cols,
+      rows: terminalSize.rows,
+      sessionName: trimmedName.length > 0 ? trimmedName : undefined,
+      model,
+      permissionMode,
+      initialPrompt: trimmedPrompt.length > 0 ? trimmedPrompt : undefined,
+    });
+  };
+
   return (
     <Dialog
       open={open}
       onOpenChange={(isOpen) => {
-        if (!isOpen) onCancel();
+        if (!isOpen) handleCancel();
       }}
     >
       <DialogContent showCloseButton={false}>
@@ -108,7 +152,7 @@ export function NewSessionDialog({
           className="space-y-4"
           onSubmit={(event) => {
             event.preventDefault();
-            onConfirm();
+            handleSubmit();
           }}
         >
           <div className="space-y-2">
@@ -126,7 +170,7 @@ export function NewSessionDialog({
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
-                  onConfirm();
+                  handleSubmit();
                 }
               }}
               rows={3}
@@ -199,12 +243,28 @@ export function NewSessionDialog({
             </ToggleGroup>
           </div>
 
+          {mutation.error ? (
+            <div className="flex items-center gap-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
+              <AlertCircle className="size-4 shrink-0" />
+              <span>
+                {mutation.error instanceof Error
+                  ? mutation.error.message
+                  : "Failed to start session."}
+              </span>
+            </div>
+          ) : null}
+
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={onCancel}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleCancel}
+              disabled={mutation.isPending}
+            >
               Cancel
             </Button>
-            <Button type="submit" disabled={isStarting}>
-              {isStarting ? "Starting..." : "Create"}
+            <Button type="submit" disabled={mutation.isPending}>
+              {mutation.isPending ? "Starting..." : "Create"}
             </Button>
           </DialogFooter>
         </form>

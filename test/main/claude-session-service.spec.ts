@@ -1,3 +1,6 @@
+import { access, mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import type {
   ClaudeActivityState,
   ClaudeProject,
@@ -36,6 +39,8 @@ interface MockActivityMonitor {
   stopMonitoring: ReturnType<typeof vi.fn>;
 }
 
+type SessionManagerStartResult = { ok: true } | { ok: false; message: string };
+
 function createHarness(options?: {
   initialProjects?: ClaudeProject[];
   initialSessionSnapshotState?: {
@@ -43,6 +48,8 @@ function createHarness(options?: {
     activeSessionId: SessionId | null;
   };
   nowFactory?: () => string;
+  stateFileFactory?: (sessionId: string) => Promise<string>;
+  managerStartImpl?: () => Promise<SessionManagerStartResult>;
 }) {
   const managerMocks: MockSessionManager[] = [];
   const monitorMocks: MockActivityMonitor[] = [];
@@ -133,7 +140,9 @@ function createHarness(options?: {
     sessionManagerFactory: (callbacks) => {
       const manager: MockSessionManager = {
         callbacks,
-        start: vi.fn(async () => ({ ok: true as const })),
+        start: vi.fn(
+          async () => options?.managerStartImpl?.() ?? ({ ok: true as const }),
+        ),
         stop: vi.fn(async () => ({ ok: true as const })),
         write: vi.fn(),
         resize: vi.fn(),
@@ -153,8 +162,9 @@ function createHarness(options?: {
       monitorMocks.push(monitor);
       return monitor;
     },
-    stateFileFactory: async (sessionId: string) =>
-      `/tmp/claude-state/${sessionId}.ndjson`,
+    stateFileFactory:
+      options?.stateFileFactory ??
+      (async (sessionId: string) => `/tmp/claude-state/${sessionId}.ndjson`),
     sessionIdFactory: () =>
       sessionIds[sessionIdIndex++] ?? `session-${sessionIdIndex}`,
     nowFactory: options?.nowFactory ?? (() => "2026-02-06T00:00:00.000Z"),
@@ -884,5 +894,56 @@ describe("ClaudeSessionService", () => {
 
     const snapshot = harness.service.getSessionsSnapshot();
     expect(snapshot.sessions).toHaveLength(0);
+  });
+
+  it("cleans up state file when starting a new session fails", async () => {
+    const stateRoot = await mkdtemp(path.join(tmpdir(), "claude-ui-state-"));
+    const harness = createHarness({
+      managerStartImpl: async () => ({
+        ok: false,
+        message: "start failed",
+      }),
+      stateFileFactory: async (sessionId: string) => {
+        const filePath = path.join(stateRoot, `${sessionId}.ndjson`);
+        await writeFile(filePath, "", "utf8");
+        return filePath;
+      },
+    });
+
+    const result = await harness.service.startSession(START_INPUT);
+
+    expect(result).toEqual({
+      ok: false,
+      message: "start failed",
+    });
+    await expect(access(path.join(stateRoot, "session-1.ndjson"))).rejects.toThrow();
+  });
+
+  it("cleans up state file when resuming a session fails", async () => {
+    const stateRoot = await mkdtemp(path.join(tmpdir(), "claude-ui-state-"));
+    const harness = createHarness({
+      stateFileFactory: async (sessionId: string) => {
+        const filePath = path.join(stateRoot, `${sessionId}.ndjson`);
+        await writeFile(filePath, "", "utf8");
+        return filePath;
+      },
+    });
+
+    await harness.service.startSession(START_INPUT);
+    harness.managerMocks[0]?.start.mockResolvedValueOnce({
+      ok: false,
+      message: "resume failed",
+    });
+
+    const result = await harness.service.startSession({
+      ...START_INPUT,
+      resumeSessionId: "session-1",
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      message: "resume failed",
+    });
+    await expect(access(path.join(stateRoot, "session-1.ndjson"))).rejects.toThrow();
   });
 });
