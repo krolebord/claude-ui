@@ -1,6 +1,18 @@
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import spawn from "nano-spawn";
 import log from "./logger";
+
+type HookRuntime = "bun" | "node";
+
+async function detectRuntime(): Promise<HookRuntime> {
+  try {
+    await spawn("bun", ["--version"], { timeout: 3000 });
+    return "bun";
+  } catch {
+    return "node";
+  }
+}
 
 const PLUGIN_VERSION = 1;
 
@@ -13,10 +25,10 @@ interface HookMatcherConfig {
   }>;
 }
 
-function buildHooksConfig() {
+function buildHooksConfig(runtime: HookRuntime) {
   const commandHook = {
     type: "command" as const,
-    command: `node "${"${CLAUDE_PLUGIN_ROOT}"}/scripts/emit-state.mjs"`,
+    command: `${runtime} "${"${CLAUDE_PLUGIN_ROOT}"}/scripts/emit-state.mjs"`,
     timeout: 5,
   };
 
@@ -56,8 +68,8 @@ function buildPluginManifest() {
   };
 }
 
-function buildHookScript() {
-  return `#!/usr/bin/env node
+function buildHookScript(runtime: HookRuntime) {
+  return `#!/usr/bin/env ${runtime}
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -141,6 +153,8 @@ export async function ensureManagedClaudeStatePlugin(
   const hooksDir = path.join(pluginRoot, "hooks");
   const scriptsDir = path.join(pluginRoot, "scripts");
 
+  const runtime = await detectRuntime();
+
   await mkdir(pluginDir, { recursive: true });
   await mkdir(hooksDir, { recursive: true });
   await mkdir(scriptsDir, { recursive: true });
@@ -156,15 +170,15 @@ export async function ensureManagedClaudeStatePlugin(
   );
   await writeFile(
     hooksPath,
-    `${JSON.stringify(buildHooksConfig(), null, 2)}\n`,
+    `${JSON.stringify(buildHooksConfig(runtime), null, 2)}\n`,
     "utf8",
   );
-  await writeFile(scriptPath, buildHookScript(), "utf8");
+  await writeFile(scriptPath, buildHookScript(runtime), "utf8");
 
   if (process.platform !== "win32") {
     await chmod(scriptPath, 0o755);
   }
 
-  log.info("Managed plugin created", { pluginRoot });
+  log.info("Managed plugin created", { pluginRoot, runtime });
   return pluginRoot;
 }
