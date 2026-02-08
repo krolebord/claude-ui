@@ -1,7 +1,24 @@
+import { Button } from "@renderer/components/ui/button";
+import { Checkbox } from "@renderer/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@renderer/components/ui/dialog";
 import { Input } from "@renderer/components/ui/input";
-import { cn } from "@renderer/lib/utils";
+import { Label } from "@renderer/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@renderer/components/ui/select";
+import { Textarea } from "@renderer/components/ui/textarea";
 import type { ClaudeModel } from "@shared/claude-types";
-import { useEffect } from "react";
 
 interface NewSessionDialogProps {
   open: boolean;
@@ -47,23 +64,6 @@ export function NewSessionDialog({
   onCancel,
   onConfirm,
 }: NewSessionDialogProps) {
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onCancel();
-      }
-    };
-
-    window.addEventListener("keydown", handleEscape);
-    return () => {
-      window.removeEventListener("keydown", handleEscape);
-    };
-  }, [onCancel, open]);
-
   if (!open || !projectPath) {
     return null;
   }
@@ -71,39 +71,34 @@ export function NewSessionDialog({
   const projectName = getProjectNameFromPath(projectPath);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-      onMouseDown={onCancel}
+    <Dialog
+      open={open}
+      onOpenChange={(isOpen) => {
+        if (!isOpen) onCancel();
+      }}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Create new session"
-        onMouseDown={(event) => {
-          event.stopPropagation();
-        }}
-        className="w-full max-w-md rounded-xl border border-white/10 bg-[#111418] p-5 shadow-2xl"
-      >
-        <div className="space-y-1">
-          <h2 className="text-lg font-semibold text-zinc-100">Start new session</h2>
-          <p className="text-sm text-zinc-400">
-            Project: <span className="text-zinc-200">{projectName}</span>
-          </p>
-          <p className="text-xs text-zinc-500">{projectPath}</p>
-        </div>
+      <DialogContent showCloseButton={false}>
+        <DialogHeader>
+          <DialogTitle>Start new session</DialogTitle>
+          <DialogDescription>
+            Project: <span className="text-foreground">{projectName}</span>
+            <br />
+            <span className="text-xs text-muted-foreground">{projectPath}</span>
+          </DialogDescription>
+        </DialogHeader>
 
         <form
-          className="mt-4 space-y-4"
+          className="space-y-4"
           onSubmit={(event) => {
             event.preventDefault();
             onConfirm();
           }}
         >
           <div className="space-y-2">
-            <label htmlFor="new-session-initial-prompt" className="text-sm text-zinc-300">
+            <Label htmlFor="new-session-initial-prompt">
               Initial prompt (optional)
-            </label>
-            <textarea
+            </Label>
+            <Textarea
               id="new-session-initial-prompt"
               autoFocus
               placeholder="What would you like Claude to do?"
@@ -118,14 +113,11 @@ export function NewSessionDialog({
                 }
               }}
               rows={3}
-              className="w-full rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-white/30"
             />
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="new-session-name" className="text-sm text-zinc-300">
-              Session name (optional)
-            </label>
+            <Label htmlFor="new-session-name">Session name (optional)</Label>
             <Input
               id="new-session-name"
               placeholder="Leave blank for generated name"
@@ -133,67 +125,56 @@ export function NewSessionDialog({
               onChange={(event) => {
                 onSessionNameChange(event.target.value);
               }}
-              className="border-white/15 bg-white/5 text-zinc-100 placeholder:text-zinc-500"
             />
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="new-session-model" className="text-sm text-zinc-300">
-              Model
-            </label>
-            <select
-              id="new-session-model"
+            <Label>Model</Label>
+            <Select
               value={model}
-              onChange={(event) => {
-                onModelChange(event.target.value as ClaudeModel);
-              }}
-              className="w-full rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm text-zinc-100"
+              onValueChange={(value) =>
+                onModelChange(value as ClaudeModel)
+              }
             >
-              {MODEL_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {MODEL_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          <label
-            htmlFor="new-session-dangerously-skip-permissions"
-            className="flex cursor-pointer items-center gap-2 text-sm text-zinc-300"
-          >
-            <input
+          <div className="flex items-center gap-2">
+            <Checkbox
               id="new-session-dangerously-skip-permissions"
-              type="checkbox"
               checked={dangerouslySkipPermissions}
-              onChange={(event) => {
-                onDangerouslySkipPermissionsChange(event.target.checked);
-              }}
-              className="size-4 rounded border-white/20 bg-white/5 accent-white"
+              onCheckedChange={(checked) =>
+                onDangerouslySkipPermissionsChange(checked === true)
+              }
             />
-            <span>Create with --dangerously-skip-permissions</span>
-          </label>
-
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="rounded-md border border-white/15 px-3 py-1.5 text-sm text-zinc-300 transition hover:bg-white/5"
+            <Label
+              htmlFor="new-session-dangerously-skip-permissions"
+              className="cursor-pointer"
             >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isStarting}
-              className={cn(
-                "rounded-md bg-white px-3 py-1.5 text-sm font-medium text-black transition",
-                "hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-60",
-              )}
-            >
-              {isStarting ? "Starting..." : "Create"}
-            </button>
+              Create with --dangerously-skip-permissions
+            </Label>
           </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onCancel}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isStarting}>
+              {isStarting ? "Starting..." : "Create"}
+            </Button>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

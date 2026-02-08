@@ -7,7 +7,12 @@
       "Bash(pnpm typecheck:*)",
       "WebFetch(domain:code.visualstudio.com)",
       "WebFetch(domain:github.com)",
-      "WebFetch(domain:dev.to)"
+      "WebFetch(domain:dev.to)",
+      "Bash(wc:*)",
+      "Bash(npx shadcn@latest add:*)",
+      "Bash(grep:*)",
+      "WebFetch(domain:zod.dev)",
+      "Bash(pnpm format:*)"
     ]
   }
 }

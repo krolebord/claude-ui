@@ -1,5 +1,7 @@
 import type { TerminalPaneHandle } from "@renderer/components/terminal-pane";
 import { claudeIpc } from "@renderer/lib/ipc";
+import * as z from "zod";
+import { claudeModelSchema } from "@shared/claude-schemas";
 import type {
   ClaudeModel,
   SessionId,
@@ -61,33 +63,22 @@ async function startSessionInProject(
   }));
 
   try {
+    const optionals = z
+      .object({
+        resumeSessionId: z.string().optional(),
+        sessionName: z.string().trim().min(1).nullish().catch(null),
+        model: claudeModelSchema.optional(),
+        dangerouslySkipPermissions: z.boolean().optional(),
+        initialPrompt: z.string().optional(),
+      })
+      .parse(input);
+
     const startInput: StartClaudeSessionInput = {
       cwd: input.cwd,
       cols: input.cols,
       rows: input.rows,
+      ...optionals,
     };
-
-    if (typeof input.resumeSessionId === "string") {
-      startInput.resumeSessionId = input.resumeSessionId;
-    }
-
-    if (typeof input.sessionName === "string") {
-      const normalizedSessionName = input.sessionName.trim();
-      startInput.sessionName =
-        normalizedSessionName.length > 0 ? normalizedSessionName : null;
-    }
-
-    if (typeof input.model !== "undefined") {
-      startInput.model = input.model;
-    }
-
-    if (typeof input.dangerouslySkipPermissions === "boolean") {
-      startInput.dangerouslySkipPermissions = input.dangerouslySkipPermissions;
-    }
-
-    if (typeof input.initialPrompt === "string") {
-      startInput.initialPrompt = input.initialPrompt;
-    }
 
     const result = await claudeIpc.startClaudeSession(startInput);
 

@@ -72,9 +72,7 @@ export function getSessionLastActivityLabel(
     if (roundedSeconds >= 60) {
       return "1m";
     }
-    if (roundedSeconds < 60) {
-      return `${roundedSeconds}s`;
-    }
+    return `${roundedSeconds}s`;
   }
 
   const minutes = Math.floor(deltaSeconds / 60);
