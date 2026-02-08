@@ -267,7 +267,7 @@ export class ClaudeSessionManager {
       return " --dangerously-skip-permissions";
     }
     if (permissionMode && permissionMode !== "default") {
-      return ` --permissions-mode ${permissionMode}`;
+      return ` --permission-mode ${permissionMode}`;
     }
     return "";
   }
