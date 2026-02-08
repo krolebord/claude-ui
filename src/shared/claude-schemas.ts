@@ -39,7 +39,7 @@ export function claudeSessionSnapshotSchema(epochFallback: string) {
       activityWarning: nullableNonEmptyString,
       lastError: nullableNonEmptyString,
       createdAt: timestampWithFallback(epochFallback),
-      lastActivityAt: z.string().trim().min(1).optional(),
+      lastActivityAt: z.string().trim().min(1).nullish().catch(null),
     })
     .transform((snapshot) => ({
       ...snapshot,
