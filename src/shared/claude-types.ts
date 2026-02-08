@@ -23,6 +23,7 @@ export const CLAUDE_IPC_CHANNELS = {
   startUsageMonitor: "claude:start-usage-monitor",
   stopUsageMonitor: "claude:stop-usage-monitor",
   usageUpdate: "claude:usage-update",
+  openLogFolder: "claude:open-log-folder",
 } as const;
 
 export type SessionId = string;
@@ -310,4 +311,5 @@ export interface ClaudeDesktopApi {
   onClaudeUsageUpdate: (
     callback: (payload: ClaudeUsageUpdateEvent) => void,
   ) => () => void;
+  openLogFolder: () => Promise<void>;
 }

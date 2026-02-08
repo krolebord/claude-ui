@@ -40,6 +40,7 @@ export interface TerminalSessionState {
   activeSessionId: SessionId | null;
   newSessionDialog: NewSessionDialogState;
   projectDefaultsDialog: ProjectDefaultsDialogState;
+  settingsDialogOpen: boolean;
   isSelecting: boolean;
   isStarting: boolean;
   isStopping: boolean;
@@ -90,6 +91,7 @@ export class TerminalSessionService {
       activeSessionId: null,
       newSessionDialog: getDefaultDialogState(),
       projectDefaultsDialog: getDefaultProjectDefaultsDialogState(),
+      settingsDialogOpen: false,
       isSelecting: false,
       isStarting: false,
       isStopping: false,

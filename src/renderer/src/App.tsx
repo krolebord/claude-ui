@@ -1,6 +1,7 @@
 import { NewSessionDialog } from "@renderer/components/new-session-dialog";
 import { ProjectDefaultsDialog } from "@renderer/components/project-defaults-dialog";
 import { SessionSidebar } from "@renderer/components/session-sidebar";
+import { SettingsDialog } from "@renderer/components/settings-dialog";
 import {
   type TerminalPaneHandle,
   TerminalPane,
@@ -72,6 +73,7 @@ function App() {
         onAddProject={() => {
           void actions.addProject();
         }}
+        onOpenSettings={actions.openSettingsDialog}
         onToggleProject={(projectPath) => {
           void actions.toggleProjectCollapsed(projectPath);
         }}
@@ -148,6 +150,11 @@ function App() {
         }
         onCancel={actions.closeProjectDefaultsDialog}
         onSaved={actions.projectDefaultsSaved}
+      />
+
+      <SettingsDialog
+        open={state.settingsDialogOpen}
+        onClose={actions.closeSettingsDialog}
       />
 
       <Toaster />

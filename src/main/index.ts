@@ -234,6 +234,11 @@ function registerIpcHandlers(): void {
   ipcMain.handle(CLAUDE_IPC_CHANNELS.stopUsageMonitor, () => {
     usageMonitor?.stop();
   });
+
+  ipcMain.handle(CLAUDE_IPC_CHANNELS.openLogFolder, async () => {
+    const logPath = app.getPath("logs");
+    await shell.openPath(logPath);
+  });
 }
 
 app.whenReady().then(async () => {

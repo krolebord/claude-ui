@@ -99,4 +99,5 @@ export const claudeIpc = {
   onClaudeUsageUpdate: (
     callback: (payload: ClaudeUsageUpdateEvent) => void,
   ): (() => void) => window.claude.onClaudeUsageUpdate(callback),
+  openLogFolder: (): Promise<void> => window.claude.openLogFolder(),
 };

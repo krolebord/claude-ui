@@ -461,5 +461,17 @@ export function createTerminalSessionActions(
         },
       }));
     },
+    openSettingsDialog: (): void => {
+      deps.updateState((prev) => ({
+        ...prev,
+        settingsDialogOpen: true,
+      }));
+    },
+    closeSettingsDialog: (): void => {
+      deps.updateState((prev) => ({
+        ...prev,
+        settingsDialogOpen: false,
+      }));
+    },
   };
 }

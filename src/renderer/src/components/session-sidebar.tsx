@@ -35,6 +35,7 @@ interface SessionSidebarProps {
   activeSessionId: SessionId | null;
   isAddingProject: boolean;
   onAddProject: () => void;
+  onOpenSettings: () => void;
   onToggleProject: (projectPath: string) => void;
   onOpenNewSessionDialog: (projectPath: string) => void;
   onSelectSession: (sessionId: SessionId) => void;
@@ -97,6 +98,7 @@ export function SessionSidebar({
   activeSessionId,
   isAddingProject,
   onAddProject,
+  onOpenSettings,
   onToggleProject,
   onOpenNewSessionDialog,
   onSelectSession,
@@ -120,7 +122,15 @@ export function SessionSidebar({
 
   return (
     <aside className="flex h-full w-[304px] shrink-0 flex-col border-r border-border/70 bg-black/35 backdrop-blur-xl">
-      <div className="border-b border-border/70 p-2">
+      <div className="flex items-center gap-1.5 border-b border-border/70 p-2">
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-white/5 text-zinc-300 transition hover:bg-white/10 hover:text-white"
+          aria-label="Settings"
+        >
+          <Settings className="size-3.5" />
+        </button>
         <button
           type="button"
           onClick={onAddProject}

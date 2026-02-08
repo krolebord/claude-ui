@@ -142,6 +142,8 @@ const claudeApi: ClaudeDesktopApi = {
       CLAUDE_IPC_CHANNELS.usageUpdate,
       callback,
     ),
+  openLogFolder: (): Promise<void> =>
+    ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.openLogFolder),
 };
 
 contextBridge.exposeInMainWorld("claude", claudeApi);
