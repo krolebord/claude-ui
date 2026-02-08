@@ -7,6 +7,7 @@ import {
   TerminalPane,
 } from "@renderer/components/terminal-pane";
 import { Toaster } from "@renderer/components/ui/sonner";
+import { useKeyboardShortcuts } from "@renderer/hooks/use-keyboard-shortcuts";
 import {
   useTerminalSession,
 } from "@renderer/services/use-terminal-session";
@@ -16,6 +17,7 @@ import { useCallback, useMemo, useRef } from "react";
 
 function App() {
   const { state, actions } = useTerminalSession();
+  useKeyboardShortcuts(state, actions);
   const terminalRef = useRef<TerminalPaneHandle | null>(null);
 
   const activeSession = state.activeSessionId
