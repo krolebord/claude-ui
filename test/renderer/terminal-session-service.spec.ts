@@ -472,7 +472,7 @@ describe("TerminalSessionService", () => {
       initialPrompt: "",
       sessionName: "",
       model: "opus",
-      dangerouslySkipPermissions: false,
+      permissionMode: "default",
     });
 
     service.actions.setNewSessionInitialPrompt("fix the bug");
@@ -495,7 +495,7 @@ describe("TerminalSessionService", () => {
       initialPrompt: "",
       sessionName: "",
       model: "opus",
-      dangerouslySkipPermissions: false,
+      permissionMode: "default",
     });
   });
 
@@ -559,7 +559,7 @@ describe("TerminalSessionService", () => {
       cwd: "/workspace",
       sessionName: "Refactor runner",
       model: "opus",
-      dangerouslySkipPermissions: false,
+      permissionMode: "default",
       cols: 80,
       rows: 24,
     });
@@ -601,7 +601,7 @@ describe("TerminalSessionService", () => {
       cwd: "/workspace",
       sessionName: null,
       model: "opus",
-      dangerouslySkipPermissions: false,
+      permissionMode: "default",
       initialPrompt: "fix the login bug",
       cols: 80,
       rows: 24,
@@ -640,7 +640,7 @@ describe("TerminalSessionService", () => {
       cwd: "/workspace",
       sessionName: null,
       model: "opus",
-      dangerouslySkipPermissions: false,
+      permissionMode: "default",
       cols: 80,
       rows: 24,
     });
@@ -678,13 +678,13 @@ describe("TerminalSessionService", () => {
       cwd: "/workspace",
       sessionName: null,
       model: "opus",
-      dangerouslySkipPermissions: false,
+      permissionMode: "default",
       cols: 80,
       rows: 24,
     });
   });
 
-  it("passes dangerously-skip-permissions when selected in new-session dialog", async () => {
+  it("passes permission mode when selected in new-session dialog", async () => {
     ipcHarness.claudeIpc.startClaudeSession.mockResolvedValue({
       ok: true,
       sessionId: "session-3",
@@ -709,14 +709,14 @@ describe("TerminalSessionService", () => {
 
     const service = new TerminalSessionService();
     service.actions.openNewSessionDialog("/workspace");
-    service.actions.setNewSessionDangerouslySkipPermissions(true);
+    service.actions.setNewSessionPermissionMode("yolo");
     await service.actions.confirmNewSession({ cols: 80, rows: 24 });
 
     expect(ipcHarness.claudeIpc.startClaudeSession).toHaveBeenCalledWith({
       cwd: "/workspace",
       sessionName: null,
       model: "opus",
-      dangerouslySkipPermissions: true,
+      permissionMode: "yolo",
       cols: 80,
       rows: 24,
     });

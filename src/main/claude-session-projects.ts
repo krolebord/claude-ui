@@ -3,6 +3,7 @@ import type {
   ClaudeProject,
   DeleteClaudeProjectInput,
   SetClaudeProjectCollapsedInput,
+  SetClaudeProjectDefaultsInput,
 } from "../shared/claude-types";
 
 export function normalizeProjectPath(pathValue: string): string {
@@ -21,6 +22,7 @@ export function normalizeProjects(projects: ClaudeProject[]): ClaudeProject[] {
 
     seenPaths.add(path);
     normalized.push({
+      ...project,
       path,
       collapsed: project.collapsed === true,
     });
@@ -128,6 +130,52 @@ export function setProjectCollapsedInList(
     nextProjects.push({
       ...project,
       collapsed: input.collapsed,
+    });
+  }
+
+  return {
+    projects: didChange ? nextProjects : projects,
+    didChange,
+  };
+}
+
+export function setProjectDefaultsInList(
+  projects: ClaudeProject[],
+  input: SetClaudeProjectDefaultsInput,
+): {
+  projects: ClaudeProject[];
+  didChange: boolean;
+} {
+  const projectPath = normalizeProjectPath(input.path);
+  if (!projectPath) {
+    return {
+      projects,
+      didChange: false,
+    };
+  }
+
+  let didChange = false;
+  const nextProjects: ClaudeProject[] = [];
+
+  for (const project of projects) {
+    if (project.path !== projectPath) {
+      nextProjects.push(project);
+      continue;
+    }
+
+    if (
+      project.defaultModel === input.defaultModel &&
+      project.defaultPermissionMode === input.defaultPermissionMode
+    ) {
+      nextProjects.push(project);
+      continue;
+    }
+
+    didChange = true;
+    nextProjects.push({
+      ...project,
+      defaultModel: input.defaultModel,
+      defaultPermissionMode: input.defaultPermissionMode,
     });
   }
 

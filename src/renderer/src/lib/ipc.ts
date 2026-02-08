@@ -19,6 +19,8 @@ import type {
   SetActiveSessionInput,
   SetClaudeProjectCollapsedInput,
   SetClaudeProjectCollapsedResult,
+  SetClaudeProjectDefaultsInput,
+  SetClaudeProjectDefaultsResult,
   StartClaudeSessionInput,
   StartClaudeSessionResult,
   StopClaudeSessionInput,
@@ -37,6 +39,10 @@ export const claudeIpc = {
     input: SetClaudeProjectCollapsedInput,
   ): Promise<SetClaudeProjectCollapsedResult> =>
     window.claude.setClaudeProjectCollapsed(input),
+  setClaudeProjectDefaults: (
+    input: SetClaudeProjectDefaultsInput,
+  ): Promise<SetClaudeProjectDefaultsResult> =>
+    window.claude.setClaudeProjectDefaults(input),
   deleteClaudeProject: (
     input: DeleteClaudeProjectInput,
   ): Promise<DeleteClaudeProjectResult> =>

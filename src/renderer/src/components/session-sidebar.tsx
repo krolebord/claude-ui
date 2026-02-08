@@ -21,6 +21,7 @@ import {
   MessageCircleQuestionMark,
   Play,
   Plus,
+  Settings,
   ShieldAlert,
   Square,
   Trash2,
@@ -40,6 +41,7 @@ interface SessionSidebarProps {
   onResumeSession: (sessionId: SessionId) => void;
   onDeleteSession: (sessionId: SessionId) => void;
   onDeleteProject: (projectPath: string) => void;
+  onOpenProjectDefaults: (projectPath: string) => void;
 }
 
 const statusIndicatorMeta: Record<
@@ -101,6 +103,7 @@ export function SessionSidebar({
   onResumeSession,
   onDeleteSession,
   onDeleteProject,
+  onOpenProjectDefaults,
 }: SessionSidebarProps) {
   const [now, setNow] = useState(() => Date.now());
 
@@ -181,6 +184,16 @@ export function SessionSidebar({
                         <Trash2 className="size-3.5" />
                       </button>
                     ) : null}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onOpenProjectDefaults(group.path);
+                      }}
+                      className="inline-flex size-6 items-center justify-center rounded-md text-zinc-300 opacity-0 transition hover:bg-white/10 hover:text-white focus-visible:opacity-100 group-hover/project:opacity-100"
+                      aria-label={`Project defaults for ${group.name}`}
+                    >
+                      <Settings className="size-3.5" />
+                    </button>
                     <button
                       type="button"
                       onClick={() => {

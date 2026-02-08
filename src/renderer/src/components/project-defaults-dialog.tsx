@@ -1,3 +1,4 @@
+import { useMutation } from "@tanstack/react-query";
 import { Button } from "@renderer/components/ui/button";
 import {
   Dialog,
@@ -7,7 +8,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@renderer/components/ui/dialog";
-import { Input } from "@renderer/components/ui/input";
 import { Label } from "@renderer/components/ui/label";
 import {
   Select,
@@ -16,27 +16,29 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@renderer/components/ui/select";
-import { Textarea } from "@renderer/components/ui/textarea";
 import {
   ToggleGroup,
   ToggleGroupItem,
 } from "@renderer/components/ui/toggle-group";
-import type { ClaudeModel, ClaudePermissionMode } from "@shared/claude-types";
+import { claudeIpc } from "@renderer/lib/ipc";
+import type {
+  ClaudeModel,
+  ClaudePermissionMode,
+  ClaudeSessionsSnapshot,
+} from "@shared/claude-types";
+import { AlertCircle } from "lucide-react";
 
-interface NewSessionDialogProps {
+interface ProjectDefaultsDialogProps {
   open: boolean;
   projectPath: string | null;
-  initialPrompt: string;
-  sessionName: string;
-  model: ClaudeModel;
-  permissionMode: ClaudePermissionMode;
-  isStarting: boolean;
-  onInitialPromptChange: (value: string) => void;
-  onSessionNameChange: (value: string) => void;
-  onModelChange: (value: ClaudeModel) => void;
-  onPermissionModeChange: (value: ClaudePermissionMode) => void;
+  defaultModel: ClaudeModel | undefined;
+  defaultPermissionMode: ClaudePermissionMode | undefined;
+  onDefaultModelChange: (value: ClaudeModel | undefined) => void;
+  onDefaultPermissionModeChange: (
+    value: ClaudePermissionMode | undefined,
+  ) => void;
   onCancel: () => void;
-  onConfirm: () => void;
+  onSaved: (snapshot: ClaudeSessionsSnapshot) => void;
 }
 
 function getProjectNameFromPath(path: string): string {
@@ -66,39 +68,48 @@ function cyclePermissionMode(
   return PERMISSION_MODES[(index + 1) % PERMISSION_MODES.length].value;
 }
 
-export function NewSessionDialog({
+export function ProjectDefaultsDialog({
   open,
   projectPath,
-  initialPrompt,
-  sessionName,
-  model,
-  permissionMode,
-  isStarting,
-  onInitialPromptChange,
-  onSessionNameChange,
-  onModelChange,
-  onPermissionModeChange,
+  defaultModel,
+  defaultPermissionMode,
+  onDefaultModelChange,
+  onDefaultPermissionModeChange,
   onCancel,
-  onConfirm,
-}: NewSessionDialogProps) {
+  onSaved,
+}: ProjectDefaultsDialogProps) {
+  const mutation = useMutation({
+    mutationFn: claudeIpc.setClaudeProjectDefaults,
+    onSuccess: (result) => {
+      onSaved(result.snapshot);
+    },
+  });
+
+  const handleCancel = () => {
+    mutation.reset();
+    onCancel();
+  };
+
   if (!open || !projectPath) {
     return null;
   }
 
   const projectName = getProjectNameFromPath(projectPath);
+  const effectivePermissionMode = defaultPermissionMode ?? "default";
 
   return (
     <Dialog
       open={open}
       onOpenChange={(isOpen) => {
-        if (!isOpen) onCancel();
+        if (!isOpen) handleCancel();
       }}
     >
       <DialogContent showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>Start new session</DialogTitle>
+          <DialogTitle>Project defaults</DialogTitle>
           <DialogDescription>
-            Project: <span className="text-foreground">{projectName}</span>
+            Set default session options for{" "}
+            <span className="text-foreground">{projectName}</span>
             <br />
             <span className="text-xs text-muted-foreground">{projectPath}</span>
           </DialogDescription>
@@ -108,49 +119,19 @@ export function NewSessionDialog({
           className="space-y-4"
           onSubmit={(event) => {
             event.preventDefault();
-            onConfirm();
+            mutation.mutate({
+              path: projectPath,
+              defaultModel,
+              defaultPermissionMode,
+            });
           }}
         >
           <div className="space-y-2">
-            <Label htmlFor="new-session-initial-prompt">
-              Initial prompt (optional)
-            </Label>
-            <Textarea
-              id="new-session-initial-prompt"
-              autoFocus
-              placeholder="What would you like Claude to do?"
-              value={initialPrompt}
-              onChange={(event) => {
-                onInitialPromptChange(event.target.value);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  onConfirm();
-                }
-              }}
-              rows={3}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="new-session-name">Session name (optional)</Label>
-            <Input
-              id="new-session-name"
-              placeholder="Leave blank for generated name"
-              value={sessionName}
-              onChange={(event) => {
-                onSessionNameChange(event.target.value);
-              }}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Model</Label>
+            <Label>Default model</Label>
             <Select
-              value={model}
+              value={defaultModel ?? "opus"}
               onValueChange={(value) =>
-                onModelChange(value as ClaudeModel)
+                onDefaultModelChange(value as ClaudeModel)
               }
             >
               <SelectTrigger className="w-full">
@@ -171,18 +152,22 @@ export function NewSessionDialog({
             onKeyDown={(event) => {
               if (event.shiftKey && event.key === "Tab") {
                 event.preventDefault();
-                onPermissionModeChange(cyclePermissionMode(permissionMode));
+                onDefaultPermissionModeChange(
+                  cyclePermissionMode(effectivePermissionMode),
+                );
               }
             }}
           >
-            <Label>Permission mode</Label>
+            <Label>Default permission mode</Label>
             <ToggleGroup
               type="single"
               variant="outline"
-              value={permissionMode}
+              value={effectivePermissionMode}
               onValueChange={(value) => {
                 if (value) {
-                  onPermissionModeChange(value as ClaudePermissionMode);
+                  onDefaultPermissionModeChange(
+                    value as ClaudePermissionMode,
+                  );
                 }
               }}
               className="w-full"
@@ -199,12 +184,28 @@ export function NewSessionDialog({
             </ToggleGroup>
           </div>
 
+          {mutation.error ? (
+            <div className="flex items-center gap-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
+              <AlertCircle className="size-4 shrink-0" />
+              <span>
+                {mutation.error instanceof Error
+                  ? mutation.error.message
+                  : "Failed to save project defaults."}
+              </span>
+            </div>
+          ) : null}
+
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={onCancel}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleCancel}
+              disabled={mutation.isPending}
+            >
               Cancel
             </Button>
-            <Button type="submit" disabled={isStarting}>
-              {isStarting ? "Starting..." : "Create"}
+            <Button type="submit" disabled={mutation.isPending}>
+              {mutation.isPending ? "Saving..." : "Save"}
             </Button>
           </DialogFooter>
         </form>

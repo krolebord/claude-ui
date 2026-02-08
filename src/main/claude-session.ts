@@ -2,6 +2,7 @@ import { existsSync, statSync } from "node:fs";
 import { type IPty, spawn } from "node-pty";
 import type {
   ClaudeModel,
+  ClaudePermissionMode,
   ClaudeSessionErrorEvent,
   ClaudeSessionExitEvent,
   ClaudeSessionStatus,
@@ -85,7 +86,7 @@ export class ClaudeSessionManager {
     try {
       const launch = this.getInteractiveLaunchCommand(
         launchOptions?.pluginDir,
-        input.dangerouslySkipPermissions === true,
+        input.permissionMode,
         launchOptions?.sessionId,
         launchOptions?.resumeSessionId,
         input.model,
@@ -261,17 +262,25 @@ export class ClaudeSessionManager {
     return "Failed to start Claude due to an unknown error.";
   }
 
+  private getPermissionArgs(permissionMode?: ClaudePermissionMode): string {
+    if (permissionMode === "yolo") {
+      return " --dangerously-skip-permissions";
+    }
+    if (permissionMode && permissionMode !== "default") {
+      return ` --permissions-mode ${permissionMode}`;
+    }
+    return "";
+  }
+
   private getInteractiveLaunchCommand(
     pluginDir?: string | null,
-    dangerouslySkipPermissions = false,
+    permissionMode?: ClaudePermissionMode,
     sessionId?: string,
     resumeSessionId?: string,
     model?: ClaudeModel,
     initialPrompt?: string,
   ): LaunchCommand {
-    const skipPermissionsArgs = dangerouslySkipPermissions
-      ? " --dangerously-skip-permissions"
-      : "";
+    const permissionArgs = this.getPermissionArgs(permissionMode);
     const pluginArgs = pluginDir
       ? ` --plugin-dir ${this.shellQuote(pluginDir)}`
       : "";
@@ -289,9 +298,7 @@ export class ClaudeSessionManager {
 
     if (process.platform === "win32") {
       const shell = process.env.COMSPEC ?? "cmd.exe";
-      const winSkipPermissionsArgs = dangerouslySkipPermissions
-        ? " --dangerously-skip-permissions"
-        : "";
+      const winPermissionArgs = this.getPermissionArgs(permissionMode);
       const winPluginArgs = pluginDir
         ? ` --plugin-dir "${pluginDir.replace(/\"/g, '""')}"`
         : "";
@@ -312,7 +319,7 @@ export class ClaudeSessionManager {
           "/d",
           "/s",
           "/c",
-          `claude${winSkipPermissionsArgs}${winPluginArgs}${winSessionIdArgs}${winResumeSessionArgs}${winModelArgs}${winInitialPromptArgs}`,
+          `claude${winPermissionArgs}${winPluginArgs}${winSessionIdArgs}${winResumeSessionArgs}${winModelArgs}${winInitialPromptArgs}`,
         ],
       };
     }
@@ -325,7 +332,7 @@ export class ClaudeSessionManager {
       file: shell,
       args: [
         "-ilc",
-        `exec claude${skipPermissionsArgs}${pluginArgs}${sessionIdArgs}${resumeSessionArgs}${modelArgs}${initialPromptArgs}`,
+        `exec claude${permissionArgs}${pluginArgs}${sessionIdArgs}${resumeSessionArgs}${modelArgs}${initialPromptArgs}`,
       ],
     };
   }

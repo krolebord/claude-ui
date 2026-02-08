@@ -48,7 +48,7 @@ export async function resumeStoppedSession(
         cwd: record.cwd,
         cols: input.cols,
         rows: input.rows,
-        dangerouslySkipPermissions: input.dangerouslySkipPermissions,
+        permissionMode: input.permissionMode,
         model: input.model,
       },
       {

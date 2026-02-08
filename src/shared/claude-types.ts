@@ -3,6 +3,7 @@ export const CLAUDE_IPC_CHANNELS = {
   getSessions: "claude:get-sessions",
   addProject: "claude:add-project",
   setProjectCollapsed: "claude:set-project-collapsed",
+  setProjectDefaults: "claude:set-project-defaults",
   startSession: "claude:start-session",
   stopSession: "claude:stop-session",
   deleteSession: "claude:delete-session",
@@ -25,6 +26,8 @@ export type SessionId = string;
 
 export type ClaudeModel = "opus" | "sonnet" | "haiku";
 
+export type ClaudePermissionMode = "default" | "acceptEdits" | "plan" | "yolo";
+
 export type ClaudeSessionStatus =
   | "idle"
   | "starting"
@@ -42,6 +45,8 @@ export type ClaudeActivityState =
 export interface ClaudeProject {
   path: string;
   collapsed: boolean;
+  defaultModel?: ClaudeModel;
+  defaultPermissionMode?: ClaudePermissionMode;
 }
 
 export interface ClaudeSessionSnapshot {
@@ -81,13 +86,24 @@ export interface SetClaudeProjectCollapsedResult {
   snapshot: ClaudeSessionsSnapshot;
 }
 
+export interface SetClaudeProjectDefaultsInput {
+  path: string;
+  defaultModel?: ClaudeModel;
+  defaultPermissionMode?: ClaudePermissionMode;
+}
+
+export interface SetClaudeProjectDefaultsResult {
+  ok: true;
+  snapshot: ClaudeSessionsSnapshot;
+}
+
 export interface StartClaudeSessionInput {
   cwd: string;
   cols: number;
   rows: number;
   resumeSessionId?: SessionId;
   sessionName?: string | null;
-  dangerouslySkipPermissions?: boolean;
+  permissionMode?: ClaudePermissionMode;
   model?: ClaudeModel;
   initialPrompt?: string;
 }
@@ -210,6 +226,9 @@ export interface ClaudeDesktopApi {
   setClaudeProjectCollapsed: (
     input: SetClaudeProjectCollapsedInput,
   ) => Promise<SetClaudeProjectCollapsedResult>;
+  setClaudeProjectDefaults: (
+    input: SetClaudeProjectDefaultsInput,
+  ) => Promise<SetClaudeProjectDefaultsResult>;
   startClaudeSession: (
     input: StartClaudeSessionInput,
   ) => Promise<StartClaudeSessionResult>;

@@ -2,6 +2,7 @@ import type { TerminalPaneHandle } from "@renderer/components/terminal-pane";
 import { claudeIpc } from "@renderer/lib/ipc";
 import type {
   ClaudeModel,
+  ClaudePermissionMode,
   ClaudeProject,
   ClaudeSessionSnapshot,
   ClaudeSessionsSnapshot,
@@ -23,7 +24,14 @@ export interface NewSessionDialogState {
   initialPrompt: string;
   sessionName: string;
   model: ClaudeModel;
-  dangerouslySkipPermissions: boolean;
+  permissionMode: ClaudePermissionMode;
+}
+
+export interface ProjectDefaultsDialogState {
+  open: boolean;
+  projectPath: string | null;
+  defaultModel: ClaudeModel | undefined;
+  defaultPermissionMode: ClaudePermissionMode | undefined;
 }
 
 export interface TerminalSessionState {
@@ -31,6 +39,7 @@ export interface TerminalSessionState {
   sessionsById: Record<SessionId, ClaudeSessionSnapshot>;
   activeSessionId: SessionId | null;
   newSessionDialog: NewSessionDialogState;
+  projectDefaultsDialog: ProjectDefaultsDialogState;
   isSelecting: boolean;
   isStarting: boolean;
   isStopping: boolean;
@@ -46,7 +55,16 @@ function getDefaultDialogState(): NewSessionDialogState {
     initialPrompt: "",
     sessionName: "",
     model: "opus",
-    dangerouslySkipPermissions: false,
+    permissionMode: "default",
+  };
+}
+
+function getDefaultProjectDefaultsDialogState(): ProjectDefaultsDialogState {
+  return {
+    open: false,
+    projectPath: null,
+    defaultModel: undefined,
+    defaultPermissionMode: undefined,
   };
 }
 
@@ -71,6 +89,7 @@ export class TerminalSessionService {
       sessionsById: {},
       activeSessionId: null,
       newSessionDialog: getDefaultDialogState(),
+      projectDefaultsDialog: getDefaultProjectDefaultsDialogState(),
       isSelecting: false,
       isStarting: false,
       isStopping: false,

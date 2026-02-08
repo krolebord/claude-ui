@@ -1,4 +1,5 @@
 import { NewSessionDialog } from "@renderer/components/new-session-dialog";
+import { ProjectDefaultsDialog } from "@renderer/components/project-defaults-dialog";
 import { SessionSidebar } from "@renderer/components/session-sidebar";
 import {
   type TerminalPaneHandle,
@@ -101,6 +102,7 @@ function App() {
         onDeleteProject={(projectPath) => {
           void actions.deleteProject(projectPath);
         }}
+        onOpenProjectDefaults={actions.openProjectDefaultsDialog}
       />
 
       <main className="flex min-w-0 flex-1 flex-col bg-black/15">
@@ -126,18 +128,29 @@ function App() {
         initialPrompt={state.newSessionDialog.initialPrompt}
         sessionName={state.newSessionDialog.sessionName}
         model={state.newSessionDialog.model}
-        dangerouslySkipPermissions={
-          state.newSessionDialog.dangerouslySkipPermissions
-        }
+        permissionMode={state.newSessionDialog.permissionMode}
         isStarting={state.isStarting}
         onInitialPromptChange={actions.setNewSessionInitialPrompt}
         onSessionNameChange={actions.setNewSessionName}
         onModelChange={actions.setNewSessionModel}
-        onDangerouslySkipPermissionsChange={
-          actions.setNewSessionDangerouslySkipPermissions
-        }
+        onPermissionModeChange={actions.setNewSessionPermissionMode}
         onCancel={actions.closeNewSessionDialog}
         onConfirm={handleConfirmNewSession}
+      />
+
+      <ProjectDefaultsDialog
+        open={state.projectDefaultsDialog.open}
+        projectPath={state.projectDefaultsDialog.projectPath}
+        defaultModel={state.projectDefaultsDialog.defaultModel}
+        defaultPermissionMode={
+          state.projectDefaultsDialog.defaultPermissionMode
+        }
+        onDefaultModelChange={actions.setProjectDefaultModel}
+        onDefaultPermissionModeChange={
+          actions.setProjectDefaultPermissionMode
+        }
+        onCancel={actions.closeProjectDefaultsDialog}
+        onSaved={actions.projectDefaultsSaved}
       />
 
       <Toaster />

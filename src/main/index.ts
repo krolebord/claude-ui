@@ -1,7 +1,7 @@
-import fixPath from "fix-path";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { BrowserWindow, app, dialog, ipcMain, shell } from "electron";
+import fixPath from "fix-path";
 
 fixPath();
 import type {
@@ -11,6 +11,7 @@ import type {
   ResizeClaudeSessionInput,
   SetActiveSessionInput,
   SetClaudeProjectCollapsedInput,
+  SetClaudeProjectDefaultsInput,
   StartClaudeSessionInput,
   StopClaudeSessionInput,
   WriteClaudeSessionInput,
@@ -140,6 +141,19 @@ function registerIpcHandlers(): void {
     CLAUDE_IPC_CHANNELS.setProjectCollapsed,
     (_event, input: SetClaudeProjectCollapsedInput) =>
       sessionService?.setProjectCollapsed(input) ?? {
+        ok: true,
+        snapshot: {
+          projects: [],
+          sessions: [],
+          activeSessionId: null,
+        },
+      },
+  );
+
+  ipcMain.handle(
+    CLAUDE_IPC_CHANNELS.setProjectDefaults,
+    (_event, input: SetClaudeProjectDefaultsInput) =>
+      sessionService?.setProjectDefaults(input) ?? {
         ok: true,
         snapshot: {
           projects: [],

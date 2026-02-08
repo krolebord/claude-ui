@@ -18,6 +18,13 @@ export const claudeActivityStateSchema = z.enum([
 
 export const claudeModelSchema = z.enum(["opus", "sonnet", "haiku"]);
 
+export const claudePermissionModeSchema = z.enum([
+  "default",
+  "acceptEdits",
+  "plan",
+  "yolo",
+]);
+
 const nullableNonEmptyString = z.string().trim().min(1).nullable().catch(null);
 
 const timestampWithFallback = (fallback: string) =>
@@ -26,6 +33,8 @@ const timestampWithFallback = (fallback: string) =>
 export const claudeProjectSchema = z.object({
   path: z.string().trim().min(1),
   collapsed: z.boolean().catch(false),
+  defaultModel: claudeModelSchema.optional().catch(undefined),
+  defaultPermissionMode: claudePermissionModeSchema.optional().catch(undefined),
 });
 
 export function claudeSessionSnapshotSchema(epochFallback: string) {

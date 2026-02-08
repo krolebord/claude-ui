@@ -13,6 +13,8 @@ import type {
   SessionId,
   SetClaudeProjectCollapsedInput,
   SetClaudeProjectCollapsedResult,
+  SetClaudeProjectDefaultsInput,
+  SetClaudeProjectDefaultsResult,
   StartClaudeSessionInput,
   StartClaudeSessionResult,
   StopClaudeSessionInput,
@@ -28,6 +30,7 @@ import {
   normalizeProjects,
   removeProjectFromList,
   setProjectCollapsedInList,
+  setProjectDefaultsInList,
 } from "./claude-session-projects";
 import {
   type ActivityMonitorFactory,
@@ -132,7 +135,7 @@ export class ClaudeSessionService {
 
   getSessionsSnapshot(): ClaudeSessionsSnapshot {
     const sessions = Array.from(this.sessions.values()).map((session) =>
-      toSnapshot(session)
+      toSnapshot(session),
     );
 
     return {
@@ -159,9 +162,24 @@ export class ClaudeSessionService {
   }
 
   setProjectCollapsed(
-    input: SetClaudeProjectCollapsedInput
+    input: SetClaudeProjectCollapsedInput,
   ): SetClaudeProjectCollapsedResult {
     const next = setProjectCollapsedInList(this.projects, input);
+    if (next.didChange) {
+      this.projects = next.projects;
+      this.persistProjects();
+    }
+
+    return {
+      ok: true,
+      snapshot: this.getSessionsSnapshot(),
+    };
+  }
+
+  setProjectDefaults(
+    input: SetClaudeProjectDefaultsInput,
+  ): SetClaudeProjectDefaultsResult {
+    const next = setProjectDefaultsInList(this.projects, input);
     if (next.didChange) {
       this.projects = next.projects;
       this.persistProjects();
@@ -176,11 +194,11 @@ export class ClaudeSessionService {
   deleteProject(input: DeleteClaudeProjectInput): DeleteClaudeProjectResult {
     const normalizedPath = normalizeProjectPath(input.path);
     const hasSession = Array.from(this.sessions.values()).some(
-      (record) => record.cwd === normalizedPath
+      (record) => record.cwd === normalizedPath,
     );
     if (hasSession) {
       throw new Error(
-        "Cannot delete project that still has sessions. Delete all sessions first."
+        "Cannot delete project that still has sessions. Delete all sessions first.",
       );
     }
 
@@ -197,7 +215,7 @@ export class ClaudeSessionService {
   }
 
   async startSession(
-    input: StartClaudeSessionInput
+    input: StartClaudeSessionInput,
   ): Promise<StartClaudeSessionResult> {
     const resumeSessionId = normalizeResumeSessionId(input.resumeSessionId);
     if (resumeSessionId) {
@@ -213,7 +231,7 @@ export class ClaudeSessionService {
           getSessionsSnapshot: () => this.getSessionsSnapshot(),
         },
         resumeSessionId,
-        input
+        input,
       );
     }
 
@@ -226,7 +244,7 @@ export class ClaudeSessionService {
     const record = this.createRecord(
       sessionId,
       input.cwd,
-      normalizeSessionName(input.sessionName)
+      normalizeSessionName(input.sessionName),
     );
     this.sessions.set(sessionId, record);
     this.persistSessionSnapshots();
@@ -310,7 +328,7 @@ export class ClaudeSessionService {
   }
 
   async stopSession(
-    input: StopClaudeSessionInput
+    input: StopClaudeSessionInput,
   ): Promise<StopClaudeSessionResult> {
     const record = this.sessions.get(input.sessionId);
     if (!record) {
@@ -322,7 +340,7 @@ export class ClaudeSessionService {
   }
 
   async deleteSession(
-    input: DeleteClaudeSessionInput
+    input: DeleteClaudeSessionInput,
   ): Promise<DeleteClaudeSessionResult> {
     const record = this.sessions.get(input.sessionId);
     if (!record) {
@@ -398,7 +416,7 @@ export class ClaudeSessionService {
   private createRecord(
     sessionId: SessionId,
     cwd: string,
-    sessionName: string | null
+    sessionName: string | null,
   ): SessionRecord {
     return createSessionRecord({
       sessionId,
@@ -441,7 +459,7 @@ export class ClaudeSessionService {
 
   private removeSessionRecord(
     sessionId: SessionId,
-    record: SessionRecord
+    record: SessionRecord,
   ): void {
     if (this.sessions.get(sessionId) === record) {
       this.sessions.delete(sessionId);
@@ -489,16 +507,16 @@ export class ClaudeSessionService {
       const record = this.createRecord(
         sessionId,
         cwd,
-        normalizeSessionName(snapshot.sessionName)
+        normalizeSessionName(snapshot.sessionName),
       );
 
       record.createdAt = normalizeCreatedAt(
         snapshot.createdAt,
-        this.nowFactory
+        this.nowFactory,
       );
       record.lastActivityAt = normalizeLastActivityAt(
         snapshot.lastActivityAt,
-        record.createdAt
+        record.createdAt,
       );
       record.status = "stopped";
       record.activityState = "idle";
@@ -511,7 +529,7 @@ export class ClaudeSessionService {
     }
 
     const normalizedActiveSessionId = normalizeResumeSessionId(
-      persisted.activeSessionId ?? undefined
+      persisted.activeSessionId ?? undefined,
     );
     this.activeSessionId =
       normalizedActiveSessionId && this.sessions.has(normalizedActiveSessionId)
@@ -522,7 +540,7 @@ export class ClaudeSessionService {
   private touchSessionActivity(
     record: SessionRecord,
     sourceTimestamp?: string | null,
-    persistMode: SessionActivityPersistMode = "immediate"
+    persistMode: SessionActivityPersistMode = "immediate",
   ): void {
     const nextTimestamp =
       typeof sourceTimestamp === "string"
@@ -563,7 +581,7 @@ export class ClaudeSessionService {
 
     this.sessionSnapshotStore.writeSessionSnapshotState({
       sessions: Array.from(this.sessions.values()).map((record) =>
-        toSnapshot(record)
+        toSnapshot(record),
       ),
       activeSessionId:
         this.activeSessionId && this.sessions.has(this.activeSessionId)

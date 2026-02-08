@@ -1,12 +1,18 @@
 import type { TerminalPaneHandle } from "@renderer/components/terminal-pane";
 import { claudeIpc } from "@renderer/lib/ipc";
-import * as z from "zod";
-import { claudeModelSchema } from "@shared/claude-schemas";
+import {
+  claudeModelSchema,
+  claudePermissionModeSchema,
+} from "@shared/claude-schemas";
 import type {
   ClaudeModel,
+  ClaudePermissionMode,
+  ClaudeProject,
+  ClaudeSessionsSnapshot,
   SessionId,
   StartClaudeSessionInput,
 } from "@shared/claude-types";
+import * as z from "zod";
 import type { TerminalSessionState } from "./terminal-session-service";
 
 interface StartSessionInProjectInput {
@@ -15,7 +21,7 @@ interface StartSessionInProjectInput {
   rows: number;
   sessionName?: string;
   model?: ClaudeModel;
-  dangerouslySkipPermissions?: boolean;
+  permissionMode?: ClaudePermissionMode;
   resumeSessionId?: SessionId;
   initialPrompt?: string;
 }
@@ -41,14 +47,22 @@ interface CreateTerminalSessionActionsDeps {
   focusTerminal: () => void;
 }
 
-function getDefaultDialogState(projectPath: string | null, open: boolean) {
+function getDefaultDialogState(
+  projectPath: string | null,
+  open: boolean,
+  projectDefaults?: Pick<
+    ClaudeProject,
+    "defaultModel" | "defaultPermissionMode"
+  >,
+) {
   return {
     open,
     projectPath,
     initialPrompt: "",
     sessionName: "",
-    model: "opus" as const,
-    dangerouslySkipPermissions: false,
+    model: projectDefaults?.defaultModel ?? ("opus" as const),
+    permissionMode:
+      projectDefaults?.defaultPermissionMode ?? ("default" as const),
   };
 }
 
@@ -68,7 +82,7 @@ async function startSessionInProject(
         resumeSessionId: z.string().optional(),
         sessionName: z.string().trim().min(1).nullish().catch(null),
         model: claudeModelSchema.optional(),
-        dangerouslySkipPermissions: z.boolean().optional(),
+        permissionMode: claudePermissionModeSchema.optional(),
         initialPrompt: z.string().optional(),
       })
       .parse(input);
@@ -182,9 +196,12 @@ export function createTerminalSessionActions(
       }
     },
     openNewSessionDialog: (projectPath: string): void => {
+      const project = deps
+        .getState()
+        .projects.find((candidate) => candidate.path === projectPath);
       deps.updateState((prev) => ({
         ...prev,
-        newSessionDialog: getDefaultDialogState(projectPath, true),
+        newSessionDialog: getDefaultDialogState(projectPath, true, project),
       }));
     },
     closeNewSessionDialog: (): void => {
@@ -220,12 +237,12 @@ export function createTerminalSessionActions(
         },
       }));
     },
-    setNewSessionDangerouslySkipPermissions: (value: boolean): void => {
+    setNewSessionPermissionMode: (value: ClaudePermissionMode): void => {
       deps.updateState((prev) => ({
         ...prev,
         newSessionDialog: {
           ...prev.newSessionDialog,
-          dangerouslySkipPermissions: value,
+          permissionMode: value,
         },
       }));
     },
@@ -241,8 +258,7 @@ export function createTerminalSessionActions(
 
       const sessionName = current.newSessionDialog.sessionName;
       const model = current.newSessionDialog.model;
-      const dangerouslySkipPermissions =
-        current.newSessionDialog.dangerouslySkipPermissions;
+      const permissionMode = current.newSessionDialog.permissionMode;
       const rawInitialPrompt = current.newSessionDialog.initialPrompt.trim();
       const initialPrompt =
         rawInitialPrompt.length > 0 ? rawInitialPrompt : undefined;
@@ -256,7 +272,7 @@ export function createTerminalSessionActions(
         cwd: projectPath,
         sessionName,
         model,
-        dangerouslySkipPermissions,
+        permissionMode,
         initialPrompt,
         cols: input.cols,
         rows: input.rows,
@@ -397,6 +413,63 @@ export function createTerminalSessionActions(
     attachTerminal: (handle: TerminalPaneHandle | null): void => {
       deps.setTerminal(handle);
       deps.renderActiveSessionOutput();
+    },
+    openProjectDefaultsDialog: (projectPath: string): void => {
+      const project = deps
+        .getState()
+        .projects.find((candidate) => candidate.path === projectPath);
+      deps.updateState((prev) => ({
+        ...prev,
+        projectDefaultsDialog: {
+          open: true,
+          projectPath,
+          defaultModel: project?.defaultModel,
+          defaultPermissionMode: project?.defaultPermissionMode,
+        },
+      }));
+    },
+    closeProjectDefaultsDialog: (): void => {
+      deps.updateState((prev) => ({
+        ...prev,
+        projectDefaultsDialog: {
+          open: false,
+          projectPath: null,
+          defaultModel: undefined,
+          defaultPermissionMode: undefined,
+        },
+      }));
+    },
+    setProjectDefaultModel: (value: ClaudeModel | undefined): void => {
+      deps.updateState((prev) => ({
+        ...prev,
+        projectDefaultsDialog: {
+          ...prev.projectDefaultsDialog,
+          defaultModel: value,
+        },
+      }));
+    },
+    setProjectDefaultPermissionMode: (
+      value: ClaudePermissionMode | undefined,
+    ): void => {
+      deps.updateState((prev) => ({
+        ...prev,
+        projectDefaultsDialog: {
+          ...prev.projectDefaultsDialog,
+          defaultPermissionMode: value,
+        },
+      }));
+    },
+    projectDefaultsSaved: (snapshot: ClaudeSessionsSnapshot): void => {
+      deps.applySnapshot(snapshot);
+      deps.updateState((prev) => ({
+        ...prev,
+        projectDefaultsDialog: {
+          open: false,
+          projectPath: null,
+          defaultModel: undefined,
+          defaultPermissionMode: undefined,
+        },
+      }));
     },
   };
 }

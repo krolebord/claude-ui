@@ -451,18 +451,18 @@ describe("ClaudeSessionService", () => {
     });
   });
 
-  it("passes dangerouslySkipPermissions to session start", async () => {
+  it("passes permissionMode to session start", async () => {
     const harness = createHarness();
 
     const result = await harness.service.startSession({
       ...START_INPUT,
-      dangerouslySkipPermissions: true,
+      permissionMode: "yolo",
     });
 
     expect(result.ok).toBe(true);
     expect(harness.managerMocks[0]?.start).toHaveBeenCalledWith(
       expect.objectContaining({
-        dangerouslySkipPermissions: true,
+        permissionMode: "yolo",
       }),
       expect.objectContaining({
         sessionId: "session-1",
