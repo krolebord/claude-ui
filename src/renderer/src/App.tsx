@@ -4,6 +4,7 @@ import {
   type TerminalPaneHandle,
   TerminalPane,
 } from "@renderer/components/terminal-pane";
+import { Toaster } from "@renderer/components/ui/sonner";
 import {
   useTerminalSession,
 } from "@renderer/services/use-terminal-session";
@@ -138,6 +139,8 @@ function App() {
         onCancel={actions.closeNewSessionDialog}
         onConfirm={handleConfirmNewSession}
       />
+
+      <Toaster />
     </div>
   );
 }

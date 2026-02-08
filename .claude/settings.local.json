@@ -12,7 +12,8 @@
       "Bash(npx shadcn@latest add:*)",
       "Bash(grep:*)",
       "WebFetch(domain:zod.dev)",
-      "Bash(pnpm format:*)"
+      "Bash(pnpm format:*)",
+      "Bash(pnpm dlx:*)"
     ]
   }
 }
