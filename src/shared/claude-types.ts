@@ -106,6 +106,7 @@ export interface StartClaudeSessionInput {
   cols: number;
   rows: number;
   resumeSessionId?: SessionId;
+  forkSessionId?: SessionId;
   sessionName?: string | null;
   permissionMode?: ClaudePermissionMode;
   model?: ClaudeModel;

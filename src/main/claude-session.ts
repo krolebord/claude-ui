@@ -35,6 +35,7 @@ interface ClaudeLaunchOptions {
   stateFilePath?: string;
   sessionId?: string;
   resumeSessionId?: string;
+  forkSession?: boolean;
 }
 
 const GRACEFUL_EXIT_COMMAND = "/exit\r";
@@ -91,6 +92,7 @@ export class ClaudeSessionManager {
         launchOptions?.resumeSessionId,
         input.model,
         initialPrompt,
+        launchOptions?.forkSession,
       );
       log.info("PTY spawn", {
         file: launch.file,
@@ -279,18 +281,20 @@ export class ClaudeSessionManager {
     resumeSessionId?: string,
     model?: ClaudeModel,
     initialPrompt?: string,
+    forkSession?: boolean,
   ): LaunchCommand {
     const permissionArgs = this.getPermissionArgs(permissionMode);
     const pluginArgs = pluginDir
       ? ` --plugin-dir ${this.shellQuote(pluginDir)}`
       : "";
     const sessionIdArgs =
-      resumeSessionId || !sessionId
+      (resumeSessionId && !forkSession) || !sessionId
         ? ""
         : ` --session-id ${this.shellQuote(sessionId)}`;
     const resumeSessionArgs = resumeSessionId
       ? ` --resume ${this.shellQuote(resumeSessionId)}`
       : "";
+    const forkSessionArgs = forkSession ? " --fork-session" : "";
     const modelArgs = model ? ` --model ${model}` : "";
     const initialPromptArgs = initialPrompt
       ? ` ${this.shellQuote(initialPrompt)}`
@@ -303,12 +307,13 @@ export class ClaudeSessionManager {
         ? ` --plugin-dir "${pluginDir.replace(/\"/g, '""')}"`
         : "";
       const winSessionIdArgs =
-        resumeSessionId || !sessionId
+        (resumeSessionId && !forkSession) || !sessionId
           ? ""
           : ` --session-id "${sessionId.replace(/\"/g, '""')}"`;
       const winResumeSessionArgs = resumeSessionId
         ? ` --resume "${resumeSessionId.replace(/\"/g, '""')}"`
         : "";
+      const winForkSessionArgs = forkSession ? " --fork-session" : "";
       const winModelArgs = model ? ` --model ${model}` : "";
       const winInitialPromptArgs = initialPrompt
         ? ` "${initialPrompt.replace(/\"/g, '""')}"`
@@ -319,7 +324,7 @@ export class ClaudeSessionManager {
           "/d",
           "/s",
           "/c",
-          `claude${winPermissionArgs}${winPluginArgs}${winSessionIdArgs}${winResumeSessionArgs}${winModelArgs}${winInitialPromptArgs}`,
+          `claude${winPermissionArgs}${winPluginArgs}${winSessionIdArgs}${winResumeSessionArgs}${winForkSessionArgs}${winModelArgs}${winInitialPromptArgs}`,
         ],
       };
     }
@@ -332,7 +337,7 @@ export class ClaudeSessionManager {
       file: shell,
       args: [
         "-ilc",
-        `exec claude${permissionArgs}${pluginArgs}${sessionIdArgs}${resumeSessionArgs}${modelArgs}${initialPromptArgs}`,
+        `exec claude${permissionArgs}${pluginArgs}${sessionIdArgs}${resumeSessionArgs}${forkSessionArgs}${modelArgs}${initialPromptArgs}`,
       ],
     };
   }

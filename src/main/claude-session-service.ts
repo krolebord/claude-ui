@@ -218,6 +218,77 @@ export class ClaudeSessionService {
   async startSession(
     input: StartClaudeSessionInput,
   ): Promise<StartClaudeSessionResult> {
+    const forkSessionId = normalizeResumeSessionId(input.forkSessionId);
+    if (forkSessionId) {
+      const sourceRecord = this.sessions.get(forkSessionId);
+      if (!sourceRecord) {
+        return {
+          ok: false,
+          message: `Session to fork does not exist: ${forkSessionId}`,
+        };
+      }
+
+      const forkedName = sourceRecord.sessionName
+        ? `${sourceRecord.sessionName} (fork)`
+        : null;
+
+      const sessionId = this.createUniqueSessionId();
+      const record = this.createRecord(
+        sessionId,
+        sourceRecord.cwd,
+        forkedName,
+      );
+      this.sessions.set(sessionId, record);
+      this.persistSessionSnapshots();
+
+      try {
+        const stateFilePath = await this.stateFileFactory(sessionId);
+        record.stateFilePath = stateFilePath;
+        record.monitor.startMonitoring(stateFilePath);
+
+        const result = await record.manager.start(
+          { cwd: sourceRecord.cwd, cols: input.cols, rows: input.rows },
+          {
+            pluginDir: this.pluginDir,
+            stateFilePath,
+            sessionId: record.sessionId,
+            resumeSessionId: forkSessionId,
+            forkSession: true,
+          },
+        );
+
+        if (!result.ok) {
+          this.cleanupStateFile(record);
+          this.removeSessionRecord(sessionId, record);
+          record.monitor.stopMonitoring();
+          record.manager.dispose();
+          return result;
+        }
+
+        record.ready = true;
+        this.setActiveSessionInternal(record.sessionId);
+        flushPendingSessionEvents(record);
+
+        return {
+          ok: true,
+          sessionId: record.sessionId,
+          snapshot: this.getSessionsSnapshot(),
+        };
+      } catch (error) {
+        this.cleanupStateFile(record);
+        this.removeSessionRecord(sessionId, record);
+        record.monitor.stopMonitoring();
+        record.manager.dispose();
+        return {
+          ok: false,
+          message:
+            error instanceof Error
+              ? `Failed to fork session: ${error.message}`
+              : "Failed to fork session due to an unknown error.",
+        };
+      }
+    }
+
     const resumeSessionId = normalizeResumeSessionId(input.resumeSessionId);
     if (resumeSessionId) {
       return resumeStoppedSession(

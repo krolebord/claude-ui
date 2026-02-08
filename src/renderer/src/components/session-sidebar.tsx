@@ -18,6 +18,7 @@ import {
   Folder,
   FolderOpen,
   FolderPlus,
+  GitFork,
   LoaderCircle,
   MessageCircleQuestionMark,
   Play,
@@ -41,6 +42,7 @@ interface SessionSidebarProps {
   onSelectSession: (sessionId: SessionId) => void;
   onStopSession: (sessionId: SessionId) => void;
   onResumeSession: (sessionId: SessionId) => void;
+  onForkSession: (sessionId: SessionId) => void;
   onDeleteSession: (sessionId: SessionId) => void;
   onDeleteProject: (projectPath: string) => void;
   onOpenProjectDefaults: (projectPath: string) => void;
@@ -104,6 +106,7 @@ export function SessionSidebar({
   onSelectSession,
   onStopSession,
   onResumeSession,
+  onForkSession,
   onDeleteSession,
   onDeleteProject,
   onOpenProjectDefaults,
@@ -239,6 +242,10 @@ export function SessionSidebar({
                         session.status === "running";
                       const canResume = session.status === "stopped";
                       const canControl = canStop || canResume;
+                      const canFork =
+                        session.status === "running" ||
+                        session.status === "stopped" ||
+                        session.status === "starting";
                       const ControlIcon = canResume ? Play : Square;
                       const controlTitle = canResume
                         ? "Resume session"
@@ -255,7 +262,7 @@ export function SessionSidebar({
                               onSelectSession(session.sessionId);
                             }}
                             className={cn(
-                              "flex w-full items-center justify-start gap-1.5 rounded-md px-1.5 py-1 pr-14 text-sm transition",
+                              "flex w-full items-center justify-start gap-1.5 rounded-md px-1.5 py-1 pr-[4.5rem] text-sm transition",
                               isActive
                                 ? "bg-white/15 text-white"
                                 : "text-zinc-300 hover:bg-white/8 hover:text-zinc-100",
@@ -280,6 +287,24 @@ export function SessionSidebar({
                             {lastActivity}
                           </span>
                           <div className="pointer-events-none absolute inset-y-0 right-1 flex items-center gap-0.5 opacity-0 transition group-hover/session:opacity-100 group-focus-within/session:opacity-100">
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void onForkSession(session.sessionId);
+                              }}
+                              className={cn(
+                                "pointer-events-auto inline-flex size-5 items-center justify-center rounded text-zinc-300 transition",
+                                canFork
+                                  ? "hover:bg-white/10 hover:text-white"
+                                  : "cursor-not-allowed opacity-40",
+                              )}
+                              aria-label={`Fork ${sessionTitle}`}
+                              title="Fork session"
+                              disabled={!canFork}
+                            >
+                              <GitFork className="size-3" />
+                            </button>
                             <button
                               type="button"
                               onClick={(event) => {

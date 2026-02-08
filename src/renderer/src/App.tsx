@@ -97,6 +97,13 @@ function App() {
             rows: terminalSize.rows,
           });
         }}
+        onForkSession={(sessionId) => {
+          const terminalSize = terminalRef.current?.getSize() ?? {
+            cols: 80,
+            rows: 24,
+          };
+          void actions.forkSession(sessionId, terminalSize);
+        }}
         onDeleteSession={(sessionId) => {
           void actions.deleteSession(sessionId);
         }}

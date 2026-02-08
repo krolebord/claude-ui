@@ -23,6 +23,7 @@ interface StartSessionInProjectInput {
   model?: ClaudeModel;
   permissionMode?: ClaudePermissionMode;
   resumeSessionId?: SessionId;
+  forkSessionId?: SessionId;
   initialPrompt?: string;
 }
 
@@ -80,6 +81,7 @@ async function startSessionInProject(
     const optionals = z
       .object({
         resumeSessionId: z.string().optional(),
+        forkSessionId: z.string().optional(),
         sessionName: z.string().trim().min(1).nullish().catch(null),
         model: claudeModelSchema.optional(),
         permissionMode: claudePermissionModeSchema.optional(),
@@ -328,6 +330,23 @@ export function createTerminalSessionActions(
         cols: input.cols,
         rows: input.rows,
         resumeSessionId: sessionId,
+      });
+    },
+    forkSession: async (
+      sessionId: SessionId,
+      input: { cols: number; rows: number },
+    ): Promise<void> => {
+      const state = deps.getState();
+      const session = state.sessionsById[sessionId];
+      if (!session || state.isStarting) {
+        return;
+      }
+
+      await startSessionInProject(deps, {
+        cwd: session.cwd,
+        cols: input.cols,
+        rows: input.rows,
+        forkSessionId: sessionId,
       });
     },
     deleteProject: async (projectPath: string): Promise<void> => {
