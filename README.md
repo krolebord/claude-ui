@@ -1,95 +1,86 @@
 # Claude UI
 
-Desktop Electron app that embeds Claude CLI in an xterm terminal, with session lifecycle/state routed through Electron IPC.
+Claude UI is a desktop app that brings Claude Code into a clean multi-session workspace.
 
-English | [简体中文](README.zh-CN.md)
+## What You Can Do
 
-## Features
+- Work across multiple Claude sessions in one app.
+- Organize sessions by project in a focused sidebar.
+- Start sessions with an initial prompt, chosen model, and permission mode.
+- Set project defaults so new sessions start with your preferred settings.
+- See clear live status indicators:
+  - running
+  - working
+  - awaiting approval
+  - awaiting user response
+  - stopped / error
+- Stop, resume, switch, and delete sessions quickly.
+- Keep history available when switching between sessions.
+- Auto-generate session titles for unnamed conversations.
+- View Claude usage metrics from the built-in usage panel.
+- Reopen the app and continue from saved projects and sessions.
 
-- Multi-session backend with a single active terminal pane
-- Project-based session organization with persisted project list
-- Session controls: start, stop, resume, delete, switch active
-- Live session status + activity state updates from Claude hook events
-- Optional session naming, model selection, and `--dangerously-skip-permissions`
+## Feature Highlights
 
-## Tech Stack
+### Multi-Session Workspace
+Run multiple Claude sessions at once, with a single active terminal view to stay focused.
 
-- Electron + Vite + React + TypeScript
-- Tailwind CSS + Radix UI primitives
-- `node-pty` for terminal process management
-- xterm.js (`@xterm/xterm`, `@xterm/addon-fit`) for terminal rendering
-- Vitest for unit tests
-- Biome for linting/formatting
-- pnpm for package management
+### Project-Centric Navigation
+Group sessions by folder, collapse/expand projects, and keep your workspace tidy.
 
-## Prerequisites
+### Fast Session Setup
+Create a session with optional:
+- Initial prompt
+- Session name
+- Model (`Opus`, `Sonnet`, `Haiku`)
+- Permission mode (`Default`, `Accept edits`, `Plan`, `Yolo`)
+
+### Activity Awareness
+Know what Claude is doing at a glance with real-time activity badges and status icons.
+
+### Usage Visibility
+Open the usage panel to track key usage buckets and extra usage progress.
+
+## Getting Started
+
+### Requirements
 
 - Node.js 18+
 - pnpm
-- Claude CLI installed and available in `PATH`
+- Claude CLI available in your `PATH`
 
-## Development
+### Run in Development
 
 ```sh
 pnpm install
 pnpm dev
 ```
 
-## Build
+### Build
 
 ```sh
 pnpm build
-pnpm preview
 ```
 
-## Install In Applications (macOS)
+### Package macOS App
 
-Build a macOS app bundle and install it to your Applications folder:
+```sh
+pnpm app:dist:mac
+```
+
+### Install macOS App Bundle
 
 ```sh
 pnpm app:install
 ```
 
-Update later (rebuild + replace installed app):
-
-```sh
-pnpm app:update
-```
-
-Notes:
-
-- Default install path is `/Applications`.
-- If `/Applications` is not writable, it falls back to `~/Applications`.
-- Override install destination with `CLAUDE_UI_INSTALL_DIR=/path/to/folder`.
-
 ## Quality Checks
 
 ```sh
 pnpm typecheck
-pnpm lint
-pnpm format:check
+pnpm format
+pnpm test
 ```
-
-## Test
-
-```sh
-pnpm exec vitest --run
-```
-
-Targeted:
-
-```sh
-pnpm exec vitest --run test/main/claude-session-service.spec.ts
-pnpm exec vitest --run test/renderer/terminal-session-service.spec.ts
-```
-
-## Architecture
-
-- IPC contracts: `src/shared/claude-types.ts`
-- Preload bridge: `src/preload/index.ts` (`window.claude`)
-- Main orchestration: `src/main/claude-session-service.ts`
-- Renderer state service: `src/renderer/src/services/terminal-session-service.ts`
-- React binding: `src/renderer/src/services/use-terminal-session.ts`
 
 ## License
 
