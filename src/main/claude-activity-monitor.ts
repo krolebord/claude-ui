@@ -4,6 +4,7 @@ import type {
   ClaudeActivityState,
   ClaudeHookEvent,
 } from "../shared/claude-types";
+import { claudeHookEventSchema } from "../shared/claude-schemas";
 import log from "./logger";
 
 const POLL_INTERVAL_MS = 180;
@@ -201,15 +202,12 @@ export class ClaudeActivityMonitor {
         continue;
       }
 
-      if (!parsed || typeof parsed !== "object") {
+      const result = claudeHookEventSchema.safeParse(parsed);
+      if (!result.success) {
         continue;
       }
 
-      const event = parsed as ClaudeHookEvent;
-      if (typeof event.hook_event_name !== "string") {
-        continue;
-      }
-
+      const event: ClaudeHookEvent = result.data;
       this.callbacks.emitHookEvent(event);
       this.setState(this.reduceState(event));
     }

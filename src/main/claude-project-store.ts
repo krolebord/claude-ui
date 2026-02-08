@@ -1,5 +1,6 @@
 import Store from "electron-store";
 import type { ClaudeProject } from "../shared/claude-types";
+import { claudeProjectSchema, parseArraySafe } from "../shared/claude-schemas";
 
 const PROJECTS_KEY = "projects";
 
@@ -8,35 +9,17 @@ interface ClaudeProjectStoreSchema {
 }
 
 function parseProjects(rawProjects: unknown): ClaudeProject[] {
-  if (!Array.isArray(rawProjects)) {
-    return [];
-  }
+  const parsed = parseArraySafe(claudeProjectSchema, rawProjects);
 
   const seenPaths = new Set<string>();
   const projects: ClaudeProject[] = [];
 
-  for (const candidate of rawProjects) {
-    if (!candidate || typeof candidate !== "object") {
+  for (const project of parsed) {
+    if (seenPaths.has(project.path)) {
       continue;
     }
-
-    const rawPath =
-      "path" in candidate && typeof candidate.path === "string"
-        ? candidate.path.trim()
-        : "";
-
-    if (!rawPath || seenPaths.has(rawPath)) {
-      continue;
-    }
-
-    seenPaths.add(rawPath);
-    projects.push({
-      path: rawPath,
-      collapsed:
-        "collapsed" in candidate && typeof candidate.collapsed === "boolean"
-          ? candidate.collapsed
-          : false,
-    });
+    seenPaths.add(project.path);
+    projects.push(project);
   }
 
   return projects;
