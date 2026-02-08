@@ -1,4 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
+import { PermissionModeToggleGroup } from "@renderer/components/permission-mode-toggle-group";
 import { Button } from "@renderer/components/ui/button";
 import {
   Dialog,
@@ -18,10 +19,6 @@ import {
   SelectValue,
 } from "@renderer/components/ui/select";
 import { Textarea } from "@renderer/components/ui/textarea";
-import {
-  ToggleGroup,
-  ToggleGroupItem,
-} from "@renderer/components/ui/toggle-group";
 import { claudeIpc } from "@renderer/lib/ipc";
 import type {
   ClaudeModel,
@@ -59,20 +56,6 @@ const MODEL_OPTIONS: { value: ClaudeModel; label: string }[] = [
   { value: "sonnet", label: "Sonnet" },
   { value: "haiku", label: "Haiku" },
 ];
-
-const PERMISSION_MODES: { value: ClaudePermissionMode; label: string }[] = [
-  { value: "default", label: "Default" },
-  { value: "acceptEdits", label: "Accept edits" },
-  { value: "plan", label: "Plan" },
-  { value: "yolo", label: "Yolo" },
-];
-
-function cyclePermissionMode(
-  current: ClaudePermissionMode,
-): ClaudePermissionMode {
-  const index = PERMISSION_MODES.findIndex((m) => m.value === current);
-  return PERMISSION_MODES[(index + 1) % PERMISSION_MODES.length].value;
-}
 
 export function NewSessionDialog({
   open,
@@ -177,6 +160,12 @@ export function NewSessionDialog({
             />
           </div>
 
+          <PermissionModeToggleGroup
+            label="Permission mode"
+            permissionMode={permissionMode}
+            onPermissionModeChange={onPermissionModeChange}
+          />
+
           <div className="space-y-2">
             <Label htmlFor="new-session-name">Session name (optional)</Label>
             <Input
@@ -208,39 +197,6 @@ export function NewSessionDialog({
                 ))}
               </SelectContent>
             </Select>
-          </div>
-
-          <div
-            className="space-y-2"
-            onKeyDown={(event) => {
-              if (event.shiftKey && event.key === "Tab") {
-                event.preventDefault();
-                onPermissionModeChange(cyclePermissionMode(permissionMode));
-              }
-            }}
-          >
-            <Label>Permission mode</Label>
-            <ToggleGroup
-              type="single"
-              variant="outline"
-              value={permissionMode}
-              onValueChange={(value) => {
-                if (value) {
-                  onPermissionModeChange(value as ClaudePermissionMode);
-                }
-              }}
-              className="w-full"
-            >
-              {PERMISSION_MODES.map((option) => (
-                <ToggleGroupItem
-                  key={option.value}
-                  value={option.value}
-                  className="flex-1"
-                >
-                  {option.label}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
           </div>
 
           {mutation.error ? (
