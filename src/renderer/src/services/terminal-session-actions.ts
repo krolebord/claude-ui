@@ -385,11 +385,6 @@ export function createTerminalSessionActions(
         return;
       }
 
-      const now = new Date().toISOString();
-      deps.updateSession(sessionId, (session) => ({
-        ...session,
-        lastActivityAt: now,
-      }));
       claudeIpc.writeToClaudeSession({ sessionId, data });
     },
     resizeActiveSession: (cols: number, rows: number): void => {
