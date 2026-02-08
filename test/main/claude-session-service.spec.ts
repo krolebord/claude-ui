@@ -6,6 +6,7 @@ import type {
   ClaudeProject,
   ClaudeSessionSnapshot,
   ClaudeSessionStatus,
+  ClaudeSessionUpdatedEvent,
   SessionId,
   StartClaudeSessionInput,
 } from "../../src/shared/claude-types";
@@ -57,19 +58,7 @@ function createHarness(options?: {
     sessionData: [] as Array<{ sessionId: string; chunk: string }>,
     sessionExit: [] as Array<{ sessionId: string; exitCode: number | null }>,
     sessionError: [] as Array<{ sessionId: string; message: string }>,
-    sessionStatus: [] as Array<{
-      sessionId: string;
-      status: ClaudeSessionStatus;
-    }>,
-    sessionActivityState: [] as Array<{
-      sessionId: string;
-      activityState: ClaudeActivityState;
-    }>,
-    sessionActivityWarning: [] as Array<{
-      sessionId: string;
-      warning: string | null;
-    }>,
-    sessionTitleChanged: [] as Array<{ sessionId: string; title: string }>,
+    sessionUpdated: [] as ClaudeSessionUpdatedEvent[],
     activeChanged: [] as Array<{ activeSessionId: string | null }>,
   };
 
@@ -120,17 +109,8 @@ function createHarness(options?: {
       emitSessionError: (payload) => {
         eventLog.sessionError.push(payload);
       },
-      emitSessionStatus: (payload) => {
-        eventLog.sessionStatus.push(payload);
-      },
-      emitSessionActivityState: (payload) => {
-        eventLog.sessionActivityState.push(payload);
-      },
-      emitSessionActivityWarning: (payload) => {
-        eventLog.sessionActivityWarning.push(payload);
-      },
-      emitSessionTitleChanged: (payload) => {
-        eventLog.sessionTitleChanged.push(payload);
+      emitSessionUpdated: (payload) => {
+        eventLog.sessionUpdated.push(payload);
       },
       emitActiveSessionChanged: (payload) => {
         eventLog.activeChanged.push(payload);
@@ -595,12 +575,17 @@ describe("ClaudeSessionService", () => {
     monitor?.callbacks.emitActivityState("working");
 
     expect(harness.eventLog.sessionData[0]?.sessionId).toBe("session-1");
-    expect(harness.eventLog.sessionStatus[0]?.sessionId).toBe("session-1");
+    expect(
+      harness.eventLog.sessionUpdated.find((e) => "status" in e.updates)
+        ?.sessionId,
+    ).toBe("session-1");
     expect(harness.eventLog.sessionError[0]?.sessionId).toBe("session-1");
     expect(harness.eventLog.sessionExit[0]?.sessionId).toBe("session-1");
-    expect(harness.eventLog.sessionActivityState[0]?.sessionId).toBe(
-      "session-1",
-    );
+    expect(
+      harness.eventLog.sessionUpdated.find(
+        (e) => "activityState" in e.updates,
+      )?.sessionId,
+    ).toBe("session-1");
   });
 
   it("continues routing by generated session IDs after hook events", async () => {
@@ -651,13 +636,18 @@ describe("ClaudeSessionService", () => {
       prompt: "fix the login bug",
     });
 
+    const titleEvents = () =>
+      harness.eventLog.sessionUpdated.filter(
+        (e) => "sessionName" in e.updates,
+      );
+
     await vi.waitFor(() => {
-      expect(harness.eventLog.sessionTitleChanged).toHaveLength(1);
+      expect(titleEvents()).toHaveLength(1);
     });
 
-    expect(harness.eventLog.sessionTitleChanged[0]).toEqual({
+    expect(titleEvents()[0]).toEqual({
       sessionId: "session-1",
-      title: "Generated Title",
+      updates: { sessionName: "Generated Title" },
     });
 
     const snapshot = harness.service.getSessionsSnapshot();
@@ -683,13 +673,21 @@ describe("ClaudeSessionService", () => {
     });
     await Promise.resolve();
 
-    expect(harness.eventLog.sessionTitleChanged).toHaveLength(0);
+    const titleEvents = harness.eventLog.sessionUpdated.filter(
+      (e) => "sessionName" in e.updates,
+    );
+    expect(titleEvents).toHaveLength(0);
   });
 
   it("waits for a non-empty UserPromptSubmit prompt before generating title", async () => {
     const harness = createHarness();
 
     await harness.service.startSession(START_INPUT);
+
+    const titleEvents = () =>
+      harness.eventLog.sessionUpdated.filter(
+        (e) => "sessionName" in e.updates,
+      );
 
     harness.monitorMocks[0]?.callbacks.emitHookEvent({
       timestamp: "2026-02-07T00:00:01.000Z",
@@ -699,7 +697,7 @@ describe("ClaudeSessionService", () => {
     });
     await Promise.resolve();
 
-    expect(harness.eventLog.sessionTitleChanged).toHaveLength(0);
+    expect(titleEvents()).toHaveLength(0);
 
     harness.monitorMocks[0]?.callbacks.emitHookEvent({
       timestamp: "2026-02-07T00:00:02.000Z",
@@ -708,12 +706,12 @@ describe("ClaudeSessionService", () => {
       prompt: "real prompt",
     });
     await vi.waitFor(() => {
-      expect(harness.eventLog.sessionTitleChanged).toHaveLength(1);
+      expect(titleEvents()).toHaveLength(1);
     });
 
-    expect(harness.eventLog.sessionTitleChanged[0]).toEqual({
+    expect(titleEvents()[0]).toEqual({
       sessionId: "session-1",
-      title: "Generated Title",
+      updates: { sessionName: "Generated Title" },
     });
   });
 
@@ -722,6 +720,11 @@ describe("ClaudeSessionService", () => {
 
     await harness.service.startSession(START_INPUT);
 
+    const titleEvents = () =>
+      harness.eventLog.sessionUpdated.filter(
+        (e) => "sessionName" in e.updates,
+      );
+
     harness.monitorMocks[0]?.callbacks.emitHookEvent({
       timestamp: "2026-02-07T00:00:01.000Z",
       hook_event_name: "UserPromptSubmit",
@@ -729,7 +732,7 @@ describe("ClaudeSessionService", () => {
       prompt: "first prompt",
     });
     await vi.waitFor(() => {
-      expect(harness.eventLog.sessionTitleChanged).toHaveLength(1);
+      expect(titleEvents()).toHaveLength(1);
     });
 
     harness.monitorMocks[0]?.callbacks.emitHookEvent({
@@ -740,7 +743,7 @@ describe("ClaudeSessionService", () => {
     });
     await Promise.resolve();
 
-    expect(harness.eventLog.sessionTitleChanged).toHaveLength(1);
+    expect(titleEvents()).toHaveLength(1);
   });
 
   it("deletes an empty project and persists the change", () => {
@@ -822,13 +825,18 @@ describe("ClaudeSessionService", () => {
       initialPrompt: "fix the login bug",
     });
 
+    const titleEvents = () =>
+      harness.eventLog.sessionUpdated.filter(
+        (e) => "sessionName" in e.updates,
+      );
+
     await vi.waitFor(() => {
-      expect(harness.eventLog.sessionTitleChanged).toHaveLength(1);
+      expect(titleEvents()).toHaveLength(1);
     });
 
-    expect(harness.eventLog.sessionTitleChanged[0]).toEqual({
+    expect(titleEvents()[0]).toEqual({
       sessionId: "session-1",
-      title: "Generated Title",
+      updates: { sessionName: "Generated Title" },
     });
 
     const snapshot = harness.service.getSessionsSnapshot();
@@ -846,7 +854,10 @@ describe("ClaudeSessionService", () => {
 
     await Promise.resolve();
 
-    expect(harness.eventLog.sessionTitleChanged).toHaveLength(0);
+    const titleEvents = harness.eventLog.sessionUpdated.filter(
+      (e) => "sessionName" in e.updates,
+    );
+    expect(titleEvents).toHaveLength(0);
   });
 
   it("does not re-trigger title generation from UserPromptSubmit after initial prompt already triggered it", async () => {
@@ -857,8 +868,13 @@ describe("ClaudeSessionService", () => {
       initialPrompt: "fix the login bug",
     });
 
+    const titleEvents = () =>
+      harness.eventLog.sessionUpdated.filter(
+        (e) => "sessionName" in e.updates,
+      );
+
     await vi.waitFor(() => {
-      expect(harness.eventLog.sessionTitleChanged).toHaveLength(1);
+      expect(titleEvents()).toHaveLength(1);
     });
 
     harness.monitorMocks[0]?.callbacks.emitHookEvent({
@@ -869,7 +885,7 @@ describe("ClaudeSessionService", () => {
     });
     await Promise.resolve();
 
-    expect(harness.eventLog.sessionTitleChanged).toHaveLength(1);
+    expect(titleEvents()).toHaveLength(1);
   });
 
   it("cleans up state file on session exit", async () => {

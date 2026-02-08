@@ -5,14 +5,10 @@ import {
   CLAUDE_IPC_CHANNELS,
   type ClaudeActiveSessionChangedEvent,
   type ClaudeDesktopApi,
-  type ClaudeSessionActivityStateEvent,
-  type ClaudeSessionActivityWarningEvent,
   type ClaudeSessionDataEvent,
   type ClaudeSessionErrorEvent,
   type ClaudeSessionExitEvent,
-  type ClaudeSessionHookEvent,
-  type ClaudeSessionStatusEvent,
-  type ClaudeSessionTitleChangedEvent,
+  type ClaudeSessionUpdatedEvent,
   type ClaudeSessionsSnapshot,
   type ClaudeUsageResult,
   type ClaudeUsageUpdateEvent,
@@ -103,34 +99,14 @@ const claudeApi: ClaudeDesktopApi = {
       CLAUDE_IPC_CHANNELS.sessionError,
       callback,
     ),
-  onClaudeSessionStatus: (callback) =>
-    subscribe<ClaudeSessionStatusEvent>(
-      CLAUDE_IPC_CHANNELS.sessionStatus,
-      callback,
-    ),
-  onClaudeSessionActivityState: (callback) =>
-    subscribe<ClaudeSessionActivityStateEvent>(
-      CLAUDE_IPC_CHANNELS.sessionActivityState,
-      callback,
-    ),
-  onClaudeSessionActivityWarning: (callback) =>
-    subscribe<ClaudeSessionActivityWarningEvent>(
-      CLAUDE_IPC_CHANNELS.sessionActivityWarning,
-      callback,
-    ),
-  onClaudeSessionTitleChanged: (callback) =>
-    subscribe<ClaudeSessionTitleChangedEvent>(
-      CLAUDE_IPC_CHANNELS.sessionTitleChanged,
+  onClaudeSessionUpdated: (callback) =>
+    subscribe<ClaudeSessionUpdatedEvent>(
+      CLAUDE_IPC_CHANNELS.sessionUpdated,
       callback,
     ),
   onClaudeActiveSessionChanged: (callback) =>
     subscribe<ClaudeActiveSessionChangedEvent>(
       CLAUDE_IPC_CHANNELS.activeSessionChanged,
-      callback,
-    ),
-  onClaudeSessionHookEvent: (callback) =>
-    subscribe<ClaudeSessionHookEvent>(
-      CLAUDE_IPC_CHANNELS.sessionHookEvent,
       callback,
     ),
   startUsageMonitor: (): Promise<ClaudeUsageResult> =>

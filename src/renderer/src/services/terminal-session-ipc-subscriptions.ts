@@ -40,25 +40,21 @@ export function registerTerminalSessionIpcSubscriptions(
       }
     }),
     claudeIpc.onClaudeSessionExit((payload) => {
-      const now = new Date().toISOString();
       if (
         !deps.updateSession(payload.sessionId, (session) => ({
           ...session,
           status: "stopped",
-          lastActivityAt: now,
         }))
       ) {
         void deps.refreshSessions();
       }
     }),
     claudeIpc.onClaudeSessionError((payload) => {
-      const now = new Date().toISOString();
       if (
         !deps.updateSession(payload.sessionId, (session) => ({
           ...session,
           lastError: payload.message,
           status: "error",
-          lastActivityAt: now,
         }))
       ) {
         void deps.refreshSessions();
@@ -72,48 +68,25 @@ export function registerTerminalSessionIpcSubscriptions(
         }));
       }
     }),
-    claudeIpc.onClaudeSessionStatus((payload) => {
-      const now = new Date().toISOString();
+    claudeIpc.onClaudeSessionUpdated((payload) => {
+      const { sessionId, updates } = payload;
+
+      const didUpdate = deps.updateSession(sessionId, (session) => {
+        const merged = { ...session, ...updates };
+        if ("status" in updates && updates.status !== "error") {
+          merged.lastError = null;
+        }
+        return merged;
+      });
+
       if (
-        !deps.updateSession(payload.sessionId, (session) => ({
-          ...session,
-          status: payload.status,
-          lastError: payload.status === "error" ? session.lastError : null,
-          lastActivityAt: now,
-        }))
+        !didUpdate &&
+        ("status" in updates ||
+          "activityState" in updates ||
+          "activityWarning" in updates)
       ) {
         void deps.refreshSessions();
       }
-    }),
-    claudeIpc.onClaudeSessionActivityState((payload) => {
-      const now = new Date().toISOString();
-      if (
-        !deps.updateSession(payload.sessionId, (session) => ({
-          ...session,
-          activityState: payload.activityState,
-          lastActivityAt: now,
-        }))
-      ) {
-        void deps.refreshSessions();
-      }
-    }),
-    claudeIpc.onClaudeSessionActivityWarning((payload) => {
-      const now = new Date().toISOString();
-      if (
-        !deps.updateSession(payload.sessionId, (session) => ({
-          ...session,
-          activityWarning: payload.warning,
-          lastActivityAt: now,
-        }))
-      ) {
-        void deps.refreshSessions();
-      }
-    }),
-    claudeIpc.onClaudeSessionTitleChanged((payload) => {
-      deps.updateSession(payload.sessionId, (session) => ({
-        ...session,
-        sessionName: payload.title,
-      }));
     }),
     claudeIpc.onClaudeActiveSessionChanged((payload) => {
       if (deps.getState().activeSessionId !== payload.activeSessionId) {
@@ -134,18 +107,6 @@ export function registerTerminalSessionIpcSubscriptions(
       ) {
         void deps.refreshSessions();
       }
-    }),
-    claudeIpc.onClaudeSessionHookEvent((payload) => {
-      const fallbackTimestamp = new Date().toISOString();
-      const hookTimestamp =
-        typeof payload.event.timestamp === "string" &&
-        payload.event.timestamp.trim().length > 0
-          ? payload.event.timestamp
-          : fallbackTimestamp;
-      deps.updateSession(payload.sessionId, (session) => ({
-        ...session,
-        lastActivityAt: hookTimestamp,
-      }));
     }),
   ];
 }

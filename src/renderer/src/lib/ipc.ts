@@ -2,14 +2,10 @@ import type {
   AddClaudeProjectInput,
   AddClaudeProjectResult,
   ClaudeActiveSessionChangedEvent,
-  ClaudeSessionActivityStateEvent,
-  ClaudeSessionActivityWarningEvent,
   ClaudeSessionDataEvent,
   ClaudeSessionErrorEvent,
   ClaudeSessionExitEvent,
-  ClaudeSessionHookEvent,
-  ClaudeSessionStatusEvent,
-  ClaudeSessionTitleChangedEvent,
+  ClaudeSessionUpdatedEvent,
   ClaudeSessionsSnapshot,
   ClaudeUsageResult,
   ClaudeUsageUpdateEvent,
@@ -75,24 +71,12 @@ export const claudeIpc = {
   onClaudeSessionError: (
     callback: (payload: ClaudeSessionErrorEvent) => void,
   ): (() => void) => window.claude.onClaudeSessionError(callback),
-  onClaudeSessionStatus: (
-    callback: (payload: ClaudeSessionStatusEvent) => void,
-  ): (() => void) => window.claude.onClaudeSessionStatus(callback),
-  onClaudeSessionActivityState: (
-    callback: (payload: ClaudeSessionActivityStateEvent) => void,
-  ): (() => void) => window.claude.onClaudeSessionActivityState(callback),
-  onClaudeSessionActivityWarning: (
-    callback: (payload: ClaudeSessionActivityWarningEvent) => void,
-  ): (() => void) => window.claude.onClaudeSessionActivityWarning(callback),
-  onClaudeSessionTitleChanged: (
-    callback: (payload: ClaudeSessionTitleChangedEvent) => void,
-  ): (() => void) => window.claude.onClaudeSessionTitleChanged(callback),
+  onClaudeSessionUpdated: (
+    callback: (payload: ClaudeSessionUpdatedEvent) => void,
+  ): (() => void) => window.claude.onClaudeSessionUpdated(callback),
   onClaudeActiveSessionChanged: (
     callback: (payload: ClaudeActiveSessionChangedEvent) => void,
   ): (() => void) => window.claude.onClaudeActiveSessionChanged(callback),
-  onClaudeSessionHookEvent: (
-    callback: (payload: ClaudeSessionHookEvent) => void,
-  ): (() => void) => window.claude.onClaudeSessionHookEvent(callback),
   startUsageMonitor: (): Promise<ClaudeUsageResult> =>
     window.claude.startUsageMonitor(),
   stopUsageMonitor: (): Promise<void> => window.claude.stopUsageMonitor(),

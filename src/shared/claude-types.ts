@@ -14,11 +14,7 @@ export const CLAUDE_IPC_CHANNELS = {
   sessionData: "claude:session-data",
   sessionExit: "claude:session-exit",
   sessionError: "claude:session-error",
-  sessionStatus: "claude:session-status",
-  sessionActivityState: "claude:session-activity-state",
-  sessionActivityWarning: "claude:session-activity-warning",
-  sessionHookEvent: "claude:session-hook-event",
-  sessionTitleChanged: "claude:session-title-changed",
+  sessionUpdated: "claude:session-updated",
   activeSessionChanged: "claude:active-session-changed",
   startUsageMonitor: "claude:start-usage-monitor",
   stopUsageMonitor: "claude:stop-usage-monitor",
@@ -180,24 +176,18 @@ export interface ClaudeSessionErrorEvent {
   message: string;
 }
 
-export interface ClaudeSessionStatusEvent {
+export interface ClaudeSessionUpdatedEvent {
   sessionId: SessionId;
-  status: ClaudeSessionStatus;
-}
-
-export interface ClaudeSessionActivityStateEvent {
-  sessionId: SessionId;
-  activityState: ClaudeActivityState;
-}
-
-export interface ClaudeSessionActivityWarningEvent {
-  sessionId: SessionId;
-  warning: string | null;
-}
-
-export interface ClaudeSessionTitleChangedEvent {
-  sessionId: SessionId;
-  title: string;
+  updates: Partial<
+    Pick<
+      ClaudeSessionSnapshot,
+      | "status"
+      | "activityState"
+      | "activityWarning"
+      | "sessionName"
+      | "lastActivityAt"
+    >
+  >;
 }
 
 export interface ClaudeActiveSessionChangedEvent {
@@ -215,11 +205,6 @@ export interface ClaudeHookEvent {
   tool_name?: string;
   reason?: string;
   stop_hook_active?: boolean;
-}
-
-export interface ClaudeSessionHookEvent {
-  sessionId: SessionId;
-  event: ClaudeHookEvent;
 }
 
 export interface ClaudeUsageBucket {
@@ -289,23 +274,11 @@ export interface ClaudeDesktopApi {
   onClaudeSessionError: (
     callback: (payload: ClaudeSessionErrorEvent) => void,
   ) => () => void;
-  onClaudeSessionStatus: (
-    callback: (payload: ClaudeSessionStatusEvent) => void,
-  ) => () => void;
-  onClaudeSessionActivityState: (
-    callback: (payload: ClaudeSessionActivityStateEvent) => void,
-  ) => () => void;
-  onClaudeSessionActivityWarning: (
-    callback: (payload: ClaudeSessionActivityWarningEvent) => void,
-  ) => () => void;
-  onClaudeSessionTitleChanged: (
-    callback: (payload: ClaudeSessionTitleChangedEvent) => void,
+  onClaudeSessionUpdated: (
+    callback: (payload: ClaudeSessionUpdatedEvent) => void,
   ) => () => void;
   onClaudeActiveSessionChanged: (
     callback: (payload: ClaudeActiveSessionChangedEvent) => void,
-  ) => () => void;
-  onClaudeSessionHookEvent: (
-    callback: (payload: ClaudeSessionHookEvent) => void,
   ) => () => void;
   startUsageMonitor: () => Promise<ClaudeUsageResult>;
   stopUsageMonitor: () => Promise<void>;

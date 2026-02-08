@@ -271,18 +271,10 @@ app.whenReady().then(async () => {
         sendToRenderer(CLAUDE_IPC_CHANNELS.sessionExit, payload),
       emitSessionError: (payload) =>
         sendToRenderer(CLAUDE_IPC_CHANNELS.sessionError, payload),
-      emitSessionStatus: (payload) =>
-        sendToRenderer(CLAUDE_IPC_CHANNELS.sessionStatus, payload),
-      emitSessionActivityState: (payload) =>
-        sendToRenderer(CLAUDE_IPC_CHANNELS.sessionActivityState, payload),
-      emitSessionActivityWarning: (payload) =>
-        sendToRenderer(CLAUDE_IPC_CHANNELS.sessionActivityWarning, payload),
-      emitSessionTitleChanged: (payload) =>
-        sendToRenderer(CLAUDE_IPC_CHANNELS.sessionTitleChanged, payload),
+      emitSessionUpdated: (payload) =>
+        sendToRenderer(CLAUDE_IPC_CHANNELS.sessionUpdated, payload),
       emitActiveSessionChanged: (payload) =>
         sendToRenderer(CLAUDE_IPC_CHANNELS.activeSessionChanged, payload),
-      emitSessionHookEvent: (payload) =>
-        sendToRenderer(CLAUDE_IPC_CHANNELS.sessionHookEvent, payload),
     },
   });
 

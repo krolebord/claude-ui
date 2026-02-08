@@ -24,7 +24,6 @@ import type {
 import { ClaudeActivityMonitor } from "./claude-activity-monitor";
 import type { ClaudeProjectStoreLike } from "./claude-project-store";
 import { ClaudeSessionManager } from "./claude-session";
-import { SessionSnapshotPersistScheduler } from "./claude-session-persist-scheduler";
 import {
   addProjectToList,
   normalizeProjectPath,
@@ -36,7 +35,6 @@ import {
 import {
   type ActivityMonitorFactory,
   type ClaudeSessionServiceCallbacks,
-  type SessionActivityPersistMode,
   type SessionManagerFactory,
   type SessionRecord,
   createSessionRecord,
@@ -91,7 +89,6 @@ export class ClaudeSessionService {
   >;
   private readonly projectStore: ClaudeProjectStoreLike;
   private readonly sessionSnapshotStore: ClaudeSessionSnapshotStoreLike;
-  private readonly persistScheduler: SessionSnapshotPersistScheduler;
   private readonly sessions = new Map<SessionId, SessionRecord>();
   private projects: ClaudeProject[] = [];
   private activeSessionId: SessionId | null = null;
@@ -125,10 +122,6 @@ export class ClaudeSessionService {
       }),
       writeSessionSnapshotState: () => undefined,
     };
-    this.persistScheduler = new SessionSnapshotPersistScheduler(() => {
-      this.persistSessionSnapshots();
-    });
-
     this.projects = normalizeProjects(this.projectStore.readProjects());
     this.hydratePersistedSessions();
     this.persistSessionSnapshots();
@@ -233,11 +226,7 @@ export class ClaudeSessionService {
         : null;
 
       const sessionId = this.createUniqueSessionId();
-      const record = this.createRecord(
-        sessionId,
-        sourceRecord.cwd,
-        forkedName,
-      );
+      const record = this.createRecord(sessionId, sourceRecord.cwd, forkedName);
       this.sessions.set(sessionId, record);
       this.persistSessionSnapshots();
 
@@ -364,9 +353,9 @@ export class ClaudeSessionService {
             });
             record.sessionName = title;
             this.persistSessionSnapshots();
-            this.callbacks.emitSessionTitleChanged({
+            this.callbacks.emitSessionUpdated({
               sessionId: record.sessionId,
-              title,
+              updates: { sessionName: title },
             });
           })
           .catch((error) => {
@@ -460,7 +449,6 @@ export class ClaudeSessionService {
       return;
     }
 
-    this.touchSessionActivity(record, undefined, "debounced");
     record.manager.write(data);
   }
 
@@ -474,8 +462,6 @@ export class ClaudeSessionService {
   }
 
   dispose(): void {
-    this.persistScheduler.clear();
-
     const uniqueRecords = new Set(this.sessions.values());
     for (const record of uniqueRecords) {
       record.monitor.stopMonitoring();
@@ -506,8 +492,8 @@ export class ClaudeSessionService {
         this.persistSessionSnapshots();
       },
       hasSession: (candidateSessionId) => this.sessions.has(candidateSessionId),
-      touchSessionActivity: (record, sourceTimestamp, persistMode) => {
-        this.touchSessionActivity(record, sourceTimestamp, persistMode);
+      touchSessionActivity: (record, sourceTimestamp) => {
+        return this.touchSessionActivity(record, sourceTimestamp);
       },
       cleanupStateFile: (record) => {
         this.cleanupStateFile(record);
@@ -618,24 +604,18 @@ export class ClaudeSessionService {
   private touchSessionActivity(
     record: SessionRecord,
     sourceTimestamp?: string | null,
-    persistMode: SessionActivityPersistMode = "immediate",
-  ): void {
+  ): string | null {
     const nextTimestamp =
       typeof sourceTimestamp === "string"
         ? normalizeLastActivityAt(sourceTimestamp, this.nowFactory())
         : this.nowFactory();
 
     if (!isTimestampNewer(nextTimestamp, record.lastActivityAt)) {
-      return;
+      return null;
     }
 
     record.lastActivityAt = nextTimestamp;
-    if (persistMode === "debounced") {
-      this.persistScheduler.schedule();
-      return;
-    }
-
-    this.persistSessionSnapshotsImmediately();
+    return nextTimestamp;
   }
 
   private createUniqueSessionId(): SessionId {
@@ -655,8 +635,6 @@ export class ClaudeSessionService {
   }
 
   private persistSessionSnapshots(): void {
-    this.persistScheduler.clear();
-
     this.sessionSnapshotStore.writeSessionSnapshotState({
       sessions: Array.from(this.sessions.values()).map((record) =>
         toSnapshot(record),
@@ -666,9 +644,5 @@ export class ClaudeSessionService {
           ? this.activeSessionId
           : null,
     });
-  }
-
-  private persistSessionSnapshotsImmediately(): void {
-    this.persistSessionSnapshots();
   }
 }

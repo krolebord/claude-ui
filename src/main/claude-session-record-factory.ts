@@ -2,15 +2,11 @@ import type {
   ClaudeActiveSessionChangedEvent,
   ClaudeActivityState,
   ClaudeHookEvent,
-  ClaudeSessionActivityStateEvent,
-  ClaudeSessionActivityWarningEvent,
   ClaudeSessionDataEvent,
   ClaudeSessionErrorEvent,
   ClaudeSessionExitEvent,
-  ClaudeSessionHookEvent,
   ClaudeSessionStatus,
-  ClaudeSessionStatusEvent,
-  ClaudeSessionTitleChangedEvent,
+  ClaudeSessionUpdatedEvent,
   SessionId,
 } from "../shared/claude-types";
 import type { ClaudeActivityMonitor } from "./claude-activity-monitor";
@@ -18,20 +14,12 @@ import type { ClaudeSessionManager } from "./claude-session";
 import { normalizeLastActivityAt } from "./claude-session-snapshot-utils";
 import log from "./logger";
 
-export type SessionActivityPersistMode = "immediate" | "debounced";
-
 export interface ClaudeSessionServiceCallbacks {
   emitSessionData: (payload: ClaudeSessionDataEvent) => void;
   emitSessionExit: (payload: ClaudeSessionExitEvent) => void;
   emitSessionError: (payload: ClaudeSessionErrorEvent) => void;
-  emitSessionStatus: (payload: ClaudeSessionStatusEvent) => void;
-  emitSessionActivityState: (payload: ClaudeSessionActivityStateEvent) => void;
-  emitSessionActivityWarning: (
-    payload: ClaudeSessionActivityWarningEvent,
-  ) => void;
-  emitSessionTitleChanged: (payload: ClaudeSessionTitleChangedEvent) => void;
+  emitSessionUpdated: (payload: ClaudeSessionUpdatedEvent) => void;
   emitActiveSessionChanged: (payload: ClaudeActiveSessionChangedEvent) => void;
-  emitSessionHookEvent?: (payload: ClaudeSessionHookEvent) => void;
 }
 
 export interface SessionManagerLike {
@@ -90,8 +78,7 @@ interface CreateSessionRecordOptions {
   touchSessionActivity: (
     record: SessionRecord,
     sourceTimestamp?: string | null,
-    persistMode?: SessionActivityPersistMode,
-  ) => void;
+  ) => string | null;
   cleanupStateFile?: (record: SessionRecord) => void;
 }
 
@@ -140,9 +127,9 @@ function maybeGenerateTitleFromHook(
       });
       record.sessionName = title;
       options.persistSessionSnapshots();
-      options.callbacks.emitSessionTitleChanged({
+      options.callbacks.emitSessionUpdated({
         sessionId: record.sessionId,
-        title,
+        updates: { sessionName: title },
       });
     })
     .catch((error) => {
@@ -199,30 +186,38 @@ export function createSessionRecord(
   const monitor = options.activityMonitorFactory({
     emitActivityState: (activityState) => {
       record.activityState = activityState;
-      options.touchSessionActivity(record);
+      const updatedAt = options.touchSessionActivity(record);
+      options.persistSessionSnapshots();
       emitOrQueueSessionEvent(record, () => {
-        options.callbacks.emitSessionActivityState({
-          sessionId: record.sessionId,
+        const updates: ClaudeSessionUpdatedEvent["updates"] = {
           activityState,
+        };
+        if (updatedAt) updates.lastActivityAt = updatedAt;
+        options.callbacks.emitSessionUpdated({
+          sessionId: record.sessionId,
+          updates,
         });
       });
     },
     emitHookEvent: (event) => {
-      options.touchSessionActivity(
+      const updatedAt = options.touchSessionActivity(
         record,
         normalizeLastActivityAt(event.timestamp, options.nowFactory()),
       );
+      if (updatedAt) {
+        options.persistSessionSnapshots();
+        emitOrQueueSessionEvent(record, () => {
+          options.callbacks.emitSessionUpdated({
+            sessionId: record.sessionId,
+            updates: { lastActivityAt: updatedAt },
+          });
+        });
+      }
       maybeGenerateTitleFromHook(record, event, {
         generateTitleFactory: options.generateTitleFactory,
         persistSessionSnapshots: options.persistSessionSnapshots,
         callbacks: options.callbacks,
         hasSession: options.hasSession,
-      });
-      emitOrQueueSessionEvent(record, () => {
-        options.callbacks.emitSessionHookEvent?.({
-          sessionId: record.sessionId,
-          event,
-        });
       });
     },
   });
@@ -240,6 +235,7 @@ export function createSessionRecord(
       monitor.stopMonitoring({ preserveState: true });
       options.cleanupStateFile?.(record);
       options.touchSessionActivity(record);
+      options.persistSessionSnapshots();
       emitOrQueueSessionEvent(record, () => {
         options.callbacks.emitSessionExit({
           sessionId: record.sessionId,
@@ -250,6 +246,7 @@ export function createSessionRecord(
     emitError: (payload) => {
       record.lastError = payload.message;
       options.touchSessionActivity(record);
+      options.persistSessionSnapshots();
       emitOrQueueSessionEvent(record, () => {
         options.callbacks.emitSessionError({
           sessionId: record.sessionId,
@@ -262,11 +259,14 @@ export function createSessionRecord(
       if (status !== "error") {
         record.lastError = null;
       }
-      options.touchSessionActivity(record);
+      const updatedAt = options.touchSessionActivity(record);
+      options.persistSessionSnapshots();
       emitOrQueueSessionEvent(record, () => {
-        options.callbacks.emitSessionStatus({
+        const updates: ClaudeSessionUpdatedEvent["updates"] = { status };
+        if (updatedAt) updates.lastActivityAt = updatedAt;
+        options.callbacks.emitSessionUpdated({
           sessionId: record.sessionId,
-          status,
+          updates,
         });
       });
     },
@@ -277,9 +277,9 @@ export function createSessionRecord(
 
   if (record.activityWarning !== null) {
     emitOrQueueSessionEvent(record, () => {
-      options.callbacks.emitSessionActivityWarning({
+      options.callbacks.emitSessionUpdated({
         sessionId: record.sessionId,
-        warning: record.activityWarning,
+        updates: { activityWarning: record.activityWarning },
       });
     });
   }

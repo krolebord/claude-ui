@@ -1,15 +1,11 @@
 import type {
   ClaudeActiveSessionChangedEvent,
   ClaudeProject,
-  ClaudeSessionActivityStateEvent,
-  ClaudeSessionActivityWarningEvent,
   ClaudeSessionDataEvent,
   ClaudeSessionErrorEvent,
   ClaudeSessionExitEvent,
-  ClaudeSessionHookEvent,
   ClaudeSessionSnapshot,
-  ClaudeSessionStatusEvent,
-  ClaudeSessionTitleChangedEvent,
+  ClaudeSessionUpdatedEvent,
   ClaudeSessionsSnapshot,
 } from "../../src/shared/claude-types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -28,18 +24,10 @@ const ipcHarness = vi.hoisted(() => {
     data: new Set<(payload: ClaudeSessionDataEvent) => void>(),
     exit: new Set<(payload: ClaudeSessionExitEvent) => void>(),
     error: new Set<(payload: ClaudeSessionErrorEvent) => void>(),
-    status: new Set<(payload: ClaudeSessionStatusEvent) => void>(),
-    activityState: new Set<
-      (payload: ClaudeSessionActivityStateEvent) => void
-    >(),
-    activityWarning: new Set<
-      (payload: ClaudeSessionActivityWarningEvent) => void
-    >(),
-    titleChanged: new Set<(payload: ClaudeSessionTitleChangedEvent) => void>(),
+    sessionUpdated: new Set<(payload: ClaudeSessionUpdatedEvent) => void>(),
     activeChanged: new Set<
       (payload: ClaudeActiveSessionChangedEvent) => void
     >(),
-    hookEvent: new Set<(payload: ClaudeSessionHookEvent) => void>(),
   };
 
   const register = <T>(bucket: Set<(payload: T) => void>) =>
@@ -64,12 +52,8 @@ const ipcHarness = vi.hoisted(() => {
     onClaudeSessionData: register(listeners.data),
     onClaudeSessionExit: register(listeners.exit),
     onClaudeSessionError: register(listeners.error),
-    onClaudeSessionStatus: register(listeners.status),
-    onClaudeSessionActivityState: register(listeners.activityState),
-    onClaudeSessionActivityWarning: register(listeners.activityWarning),
-    onClaudeSessionTitleChanged: register(listeners.titleChanged),
+    onClaudeSessionUpdated: register(listeners.sessionUpdated),
     onClaudeActiveSessionChanged: register(listeners.activeChanged),
-    onClaudeSessionHookEvent: register(listeners.hookEvent),
   };
 
   const emit = {
