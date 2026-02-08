@@ -1,6 +1,6 @@
 import { cn } from "@renderer/lib/utils";
 import { claudeIpc } from "@renderer/lib/ipc";
-import type { ClaudeUsageData } from "@shared/claude-types";
+import type { ClaudeUsageData, ClaudeUsageBucket } from "@shared/claude-types";
 import { BarChart3, LoaderCircle } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -10,9 +10,11 @@ type UsagePanelState =
   | { status: "loading" }
   | { status: "active"; usage: ClaudeUsageData };
 
-const BUCKET_LABELS: { key: keyof ClaudeUsageData; label: string }[] = [
+type UsageBucketKey = "five_hour" | "seven_day" | "seven_day_sonnet";
+
+const BUCKET_LABELS: { key: UsageBucketKey; label: string }[] = [
   { key: "five_hour", label: "5 hour" },
-  { key: "seven_day", label: "Daily" },
+  { key: "seven_day", label: "Weekly" },
   { key: "seven_day_sonnet", label: "Sonnet" },
 ];
 
@@ -22,6 +24,26 @@ function getBarColor(pct: number): string {
 
 function getTextColor(pct: number): string {
   return pct >= 100 ? "text-[#DE7356]" : "text-zinc-400";
+}
+
+function formatResetsAt(
+  resetsAt: ClaudeUsageBucket["resets_at"]
+): string | null {
+  if (!resetsAt) {
+    return null;
+  }
+
+  const date = new Date(resetsAt);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
 }
 
 export function UsagePanel() {
@@ -96,49 +118,60 @@ export function UsagePanel() {
       <div className="space-y-1.5">
         {BUCKET_LABELS.map(({ key, label }) => {
           const bucket = usage[key];
-          if (!bucket || typeof bucket !== "object" || !("utilization" in bucket)) return null;
+          if (!bucket) return null;
           const pct = Math.round(bucket.utilization);
+          const resetsAt = formatResetsAt(bucket.resets_at);
           return (
             <div key={key} className="space-y-0.5">
               <div className="flex items-center justify-between text-[10px]">
-                <span className="text-zinc-400">{label}</span>
+                <span className="text-zinc-400">
+                  {label}
+                  {resetsAt ? (
+                    <span className="text-zinc-500">{` (${resetsAt})`}</span>
+                  ) : null}
+                </span>
                 <span className={cn("tabular-nums", getTextColor(pct))}>
                   {pct}%
                 </span>
               </div>
               <div className="h-1 rounded-full bg-white/10">
                 <div
-                  className={cn("h-full rounded-full transition-all", getBarColor(pct))}
-                  style={{ width: `${Math.min(pct, 100)}%` }}
-                />
-              </div>
-            </div>
-          );
-        })}
-        {usage.extra_usage && usage.extra_usage.is_enabled ? (() => {
-          const used = usage.extra_usage.used_credits / 100;
-          const limit = usage.extra_usage.monthly_limit / 100;
-          const pct = Math.round(usage.extra_usage.utilization);
-          return (
-            <div className="space-y-0.5">
-              <div className="flex items-center justify-between text-[10px]">
-                <span className="text-zinc-400">Extra usage</span>
-                <span className={cn("tabular-nums", getTextColor(pct))}>
-                  ${used.toFixed(2)} / ${limit.toFixed(2)}
-                </span>
-              </div>
-              <div className="h-1 rounded-full bg-white/10">
-                <div
                   className={cn(
                     "h-full rounded-full transition-all",
-                    getBarColor(pct),
+                    getBarColor(pct)
                   )}
                   style={{ width: `${Math.min(pct, 100)}%` }}
                 />
               </div>
             </div>
           );
-        })() : null}
+        })}
+        {usage.extra_usage && usage.extra_usage.is_enabled
+          ? (() => {
+              const used = usage.extra_usage.used_credits / 100;
+              const limit = usage.extra_usage.monthly_limit / 100;
+              const pct = Math.round(usage.extra_usage.utilization);
+              return (
+                <div className="space-y-0.5">
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="text-zinc-400">Extra usage</span>
+                    <span className={cn("tabular-nums", getTextColor(pct))}>
+                      ${used.toFixed(2)} / ${limit.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="h-1 rounded-full bg-white/10">
+                    <div
+                      className={cn(
+                        "h-full rounded-full transition-all",
+                        getBarColor(pct)
+                      )}
+                      style={{ width: `${Math.min(pct, 100)}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })()
+          : null}
       </div>
     </div>
   );

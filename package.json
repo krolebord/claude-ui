@@ -1,6 +1,6 @@
 {
   "name": "claude-ui",
-  "version": "0.2.2",
+  "version": "0.3.1",
   "private": true,
   "type": "module",
   "main": "dist-electron/main/index.js",
@@ -11,12 +11,8 @@
     "app:dist:mac": "pnpm build && electron-builder --mac",
     "app:dist:mac:dir": "pnpm build && electron-builder --mac dir",
     "app:install": "pnpm app:dist:mac:dir && ./scripts/install-mac-app.sh",
-    "app:update": "pnpm app:install",
-    "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "lint": "biome check .",
-    "format": "biome format --write .",
-    "format:check": "biome format .",
+    "format": "biome check --write .",
     "test": "vitest run"
   },
   "dependencies": {

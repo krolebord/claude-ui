@@ -222,7 +222,7 @@ export interface ClaudeSessionHookEvent {
 
 export interface ClaudeUsageBucket {
   utilization: number;
-  resets_at: string;
+  resets_at: string | null;
 }
 
 export interface ClaudeExtraUsage {

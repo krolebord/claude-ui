@@ -119,11 +119,8 @@ src/
 - Install deps: `pnpm install`
 - Run app (dev): `pnpm dev`
 - Build: `pnpm build`
-- Preview build: `pnpm preview`
 - Type check: `pnpm typecheck`
-- Lint: `pnpm lint`
-- Format: `pnpm format`
-- Format check: `pnpm format:check`
+- Format (lint + format fix): `pnpm format`
 - Run unit tests: `pnpm exec vitest --run`
 - Run targeted tests:
   - `pnpm exec vitest --run test/main/claude-session-service.spec.ts`

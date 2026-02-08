@@ -9,14 +9,13 @@ const CredentialsSchema = z.object({
     expiresAt: z.number(),
     scopes: z.array(z.string()),
     subscriptionType: z.string(),
-    rateLimitTier: z.string(),
   }),
 });
 
 const UsageBucketSchema = z
   .object({
     utilization: z.number(),
-    resets_at: z.string(),
+    resets_at: z.string().nullable(),
   })
   .nullable();
 
@@ -32,11 +31,7 @@ const ExtraUsageSchema = z
 const UsageResponseSchema = z.object({
   five_hour: UsageBucketSchema,
   seven_day: UsageBucketSchema,
-  seven_day_oauth_apps: UsageBucketSchema,
-  seven_day_opus: UsageBucketSchema,
   seven_day_sonnet: UsageBucketSchema,
-  seven_day_cowork: UsageBucketSchema,
-  iguana_necktie: UsageBucketSchema,
   extra_usage: ExtraUsageSchema,
 });
 
@@ -52,7 +47,7 @@ export async function getUsage(): Promise<ClaudeUsageResult> {
     const { output } = await spawn(
       "security",
       ["find-generic-password", "-s", "Claude Code-credentials", "-w"],
-      { timeout: 5_000, stdin: "ignore" },
+      { timeout: 5_000, stdin: "ignore" }
     );
     credentialsJson = output.trim();
   } catch (e: unknown) {
@@ -115,7 +110,9 @@ export async function getUsage(): Promise<ClaudeUsageResult> {
   const usageResult = UsageResponseSchema.safeParse(responseJson);
   if (!usageResult.success) {
     log.error("Usage: response schema validation failed", {
+      message: usageResult.error.message,
       issues: usageResult.error.issues,
+      responseJson,
     });
     return { ok: false, message: "Usage response has unexpected format" };
   }
