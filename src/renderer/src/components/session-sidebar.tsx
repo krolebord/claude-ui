@@ -1,3 +1,4 @@
+import { UsagePanel } from "@renderer/components/usage-panel";
 import { cn } from "@renderer/lib/utils";
 import type {
   ProjectSessionGroup,
@@ -318,6 +319,7 @@ export function SessionSidebar({
           ))}
         </div>
       </div>
+      <UsagePanel />
     </aside>
   );
 }

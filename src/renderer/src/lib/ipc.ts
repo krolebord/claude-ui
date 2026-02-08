@@ -11,6 +11,8 @@ import type {
   ClaudeSessionStatusEvent,
   ClaudeSessionTitleChangedEvent,
   ClaudeSessionsSnapshot,
+  ClaudeUsageResult,
+  ClaudeUsageUpdateEvent,
   DeleteClaudeProjectInput,
   DeleteClaudeProjectResult,
   DeleteClaudeSessionInput,
@@ -91,4 +93,10 @@ export const claudeIpc = {
   onClaudeSessionHookEvent: (
     callback: (payload: ClaudeSessionHookEvent) => void,
   ): (() => void) => window.claude.onClaudeSessionHookEvent(callback),
+  startUsageMonitor: (): Promise<ClaudeUsageResult> =>
+    window.claude.startUsageMonitor(),
+  stopUsageMonitor: (): Promise<void> => window.claude.stopUsageMonitor(),
+  onClaudeUsageUpdate: (
+    callback: (payload: ClaudeUsageUpdateEvent) => void,
+  ): (() => void) => window.claude.onClaudeUsageUpdate(callback),
 };

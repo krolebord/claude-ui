@@ -20,6 +20,9 @@ export const CLAUDE_IPC_CHANNELS = {
   sessionHookEvent: "claude:session-hook-event",
   sessionTitleChanged: "claude:session-title-changed",
   activeSessionChanged: "claude:active-session-changed",
+  startUsageMonitor: "claude:start-usage-monitor",
+  stopUsageMonitor: "claude:stop-usage-monitor",
+  usageUpdate: "claude:usage-update",
 } as const;
 
 export type SessionId = string;
@@ -217,6 +220,37 @@ export interface ClaudeSessionHookEvent {
   event: ClaudeHookEvent;
 }
 
+export interface ClaudeUsageBucket {
+  utilization: number;
+  resets_at: string;
+}
+
+export interface ClaudeExtraUsage {
+  is_enabled: boolean;
+  monthly_limit: number;
+  used_credits: number;
+  utilization: number;
+}
+
+export interface ClaudeUsageData {
+  five_hour: ClaudeUsageBucket | null;
+  seven_day: ClaudeUsageBucket | null;
+  seven_day_oauth_apps: ClaudeUsageBucket | null;
+  seven_day_opus: ClaudeUsageBucket | null;
+  seven_day_sonnet: ClaudeUsageBucket | null;
+  seven_day_cowork: ClaudeUsageBucket | null;
+  iguana_necktie: ClaudeUsageBucket | null;
+  extra_usage: ClaudeExtraUsage | null;
+}
+
+export type ClaudeUsageResult =
+  | { ok: true; usage: ClaudeUsageData }
+  | { ok: false; message: string };
+
+export interface ClaudeUsageUpdateEvent {
+  result: ClaudeUsageResult;
+}
+
 export interface ClaudeDesktopApi {
   selectFolder: () => Promise<string | null>;
   getSessions: () => Promise<ClaudeSessionsSnapshot>;
@@ -270,5 +304,10 @@ export interface ClaudeDesktopApi {
   ) => () => void;
   onClaudeSessionHookEvent: (
     callback: (payload: ClaudeSessionHookEvent) => void,
+  ) => () => void;
+  startUsageMonitor: () => Promise<ClaudeUsageResult>;
+  stopUsageMonitor: () => Promise<void>;
+  onClaudeUsageUpdate: (
+    callback: (payload: ClaudeUsageUpdateEvent) => void,
   ) => () => void;
 }
