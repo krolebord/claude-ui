@@ -32,25 +32,44 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="flex items-center justify-between rounded-lg border border-white/10 px-4 py-3">
-            <div className="space-y-0.5">
-              <div className="text-sm font-medium">Log files</div>
-              <div className="text-xs text-muted-foreground">
-                Open the folder containing application logs
-              </div>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                void claudeIpc.openLogFolder();
-              }}
+          {[
+            {
+              label: "Log files",
+              description: "Open the folder containing application logs",
+              action: () => void claudeIpc.openLogFolder(),
+            },
+            {
+              label: "State plugin",
+              description: "Open the managed Claude hook plugin folder",
+              action: () => void claudeIpc.openStatePluginFolder(),
+            },
+            {
+              label: "Session files",
+              description: "Open the folder containing session state files",
+              action: () => void claudeIpc.openSessionFilesFolder(),
+            },
+          ].map((item) => (
+            <div
+              key={item.label}
+              className="flex items-center justify-between rounded-lg border border-white/10 px-4 py-3"
             >
-              <FolderOpen className="mr-1.5 size-3.5" />
-              Open
-            </Button>
-          </div>
+              <div className="space-y-0.5">
+                <div className="text-sm font-medium">{item.label}</div>
+                <div className="text-xs text-muted-foreground">
+                  {item.description}
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={item.action}
+              >
+                <FolderOpen className="mr-1.5 size-3.5" />
+                Open
+              </Button>
+            </div>
+          ))}
 
           <div className="rounded-lg border border-white/10 px-4 py-3">
             <div className="mb-3 flex items-center gap-2">

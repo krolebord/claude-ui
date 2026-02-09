@@ -18,6 +18,8 @@ export const CLAUDE_IPC_CHANNELS = {
   activeSessionChanged: "claude:active-session-changed",
   getUsage: "claude:get-usage",
   openLogFolder: "claude:open-log-folder",
+  openStatePluginFolder: "claude:open-state-plugin-folder",
+  openSessionFilesFolder: "claude:open-session-files-folder",
 } as const;
 
 export type SessionId = string;
@@ -241,4 +243,6 @@ export interface ClaudeDesktopApi {
   ) => () => void;
   getUsage: () => Promise<ClaudeUsageResult>;
   openLogFolder: () => Promise<void>;
+  openStatePluginFolder: () => Promise<void>;
+  openSessionFilesFolder: () => Promise<void>;
 }

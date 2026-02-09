@@ -195,6 +195,19 @@ function registerIpcHandlers(): void {
     const logPath = app.getPath("logs");
     await shell.openPath(logPath);
   });
+
+  ipcMain.handle(CLAUDE_IPC_CHANNELS.openStatePluginFolder, async () => {
+    const pluginPath = path.join(
+      app.getPath("userData"),
+      "claude-state-plugin",
+    );
+    await shell.openPath(pluginPath);
+  });
+
+  ipcMain.handle(CLAUDE_IPC_CHANNELS.openSessionFilesFolder, async () => {
+    const stateDir = path.join(app.getPath("userData"), "claude-state");
+    await shell.openPath(stateDir);
+  });
 }
 
 app.whenReady().then(async () => {

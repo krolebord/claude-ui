@@ -102,6 +102,10 @@ const claudeApi: ClaudeDesktopApi = {
     ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.getUsage),
   openLogFolder: (): Promise<void> =>
     ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.openLogFolder),
+  openStatePluginFolder: (): Promise<void> =>
+    ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.openStatePluginFolder),
+  openSessionFilesFolder: (): Promise<void> =>
+    ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.openSessionFilesFolder),
 };
 
 contextBridge.exposeInMainWorld("claude", claudeApi);
