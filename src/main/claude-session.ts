@@ -37,6 +37,90 @@ interface ClaudeLaunchOptions {
   forkSession?: boolean;
 }
 
+interface LaunchCommandInput {
+  pluginDir?: string | null;
+  permissionMode?: ClaudePermissionMode;
+  sessionId?: string;
+  resumeSessionId?: string;
+  forkSession?: boolean;
+  model?: ClaudeModel;
+  initialPrompt?: string;
+}
+
+function shellQuoteUnix(value: string): string {
+  return `'${value.replace(/'/g, `'\"'\"'`)}'`;
+}
+
+function shellQuoteWin(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+function getPermissionArgs(permissionMode?: ClaudePermissionMode): string {
+  if (permissionMode === "yolo") {
+    return "--dangerously-skip-permissions";
+  }
+  if (permissionMode && permissionMode !== "default") {
+    return `--permission-mode ${permissionMode}`;
+  }
+  return "";
+}
+
+function buildClaudeArgs(
+  input: LaunchCommandInput,
+  quote: (value: string) => string,
+): string[] {
+  const args: string[] = [];
+
+  const permissionArg = getPermissionArgs(input.permissionMode);
+  if (permissionArg) {
+    args.push(permissionArg);
+  }
+
+  if (input.pluginDir) {
+    args.push(`--plugin-dir ${quote(input.pluginDir)}`);
+  }
+
+  if (input.sessionId && !(input.resumeSessionId && !input.forkSession)) {
+    args.push(`--session-id ${quote(input.sessionId)}`);
+  }
+
+  if (input.resumeSessionId) {
+    args.push(`--resume ${quote(input.resumeSessionId)}`);
+  }
+
+  if (input.forkSession) {
+    args.push("--fork-session");
+  }
+
+  if (input.model) {
+    args.push(`--model ${input.model}`);
+  }
+
+  if (input.initialPrompt) {
+    args.push(quote(input.initialPrompt));
+  }
+
+  return args;
+}
+
+export function getInteractiveLaunchCommand(
+  input: LaunchCommandInput,
+): LaunchCommand {
+  if (process.platform === "win32") {
+    const shell = process.env.COMSPEC ?? "cmd.exe";
+    const args = buildClaudeArgs(input, shellQuoteWin);
+    const claudeCommand = ["claude", ...args].join(" ");
+    return { file: shell, args: ["/d", "/s", "/c", claudeCommand] };
+  }
+
+  const shell =
+    process.env.SHELL ??
+    (process.platform === "darwin" ? "/bin/zsh" : "/bin/bash");
+  const args = buildClaudeArgs(input, shellQuoteUnix);
+  const claudeCommand = ["exec claude", ...args].join(" ");
+  return { file: shell, args: ["-ilc", claudeCommand] };
+}
+
 const GRACEFUL_EXIT_COMMAND = "/exit\r";
 const GRACEFUL_STOP_TIMEOUT_MS = 1500;
 const FORCE_KILL_TIMEOUT_MS = 500;
@@ -84,15 +168,15 @@ export class ClaudeSessionManager {
         : undefined;
 
     try {
-      const launch = this.getInteractiveLaunchCommand(
-        launchOptions?.pluginDir,
-        input.permissionMode,
-        launchOptions?.sessionId,
-        launchOptions?.resumeSessionId,
-        input.model,
+      const launch = getInteractiveLaunchCommand({
+        pluginDir: launchOptions?.pluginDir,
+        permissionMode: input.permissionMode,
+        sessionId: launchOptions?.sessionId,
+        resumeSessionId: launchOptions?.resumeSessionId,
+        forkSession: launchOptions?.forkSession,
+        model: input.model,
         initialPrompt,
-        launchOptions?.forkSession,
-      );
+      });
       log.info("PTY spawn", {
         file: launch.file,
         args: launch.args,
@@ -263,88 +347,6 @@ export class ClaudeSessionManager {
     }
 
     return "Failed to start Claude due to an unknown error.";
-  }
-
-  private getPermissionArgs(permissionMode?: ClaudePermissionMode): string {
-    if (permissionMode === "yolo") {
-      return " --dangerously-skip-permissions";
-    }
-    if (permissionMode && permissionMode !== "default") {
-      return ` --permission-mode ${permissionMode}`;
-    }
-    return "";
-  }
-
-  private getInteractiveLaunchCommand(
-    pluginDir?: string | null,
-    permissionMode?: ClaudePermissionMode,
-    sessionId?: string,
-    resumeSessionId?: string,
-    model?: ClaudeModel,
-    initialPrompt?: string,
-    forkSession?: boolean,
-  ): LaunchCommand {
-    const permissionArgs = this.getPermissionArgs(permissionMode);
-    const pluginArgs = pluginDir
-      ? ` --plugin-dir ${this.shellQuote(pluginDir)}`
-      : "";
-    const sessionIdArgs =
-      (resumeSessionId && !forkSession) || !sessionId
-        ? ""
-        : ` --session-id ${this.shellQuote(sessionId)}`;
-    const resumeSessionArgs = resumeSessionId
-      ? ` --resume ${this.shellQuote(resumeSessionId)}`
-      : "";
-    const forkSessionArgs = forkSession ? " --fork-session" : "";
-    const modelArgs = model ? ` --model ${model}` : "";
-    const initialPromptArgs = initialPrompt
-      ? ` ${this.shellQuote(initialPrompt)}`
-      : "";
-
-    if (process.platform === "win32") {
-      const shell = process.env.COMSPEC ?? "cmd.exe";
-      const winPermissionArgs = this.getPermissionArgs(permissionMode);
-      const winPluginArgs = pluginDir
-        ? ` --plugin-dir "${pluginDir.replace(/\"/g, '""')}"`
-        : "";
-      const winSessionIdArgs =
-        (resumeSessionId && !forkSession) || !sessionId
-          ? ""
-          : ` --session-id "${sessionId.replace(/\"/g, '""')}"`;
-      const winResumeSessionArgs = resumeSessionId
-        ? ` --resume "${resumeSessionId.replace(/\"/g, '""')}"`
-        : "";
-      const winForkSessionArgs = forkSession ? " --fork-session" : "";
-      const winModelArgs = model ? ` --model ${model}` : "";
-      const winInitialPromptArgs = initialPrompt
-        ? ` "${initialPrompt.replace(/\"/g, '""')}"`
-        : "";
-      return {
-        file: shell,
-        args: [
-          "/d",
-          "/s",
-          "/c",
-          `claude${winPermissionArgs}${winPluginArgs}${winSessionIdArgs}${winResumeSessionArgs}${winForkSessionArgs}${winModelArgs}${winInitialPromptArgs}`,
-        ],
-      };
-    }
-
-    const shell =
-      process.env.SHELL ??
-      (process.platform === "darwin" ? "/bin/zsh" : "/bin/bash");
-
-    return {
-      file: shell,
-      args: [
-        "-ilc",
-        `exec claude${permissionArgs}${pluginArgs}${sessionIdArgs}${resumeSessionArgs}${forkSessionArgs}${modelArgs}${initialPromptArgs}`,
-      ],
-    };
-  }
-
-  private shellQuote(input: string): string {
-    return `'${input.replace(/'/g, `'\"'\"'`)}'`;
   }
 
   private waitForExit(token: number, timeoutMs: number): Promise<boolean> {
