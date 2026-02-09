@@ -7,6 +7,7 @@ import type {
   ClaudeActiveSessionChangedEvent,
   ClaudeActivityState,
   ClaudeHookEvent,
+  ClaudePermissionMode,
   ClaudeProject,
   ClaudeSessionDataEvent,
   ClaudeSessionErrorEvent,
@@ -79,6 +80,7 @@ interface SessionRecord {
   sessionId: SessionId;
   cwd: string;
   sessionName: string | null;
+  permissionMode: ClaudePermissionMode | undefined;
   createdAt: string;
   lastActivityAt: string;
   status: ClaudeSessionStatus;
@@ -254,13 +256,23 @@ export class ClaudeSessionService {
         : null;
 
       const sessionId = this.createUniqueSessionId();
-      const record = this.createRecord(sessionId, sourceRecord.cwd, forkedName);
+      const record = this.createRecord(
+        sessionId,
+        sourceRecord.cwd,
+        forkedName,
+        sourceRecord.permissionMode,
+      );
       this.sessions.set(sessionId, record);
       this.persistSessionSnapshots();
 
       return this.startAndMonitor(
         record,
-        { cwd: sourceRecord.cwd, cols: input.cols, rows: input.rows },
+        {
+          cwd: sourceRecord.cwd,
+          cols: input.cols,
+          rows: input.rows,
+          permissionMode: sourceRecord.permissionMode,
+        },
         {
           pluginDir: this.pluginDir,
           sessionId: record.sessionId,
@@ -292,13 +304,16 @@ export class ClaudeSessionService {
 
       this.cleanupStateFile(record);
 
+      const resumePermissionMode =
+        input.permissionMode ?? record.permissionMode;
+
       return this.startAndMonitor(
         record,
         {
           cwd: record.cwd,
           cols: input.cols,
           rows: input.rows,
-          permissionMode: input.permissionMode,
+          permissionMode: resumePermissionMode,
           model: input.model,
         },
         {
@@ -319,6 +334,7 @@ export class ClaudeSessionService {
       sessionId,
       input.cwd,
       normalizeOptionalString(input.sessionName),
+      input.permissionMode,
     );
     this.sessions.set(sessionId, record);
     this.persistSessionSnapshots();
@@ -446,12 +462,14 @@ export class ClaudeSessionService {
     sessionId: SessionId,
     cwd: string,
     sessionName: string | null,
+    permissionMode?: ClaudePermissionMode,
   ): SessionRecord {
     const createdAt = this.nowFactory();
     const record: SessionRecord = {
       sessionId,
       cwd,
       sessionName,
+      permissionMode,
       createdAt,
       lastActivityAt: createdAt,
       status: "idle",
@@ -693,6 +711,7 @@ export class ClaudeSessionService {
         sessionId,
         cwd,
         normalizeOptionalString(snapshot.sessionName),
+        snapshot.permissionMode,
       );
 
       record.createdAt = normalizeStringWithFallback(

@@ -1,11 +1,12 @@
 {
   "name": "claude-ui",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "type": "module",
   "main": "dist-electron/main/index.js",
   "scripts": {
     "dev": "vite",
+    "dev:static": "vite build --sourcemap && electron .",
     "build": "tsc && vite build",
     "app:dist": "pnpm build && electron-builder",
     "app:dist:mac": "pnpm build && electron-builder --mac",

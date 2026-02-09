@@ -460,6 +460,87 @@ describe("ClaudeSessionService", () => {
     );
   });
 
+  it("persists permissionMode in session snapshot", async () => {
+    const harness = createHarness();
+
+    await harness.service.startSession({
+      ...START_INPUT,
+      permissionMode: "yolo",
+    });
+
+    const snapshot = harness.service.getSessionsSnapshot();
+    expect(snapshot.sessions[0]?.permissionMode).toBe("yolo");
+    expect(harness.storedSessionSnapshotState.sessions[0]?.permissionMode).toBe(
+      "yolo",
+    );
+  });
+
+  it("resumes a session with its stored permissionMode when none is provided", async () => {
+    const harness = createHarness();
+
+    await harness.service.startSession({
+      ...START_INPUT,
+      permissionMode: "yolo",
+    });
+    harness.managerMocks[0]?.callbacks.emitStatus("stopped");
+
+    const result = await harness.service.startSession({
+      ...START_INPUT,
+      resumeSessionId: "session-1",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(harness.managerMocks[0]?.start).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        permissionMode: "yolo",
+      }),
+      expect.objectContaining({
+        resumeSessionId: "session-1",
+      }),
+    );
+  });
+
+  it("hydrates permissionMode from persisted session snapshots", async () => {
+    const harness = createHarness({
+      initialSessionSnapshotState: {
+        sessions: [
+          {
+            sessionId: "persisted-1",
+            cwd: "/workspace",
+            sessionName: null,
+            permissionMode: "acceptEdits",
+            status: "stopped",
+            activityState: "idle",
+            activityWarning: null,
+            lastError: null,
+            createdAt: "2026-02-06T00:00:00.000Z",
+            lastActivityAt: "2026-02-06T00:00:00.000Z",
+          },
+        ],
+        activeSessionId: null,
+      },
+    });
+
+    const snapshot = harness.service.getSessionsSnapshot();
+    expect(snapshot.sessions[0]?.permissionMode).toBe("acceptEdits");
+
+    const result = await harness.service.startSession({
+      ...START_INPUT,
+      resumeSessionId: "persisted-1",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(harness.managerMocks[0]?.start).toHaveBeenCalledWith(
+      expect.objectContaining({
+        permissionMode: "acceptEdits",
+      }),
+      expect.objectContaining({
+        resumeSessionId: "persisted-1",
+      }),
+    );
+  });
+
   it("passes model to session start", async () => {
     const harness = createHarness();
 

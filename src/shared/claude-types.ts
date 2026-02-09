@@ -53,6 +53,7 @@ export interface ClaudeSessionSnapshot {
   sessionId: SessionId;
   cwd: string;
   sessionName: string | null;
+  permissionMode?: ClaudePermissionMode;
   status: ClaudeSessionStatus;
   activityState: ClaudeActivityState;
   activityWarning: string | null;
