@@ -4,7 +4,15 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type {
   AddClaudeProjectInput,
+  ClaudeActiveSessionChangedEvent,
+  ClaudeActivityState,
+  ClaudeHookEvent,
   ClaudeProject,
+  ClaudeSessionDataEvent,
+  ClaudeSessionErrorEvent,
+  ClaudeSessionExitEvent,
+  ClaudeSessionStatus,
+  ClaudeSessionUpdatedEvent,
   ClaudeSessionsSnapshot,
   DeleteClaudeProjectInput,
   DeleteClaudeSessionInput,
@@ -26,14 +34,6 @@ import {
   setProjectCollapsedInList,
   setProjectDefaultsInList,
 } from "./claude-session-projects";
-import {
-  type ActivityMonitorFactory,
-  type ClaudeSessionServiceCallbacks,
-  type SessionManagerFactory,
-  type SessionRecord,
-  createSessionRecord,
-  flushPendingSessionEvents,
-} from "./claude-session-record-factory";
 import type { ClaudeSessionSnapshotStoreLike } from "./claude-session-snapshot-store";
 import {
   isTimestampNewer,
@@ -43,6 +43,55 @@ import {
 } from "./claude-session-snapshot-utils";
 import { generateSessionTitle } from "./generate-session-title";
 import log from "./logger";
+
+export interface ClaudeSessionServiceCallbacks {
+  emitSessionData: (payload: ClaudeSessionDataEvent) => void;
+  emitSessionExit: (payload: ClaudeSessionExitEvent) => void;
+  emitSessionError: (payload: ClaudeSessionErrorEvent) => void;
+  emitSessionUpdated: (payload: ClaudeSessionUpdatedEvent) => void;
+  emitActiveSessionChanged: (payload: ClaudeActiveSessionChangedEvent) => void;
+}
+
+interface SessionManagerLike {
+  start: InstanceType<typeof ClaudeSessionManager>["start"];
+  stop: InstanceType<typeof ClaudeSessionManager>["stop"];
+  write: InstanceType<typeof ClaudeSessionManager>["write"];
+  resize: InstanceType<typeof ClaudeSessionManager>["resize"];
+  dispose: InstanceType<typeof ClaudeSessionManager>["dispose"];
+}
+
+interface ActivityMonitorLike {
+  startMonitoring: InstanceType<
+    typeof ClaudeActivityMonitor
+  >["startMonitoring"];
+  stopMonitoring: InstanceType<typeof ClaudeActivityMonitor>["stopMonitoring"];
+}
+
+type SessionManagerFactory = (
+  callbacks: ConstructorParameters<typeof ClaudeSessionManager>[0],
+) => SessionManagerLike;
+
+type ActivityMonitorFactory = (
+  callbacks: ConstructorParameters<typeof ClaudeActivityMonitor>[0],
+) => ActivityMonitorLike;
+
+interface SessionRecord {
+  sessionId: SessionId;
+  cwd: string;
+  sessionName: string | null;
+  createdAt: string;
+  lastActivityAt: string;
+  status: ClaudeSessionStatus;
+  activityState: ClaudeActivityState;
+  activityWarning: string | null;
+  lastError: string | null;
+  stateFilePath: string | null;
+  manager: SessionManagerLike;
+  monitor: ActivityMonitorLike;
+  ready: boolean;
+  pendingEvents: Array<() => void>;
+  titleGenerationTriggered: boolean;
+}
 
 interface ClaudeSessionServiceOptions {
   userDataPath: string;
@@ -398,27 +447,122 @@ export class ClaudeSessionService {
     cwd: string,
     sessionName: string | null,
   ): SessionRecord {
-    return createSessionRecord({
+    const createdAt = this.nowFactory();
+    const record: SessionRecord = {
       sessionId,
       cwd,
       sessionName,
-      pluginWarning: this.pluginWarning,
-      nowFactory: this.nowFactory,
-      callbacks: this.callbacks,
-      sessionManagerFactory: this.sessionManagerFactory,
-      activityMonitorFactory: this.activityMonitorFactory,
-      generateTitleFactory: this.generateTitleFactory,
-      persistSessionSnapshots: () => {
+      createdAt,
+      lastActivityAt: createdAt,
+      status: "idle",
+      activityState: "unknown",
+      activityWarning: this.pluginWarning,
+      lastError: null,
+      stateFilePath: null,
+      manager: null as unknown as SessionManagerLike,
+      monitor: null as unknown as ActivityMonitorLike,
+      ready: false,
+      pendingEvents: [],
+      titleGenerationTriggered: sessionName !== null,
+    };
+
+    const monitor = this.activityMonitorFactory({
+      emitActivityState: (activityState) => {
+        record.activityState = activityState;
+        const updatedAt = this.touchSessionActivity(record);
         this.persistSessionSnapshots();
+        this.emitOrQueue(record, () => {
+          const updates: ClaudeSessionUpdatedEvent["updates"] = {
+            activityState,
+          };
+          if (updatedAt) updates.lastActivityAt = updatedAt;
+          this.callbacks.emitSessionUpdated({
+            sessionId: record.sessionId,
+            updates,
+          });
+        });
       },
-      hasSession: (candidateSessionId) => this.sessions.has(candidateSessionId),
-      touchSessionActivity: (record, sourceTimestamp) => {
-        return this.touchSessionActivity(record, sourceTimestamp);
-      },
-      cleanupStateFile: (record) => {
-        this.cleanupStateFile(record);
+      emitHookEvent: (event) => {
+        const updatedAt = this.touchSessionActivity(
+          record,
+          normalizeStringWithFallback(event.timestamp, this.nowFactory()),
+        );
+        if (updatedAt) {
+          this.persistSessionSnapshots();
+          this.emitOrQueue(record, () => {
+            this.callbacks.emitSessionUpdated({
+              sessionId: record.sessionId,
+              updates: { lastActivityAt: updatedAt },
+            });
+          });
+        }
+        this.maybeGenerateTitle(record, event);
       },
     });
+
+    const manager = this.sessionManagerFactory({
+      emitData: (chunk) => {
+        this.emitOrQueue(record, () => {
+          this.callbacks.emitSessionData({
+            sessionId: record.sessionId,
+            chunk,
+          });
+        });
+      },
+      emitExit: (payload) => {
+        monitor.stopMonitoring({ preserveState: true });
+        this.cleanupStateFile(record);
+        this.touchSessionActivity(record);
+        this.persistSessionSnapshots();
+        this.emitOrQueue(record, () => {
+          this.callbacks.emitSessionExit({
+            sessionId: record.sessionId,
+            ...payload,
+          });
+        });
+      },
+      emitError: (payload) => {
+        record.lastError = payload.message;
+        this.touchSessionActivity(record);
+        this.persistSessionSnapshots();
+        this.emitOrQueue(record, () => {
+          this.callbacks.emitSessionError({
+            sessionId: record.sessionId,
+            message: payload.message,
+          });
+        });
+      },
+      emitStatus: (status) => {
+        record.status = status;
+        if (status !== "error") {
+          record.lastError = null;
+        }
+        const updatedAt = this.touchSessionActivity(record);
+        this.persistSessionSnapshots();
+        this.emitOrQueue(record, () => {
+          const updates: ClaudeSessionUpdatedEvent["updates"] = { status };
+          if (updatedAt) updates.lastActivityAt = updatedAt;
+          this.callbacks.emitSessionUpdated({
+            sessionId: record.sessionId,
+            updates,
+          });
+        });
+      },
+    });
+
+    record.manager = manager;
+    record.monitor = monitor;
+
+    if (record.activityWarning !== null) {
+      this.emitOrQueue(record, () => {
+        this.callbacks.emitSessionUpdated({
+          sessionId: record.sessionId,
+          updates: { activityWarning: record.activityWarning },
+        });
+      });
+    }
+
+    return record;
   }
 
   private async startAndMonitor(
@@ -454,7 +598,7 @@ export class ClaudeSessionService {
 
       record.ready = true;
       this.setActiveSessionInternal(record.sessionId);
-      flushPendingSessionEvents(record);
+      this.flushPendingEvents(record);
 
       return {
         ok: true,
@@ -601,6 +745,61 @@ export class ClaudeSessionService {
       sessionId = normalizeOptionalString(this.sessionIdFactory());
     }
     return sessionId;
+  }
+
+  private emitOrQueue(record: SessionRecord, emit: () => void): void {
+    if (!record.ready) {
+      record.pendingEvents.push(emit);
+      return;
+    }
+    emit();
+  }
+
+  private flushPendingEvents(record: SessionRecord): void {
+    const pending = [...record.pendingEvents];
+    record.pendingEvents = [];
+    for (const emit of pending) {
+      emit();
+    }
+  }
+
+  private maybeGenerateTitle(
+    record: SessionRecord,
+    event: ClaudeHookEvent,
+  ): void {
+    if (record.titleGenerationTriggered) return;
+    if (event.hook_event_name !== "UserPromptSubmit") return;
+
+    const prompt = event.prompt?.trim();
+    if (!prompt) return;
+
+    record.titleGenerationTriggered = true;
+    log.info("Title generation triggered from hook", {
+      sessionId: record.sessionId,
+      hookEvent: event.hook_event_name,
+    });
+
+    void this.generateTitleFactory(prompt)
+      .then((title) => {
+        if (!this.sessions.has(record.sessionId)) return;
+
+        log.info("Title generation completed from hook", {
+          sessionId: record.sessionId,
+          title,
+        });
+        record.sessionName = title;
+        this.persistSessionSnapshots();
+        this.callbacks.emitSessionUpdated({
+          sessionId: record.sessionId,
+          updates: { sessionName: title },
+        });
+      })
+      .catch((error) => {
+        log.error("Title generation failed from hook", {
+          sessionId: record.sessionId,
+          error,
+        });
+      });
   }
 
   private persistSessionSnapshots(): void {

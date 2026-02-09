@@ -31,21 +31,25 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+export interface SidebarCallbacks {
+  addProject: () => void;
+  openSettings: () => void;
+  toggleProject: (projectPath: string) => void;
+  openNewSessionDialog: (projectPath: string) => void;
+  selectSession: (sessionId: SessionId) => void;
+  stopSession: (sessionId: SessionId) => void;
+  resumeSession: (sessionId: SessionId) => void;
+  forkSession: (sessionId: SessionId) => void;
+  deleteSession: (sessionId: SessionId) => void;
+  deleteProject: (projectPath: string) => void;
+  openProjectDefaults: (projectPath: string) => void;
+}
+
 interface SessionSidebarProps {
   groups: ProjectSessionGroup[];
   activeSessionId: SessionId | null;
   isAddingProject: boolean;
-  onAddProject: () => void;
-  onOpenSettings: () => void;
-  onToggleProject: (projectPath: string) => void;
-  onOpenNewSessionDialog: (projectPath: string) => void;
-  onSelectSession: (sessionId: SessionId) => void;
-  onStopSession: (sessionId: SessionId) => void;
-  onResumeSession: (sessionId: SessionId) => void;
-  onForkSession: (sessionId: SessionId) => void;
-  onDeleteSession: (sessionId: SessionId) => void;
-  onDeleteProject: (projectPath: string) => void;
-  onOpenProjectDefaults: (projectPath: string) => void;
+  callbacks: SidebarCallbacks;
 }
 
 const statusIndicatorMeta: Record<
@@ -99,17 +103,7 @@ export function SessionSidebar({
   groups,
   activeSessionId,
   isAddingProject,
-  onAddProject,
-  onOpenSettings,
-  onToggleProject,
-  onOpenNewSessionDialog,
-  onSelectSession,
-  onStopSession,
-  onResumeSession,
-  onForkSession,
-  onDeleteSession,
-  onDeleteProject,
-  onOpenProjectDefaults,
+  callbacks,
 }: SessionSidebarProps) {
   const [now, setNow] = useState(() => Date.now());
 
@@ -128,7 +122,7 @@ export function SessionSidebar({
       <div className="flex items-center gap-1.5 border-b border-border/70 p-2">
         <button
           type="button"
-          onClick={onOpenSettings}
+          onClick={callbacks.openSettings}
           className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-white/5 text-zinc-300 transition hover:bg-white/10 hover:text-white"
           aria-label="Settings"
         >
@@ -136,7 +130,7 @@ export function SessionSidebar({
         </button>
         <button
           type="button"
-          onClick={onAddProject}
+          onClick={callbacks.addProject}
           disabled={isAddingProject}
           className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-2.5 py-1.5 text-xs font-medium text-zinc-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
         >
@@ -157,7 +151,7 @@ export function SessionSidebar({
                   type="button"
                   onClick={() => {
                     if (group.fromProjectList) {
-                      onToggleProject(group.path);
+                      callbacks.toggleProject(group.path);
                     }
                   }}
                   className={cn(
@@ -190,7 +184,7 @@ export function SessionSidebar({
                       <button
                         type="button"
                         onClick={() => {
-                          onDeleteProject(group.path);
+                          callbacks.deleteProject(group.path);
                         }}
                         className="inline-flex size-6 items-center justify-center rounded-md text-zinc-300 opacity-0 transition hover:bg-white/10 hover:text-rose-300 focus-visible:opacity-100 group-hover/project:opacity-100"
                         aria-label={`Delete project ${group.name}`}
@@ -201,7 +195,7 @@ export function SessionSidebar({
                     <button
                       type="button"
                       onClick={() => {
-                        onOpenProjectDefaults(group.path);
+                        callbacks.openProjectDefaults(group.path);
                       }}
                       className="inline-flex size-6 items-center justify-center rounded-md text-zinc-300 opacity-0 transition hover:bg-white/10 hover:text-white focus-visible:opacity-100 group-hover/project:opacity-100"
                       aria-label={`Project defaults for ${group.name}`}
@@ -211,7 +205,7 @@ export function SessionSidebar({
                     <button
                       type="button"
                       onClick={() => {
-                        onOpenNewSessionDialog(group.path);
+                        callbacks.openNewSessionDialog(group.path);
                       }}
                       className="inline-flex size-6 items-center justify-center rounded-md text-zinc-300 opacity-0 transition hover:bg-white/10 hover:text-white focus-visible:opacity-100 group-hover/project:opacity-100"
                       aria-label={`New session in ${group.name}`}
@@ -259,7 +253,7 @@ export function SessionSidebar({
                           <button
                             type="button"
                             onClick={() => {
-                              onSelectSession(session.sessionId);
+                              callbacks.selectSession(session.sessionId);
                             }}
                             className={cn(
                               "flex w-full items-center justify-start gap-1.5 rounded-md px-1.5 py-1 pr-[4.5rem] text-sm transition",
@@ -291,7 +285,7 @@ export function SessionSidebar({
                               type="button"
                               onClick={(event) => {
                                 event.stopPropagation();
-                                void onForkSession(session.sessionId);
+                                void callbacks.forkSession(session.sessionId);
                               }}
                               className={cn(
                                 "pointer-events-auto inline-flex size-5 items-center justify-center rounded text-zinc-300 transition",
@@ -310,10 +304,10 @@ export function SessionSidebar({
                               onClick={(event) => {
                                 event.stopPropagation();
                                 if (canResume) {
-                                  void onResumeSession(session.sessionId);
+                                  void callbacks.resumeSession(session.sessionId);
                                   return;
                                 }
-                                void onStopSession(session.sessionId);
+                                void callbacks.stopSession(session.sessionId);
                               }}
                               className={cn(
                                 "pointer-events-auto inline-flex size-5 items-center justify-center rounded text-zinc-300 transition",
@@ -331,7 +325,7 @@ export function SessionSidebar({
                               type="button"
                               onClick={(event) => {
                                 event.stopPropagation();
-                                void onDeleteSession(session.sessionId);
+                                void callbacks.deleteSession(session.sessionId);
                               }}
                               className="pointer-events-auto inline-flex size-5 items-center justify-center rounded text-zinc-300 transition hover:bg-white/10 hover:text-rose-300"
                               aria-label={`Delete ${sessionTitle}`}

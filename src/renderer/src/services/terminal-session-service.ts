@@ -13,8 +13,10 @@ import {
   SESSION_OUTPUT_MAX_LINES,
   SessionOutputRingBuffer,
 } from "./session-output-ring-buffer";
-import { createTerminalSessionActions } from "./terminal-session-actions";
-import { registerTerminalSessionIpcSubscriptions } from "./terminal-session-ipc-subscriptions";
+import {
+  createTerminalSessionActions,
+  getDefaultDialogState,
+} from "./terminal-session-actions";
 
 export type { ClaudeProject as SidebarProject } from "@shared/claude-types";
 
@@ -49,26 +51,6 @@ export interface TerminalSessionState {
 
 type Listener = () => void;
 
-function getDefaultDialogState(): NewSessionDialogState {
-  return {
-    open: false,
-    projectPath: null,
-    initialPrompt: "",
-    sessionName: "",
-    model: "opus",
-    permissionMode: "default",
-  };
-}
-
-function getDefaultProjectDefaultsDialogState(): ProjectDefaultsDialogState {
-  return {
-    open: false,
-    projectPath: null,
-    defaultModel: undefined,
-    defaultPermissionMode: undefined,
-  };
-}
-
 export class TerminalSessionService {
   private state: TerminalSessionState;
   private sessionOutputById: Record<SessionId, SessionOutputRingBuffer> = {};
@@ -89,8 +71,13 @@ export class TerminalSessionService {
       projects: [],
       sessionsById: {},
       activeSessionId: null,
-      newSessionDialog: getDefaultDialogState(),
-      projectDefaultsDialog: getDefaultProjectDefaultsDialogState(),
+      newSessionDialog: getDefaultDialogState(null, false),
+      projectDefaultsDialog: {
+        open: false,
+        projectPath: null,
+        defaultModel: undefined,
+        defaultPermissionMode: undefined,
+      },
       settingsDialogOpen: false,
       isSelecting: false,
       isStarting: false,
@@ -157,33 +144,86 @@ export class TerminalSessionService {
 
     this.initialized = true;
 
-    this.unsubscribers = registerTerminalSessionIpcSubscriptions({
-      getState: () => this.state,
-      appendSessionOutput: (sessionId, chunk) => {
-        this.appendSessionOutput(sessionId, chunk);
-      },
-      writeToTerminal: (chunk) => {
-        this.terminal?.write(chunk);
-      },
-      setRenderedOutputMeta: (sessionId, outputLength) => {
-        this.renderedSessionId = sessionId;
-        this.renderedOutputLength = outputLength;
-      },
-      getSessionOutputLength: (sessionId) =>
-        this.getSessionOutputLength(sessionId),
-      updateSession: (sessionId, mutate) =>
-        this.updateSession(sessionId, mutate),
-      refreshSessions: async () => this.refreshSessions(),
-      updateState: (updater) => {
-        this.updateState(updater);
-      },
-      renderActiveSessionOutput: (force) => {
-        this.renderActiveSessionOutput(force);
-      },
-      focusTerminal: () => {
-        this.focusTerminal();
-      },
-    });
+    this.unsubscribers = [
+      claudeIpc.onClaudeSessionData((payload) => {
+        this.appendSessionOutput(payload.sessionId, payload.chunk);
+        if (payload.sessionId === this.state.activeSessionId) {
+          this.terminal?.write(payload.chunk);
+          this.renderedSessionId = payload.sessionId;
+          this.renderedOutputLength = this.getSessionOutputLength(
+            payload.sessionId,
+          );
+        }
+      }),
+      claudeIpc.onClaudeSessionExit((payload) => {
+        if (
+          !this.updateSession(payload.sessionId, (session) => ({
+            ...session,
+            status: "stopped",
+          }))
+        ) {
+          void this.refreshSessions();
+        }
+      }),
+      claudeIpc.onClaudeSessionError((payload) => {
+        if (
+          !this.updateSession(payload.sessionId, (session) => ({
+            ...session,
+            lastError: payload.message,
+            status: "error",
+          }))
+        ) {
+          void this.refreshSessions();
+          return;
+        }
+
+        if (payload.sessionId === this.state.activeSessionId) {
+          this.updateState((prev) => ({
+            ...prev,
+            errorMessage: payload.message,
+          }));
+        }
+      }),
+      claudeIpc.onClaudeSessionUpdated((payload) => {
+        const { sessionId, updates } = payload;
+
+        const didUpdate = this.updateSession(sessionId, (session) => {
+          const merged = { ...session, ...updates };
+          if ("status" in updates && updates.status !== "error") {
+            merged.lastError = null;
+          }
+          return merged;
+        });
+
+        if (
+          !didUpdate &&
+          ("status" in updates ||
+            "activityState" in updates ||
+            "activityWarning" in updates)
+        ) {
+          void this.refreshSessions();
+        }
+      }),
+      claudeIpc.onClaudeActiveSessionChanged((payload) => {
+        if (this.state.activeSessionId !== payload.activeSessionId) {
+          this.updateState((prev) => ({
+            ...prev,
+            activeSessionId: payload.activeSessionId,
+          }));
+          this.renderActiveSessionOutput(true);
+          if (payload.activeSessionId) {
+            this.focusTerminal();
+          }
+        }
+
+        if (
+          payload.activeSessionId &&
+          !(payload.activeSessionId in this.state.sessionsById)
+        ) {
+          void this.refreshSessions();
+        }
+      }),
+    ];
 
     await this.refreshSessions();
   }

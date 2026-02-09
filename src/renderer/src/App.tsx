@@ -72,45 +72,25 @@ function App() {
         groups={groups}
         activeSessionId={state.activeSessionId}
         isAddingProject={state.isSelecting}
-        onAddProject={() => {
-          void actions.addProject();
+        callbacks={{
+          addProject: () => void actions.addProject(),
+          openSettings: actions.openSettingsDialog,
+          toggleProject: (path) => void actions.toggleProjectCollapsed(path),
+          openNewSessionDialog: actions.openNewSessionDialog,
+          selectSession: (id) => void actions.setActiveSession(id),
+          stopSession: (id) => void actions.stopSession(id),
+          resumeSession: (id) => {
+            const size = terminalRef.current?.getSize() ?? { cols: 80, rows: 24 };
+            void actions.resumeSession(id, size);
+          },
+          forkSession: (id) => {
+            const size = terminalRef.current?.getSize() ?? { cols: 80, rows: 24 };
+            void actions.forkSession(id, size);
+          },
+          deleteSession: (id) => void actions.deleteSession(id),
+          deleteProject: (path) => void actions.deleteProject(path),
+          openProjectDefaults: actions.openProjectDefaultsDialog,
         }}
-        onOpenSettings={actions.openSettingsDialog}
-        onToggleProject={(projectPath) => {
-          void actions.toggleProjectCollapsed(projectPath);
-        }}
-        onOpenNewSessionDialog={actions.openNewSessionDialog}
-        onSelectSession={(sessionId) => {
-          void actions.setActiveSession(sessionId);
-        }}
-        onStopSession={(sessionId) => {
-          void actions.stopSession(sessionId);
-        }}
-        onResumeSession={(sessionId) => {
-          const terminalSize = terminalRef.current?.getSize() ?? {
-            cols: 80,
-            rows: 24,
-          };
-
-          void actions.resumeSession(sessionId, {
-            cols: terminalSize.cols,
-            rows: terminalSize.rows,
-          });
-        }}
-        onForkSession={(sessionId) => {
-          const terminalSize = terminalRef.current?.getSize() ?? {
-            cols: 80,
-            rows: 24,
-          };
-          void actions.forkSession(sessionId, terminalSize);
-        }}
-        onDeleteSession={(sessionId) => {
-          void actions.deleteSession(sessionId);
-        }}
-        onDeleteProject={(projectPath) => {
-          void actions.deleteProject(projectPath);
-        }}
-        onOpenProjectDefaults={actions.openProjectDefaultsDialog}
       />
 
       <main className="flex min-w-0 flex-1 flex-col bg-black/15">

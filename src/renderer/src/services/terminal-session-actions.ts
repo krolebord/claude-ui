@@ -52,7 +52,7 @@ interface CreateTerminalSessionActionsDeps {
   focusTerminal: () => void;
 }
 
-function getDefaultDialogState(
+export function getDefaultDialogState(
   projectPath: string | null,
   open: boolean,
   projectDefaults?: Pick<
@@ -70,6 +70,24 @@ function getDefaultDialogState(
       projectDefaults?.defaultPermissionMode ?? ("default" as const),
   };
 }
+
+function setError(
+  deps: CreateTerminalSessionActionsDeps,
+  error: unknown,
+  fallback: string,
+): void {
+  deps.updateState((prev) => ({
+    ...prev,
+    errorMessage: error instanceof Error ? error.message : fallback,
+  }));
+}
+
+const closedProjectDefaultsDialog: ProjectDefaultsDialogState = {
+  open: false,
+  projectPath: null,
+  defaultModel: undefined,
+  defaultPermissionMode: undefined,
+};
 
 async function startSessionInProject(
   deps: CreateTerminalSessionActionsDeps,
@@ -103,10 +121,7 @@ async function startSessionInProject(
     const result = await claudeIpc.startClaudeSession(startInput);
 
     if (!result.ok) {
-      deps.updateState((prev) => ({
-        ...prev,
-        errorMessage: result.message,
-      }));
+      setError(deps, new Error(result.message), result.message);
       return;
     }
 
@@ -114,11 +129,7 @@ async function startSessionInProject(
     deps.clearTerminal();
     deps.focusTerminal();
   } catch (error) {
-    deps.updateState((prev) => ({
-      ...prev,
-      errorMessage:
-        error instanceof Error ? error.message : "Failed to start session.",
-    }));
+    setError(deps, error, "Failed to start session.");
   } finally {
     deps.updateState((prev) => ({
       ...prev,
@@ -178,11 +189,7 @@ export function createTerminalSessionActions(
           },
         }));
       } catch (error) {
-        deps.updateState((prev) => ({
-          ...prev,
-          errorMessage:
-            error instanceof Error ? error.message : "Failed to add project.",
-        }));
+        setError(deps, error, "Failed to add project.");
       } finally {
         deps.updateState((prev) => ({
           ...prev,
@@ -205,13 +212,7 @@ export function createTerminalSessionActions(
         });
         deps.applySnapshot(snapshot);
       } catch (error) {
-        deps.updateState((prev) => ({
-          ...prev,
-          errorMessage:
-            error instanceof Error
-              ? error.message
-              : "Failed to update project state.",
-        }));
+        setError(deps, error, "Failed to update project state.");
       }
     },
     openNewSessionDialog: (projectPath: string): void => {
@@ -268,11 +269,7 @@ export function createTerminalSessionActions(
       try {
         await claudeIpc.stopClaudeSession({ sessionId });
       } catch (error) {
-        deps.updateState((prev) => ({
-          ...prev,
-          errorMessage:
-            error instanceof Error ? error.message : "Failed to stop session.",
-        }));
+        setError(deps, error, "Failed to stop session.");
       } finally {
         deps.updateState((prev) => ({
           ...prev,
@@ -288,11 +285,7 @@ export function createTerminalSessionActions(
       try {
         await claudeIpc.stopClaudeSession({ sessionId });
       } catch (error) {
-        deps.updateState((prev) => ({
-          ...prev,
-          errorMessage:
-            error instanceof Error ? error.message : "Failed to stop session.",
-        }));
+        setError(deps, error, "Failed to stop session.");
       }
     },
     resumeSession: async (
@@ -334,13 +327,7 @@ export function createTerminalSessionActions(
         await claudeIpc.deleteClaudeProject({ path: projectPath });
         await deps.refreshSessions();
       } catch (error) {
-        deps.updateState((prev) => ({
-          ...prev,
-          errorMessage:
-            error instanceof Error
-              ? error.message
-              : "Failed to delete project.",
-        }));
+        setError(deps, error, "Failed to delete project.");
       }
     },
     deleteSession: async (sessionId: SessionId): Promise<void> => {
@@ -352,13 +339,7 @@ export function createTerminalSessionActions(
         await claudeIpc.deleteClaudeSession({ sessionId });
         await deps.refreshSessions();
       } catch (error) {
-        deps.updateState((prev) => ({
-          ...prev,
-          errorMessage:
-            error instanceof Error
-              ? error.message
-              : "Failed to delete session.",
-        }));
+        setError(deps, error, "Failed to delete session.");
       }
     },
     setActiveSession: async (sessionId: SessionId): Promise<void> => {
@@ -369,13 +350,7 @@ export function createTerminalSessionActions(
       try {
         await claudeIpc.setActiveSession({ sessionId });
       } catch (error) {
-        deps.updateState((prev) => ({
-          ...prev,
-          errorMessage:
-            error instanceof Error
-              ? error.message
-              : "Failed to switch session.",
-        }));
+        setError(deps, error, "Failed to switch session.");
       }
     },
     writeToActiveSession: (data: string): void => {
@@ -415,12 +390,7 @@ export function createTerminalSessionActions(
     closeProjectDefaultsDialog: (): void => {
       deps.updateState((prev) => ({
         ...prev,
-        projectDefaultsDialog: {
-          open: false,
-          projectPath: null,
-          defaultModel: undefined,
-          defaultPermissionMode: undefined,
-        },
+        projectDefaultsDialog: closedProjectDefaultsDialog,
       }));
     },
     updateProjectDefaultsDialog: <K extends keyof ProjectDefaultsDialogState>(
@@ -439,12 +409,7 @@ export function createTerminalSessionActions(
       deps.applySnapshot(snapshot);
       deps.updateState((prev) => ({
         ...prev,
-        projectDefaultsDialog: {
-          open: false,
-          projectPath: null,
-          defaultModel: undefined,
-          defaultPermissionMode: undefined,
-        },
+        projectDefaultsDialog: closedProjectDefaultsDialog,
       }));
     },
     openSettingsDialog: (): void => {
