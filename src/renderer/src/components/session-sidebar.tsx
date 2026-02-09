@@ -15,6 +15,7 @@ import {
   CircleDot,
   ChevronDown,
   ChevronRight,
+  Copy,
   Folder,
   FolderOpen,
   FolderPlus,
@@ -30,6 +31,14 @@ import {
   TriangleAlert,
   type LucideIcon,
 } from "lucide-react";
+import { toast } from "sonner";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@renderer/components/ui/context-menu";
 
 export interface SidebarCallbacks {
   addProject: () => void;
@@ -225,13 +234,17 @@ export function SessionSidebar({
               </div>
 
               {!group.collapsed ? (
-                <ul className="space-y-0.5 px-1.5 pb-1.5">
+                <ul className="space-y-0.5 px-1 pb-1">
                   {group.sessions.length > 0 ? (
                     group.sessions.map((session) => {
                       const isActive = activeSessionId === session.sessionId;
-                      const isLoading = loadingSessionIds.has(session.sessionId);
-                      const statusState =
-                        getSessionSidebarIndicatorState(session, { isLoading });
+                      const isLoading = loadingSessionIds.has(
+                        session.sessionId,
+                      );
+                      const statusState = getSessionSidebarIndicatorState(
+                        session,
+                        { isLoading },
+                      );
                       const statusMeta = statusIndicatorMeta[statusState];
                       const StatusIcon = statusMeta.icon;
                       const sessionTitle = getSessionTitle(session);
@@ -241,8 +254,9 @@ export function SessionSidebar({
                       );
                       const ariaLabel = `${sessionTitle} (${statusMeta.label})`;
                       const canStop =
-                        session.status === "starting" ||
-                        session.status === "running";
+                        !isLoading &&
+                        (session.status === "starting" ||
+                          session.status === "running");
                       const canResume = session.status === "stopped";
                       const canControl = canStop || canResume;
                       const canFork =
@@ -258,91 +272,169 @@ export function SessionSidebar({
                         : `Stop ${sessionTitle}`;
 
                       return (
-                        <li key={session.sessionId} className="group/session relative">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              callbacks.selectSession(session.sessionId);
-                            }}
-                            className={cn(
-                              "flex w-full items-center justify-start gap-1.5 rounded-md px-1.5 py-1 pr-[4.5rem] text-sm transition",
-                              isActive
-                                ? "bg-white/15 text-white"
-                                : "text-zinc-300 hover:bg-white/8 hover:text-zinc-100",
-                            )}
-                            aria-label={ariaLabel}
-                          >
-                            <span className="inline-flex shrink-0" title={statusMeta.label}>
-                              <StatusIcon
-                                className={cn(
-                                  "size-3",
-                                  statusMeta.className,
-                                  statusMeta.animate && "animate-spin",
-                                )}
-                                aria-hidden="true"
-                              />
-                            </span>
-                            <span className="min-w-0 flex-1 truncate text-left">
-                              {sessionTitle}
-                            </span>
-                          </button>
-                          <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs tabular-nums text-zinc-400 transition group-hover/session:opacity-0 group-focus-within/session:opacity-0">
-                            {lastActivity}
-                          </span>
-                          <div className="pointer-events-none absolute inset-y-0 right-1 flex items-center gap-0.5 opacity-0 transition group-hover/session:opacity-100 group-focus-within/session:opacity-100">
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                void callbacks.forkSession(session.sessionId);
-                              }}
-                              className={cn(
-                                "pointer-events-auto inline-flex size-5 items-center justify-center rounded text-zinc-300 transition",
-                                canFork
-                                  ? "hover:bg-white/10 hover:text-white"
-                                  : "cursor-not-allowed opacity-40",
-                              )}
-                              aria-label={`Fork ${sessionTitle}`}
-                              title="Fork session"
-                              disabled={!canFork}
-                            >
-                              <GitFork className="size-3" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                if (canResume) {
-                                  void callbacks.resumeSession(session.sessionId);
-                                  return;
-                                }
-                                void callbacks.stopSession(session.sessionId);
-                              }}
-                              className={cn(
-                                "pointer-events-auto inline-flex size-5 items-center justify-center rounded text-zinc-300 transition",
-                                canControl
-                                  ? "hover:bg-white/10 hover:text-white"
-                                  : "cursor-not-allowed opacity-40",
-                              )}
-                              aria-label={controlAriaLabel}
-                              title={controlTitle}
-                              disabled={!canControl}
-                            >
-                              <ControlIcon className="size-3" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                void callbacks.deleteSession(session.sessionId);
-                              }}
-                              className="pointer-events-auto inline-flex size-5 items-center justify-center rounded text-zinc-300 transition hover:bg-white/10 hover:text-rose-300"
-                              aria-label={`Delete ${sessionTitle}`}
-                              title="Delete session"
-                            >
-                              <Trash2 className="size-3" />
-                            </button>
-                          </div>
+                        <li
+                          key={session.sessionId}
+                          className="group/session relative"
+                        >
+                          <ContextMenu>
+                            <ContextMenuTrigger asChild>
+                              <div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    callbacks.selectSession(session.sessionId);
+                                  }}
+                                  className={cn(
+                                    "flex w-full items-center justify-start gap-1.5 rounded-md px-1.5 py-1 pr-[3rem] text-sm transition",
+                                    isActive
+                                      ? "bg-white/15 text-white"
+                                      : "text-zinc-300 hover:bg-white/8 hover:text-zinc-100",
+                                  )}
+                                  aria-label={ariaLabel}
+                                >
+                                  <span
+                                    className="inline-flex shrink-0"
+                                    title={statusMeta.label}
+                                  >
+                                    <StatusIcon
+                                      className={cn(
+                                        "size-3",
+                                        statusMeta.className,
+                                        statusMeta.animate && "animate-spin",
+                                      )}
+                                      aria-hidden="true"
+                                    />
+                                  </span>
+                                  <span className="min-w-0 flex-1 truncate text-left">
+                                    {sessionTitle}
+                                  </span>
+                                </button>
+                                <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs tabular-nums text-zinc-400 transition group-hover/session:opacity-0 group-focus-within/session:opacity-0">
+                                  {lastActivity}
+                                </span>
+                                <div className="pointer-events-none absolute inset-y-0 right-1 flex items-center gap-0.5 opacity-0 transition group-hover/session:opacity-100 group-focus-within/session:opacity-100">
+                                  <button
+                                    type="button"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      if (canResume) {
+                                        void callbacks.resumeSession(
+                                          session.sessionId,
+                                        );
+                                        return;
+                                      }
+                                      void callbacks.stopSession(
+                                        session.sessionId,
+                                      );
+                                    }}
+                                    className={cn(
+                                      "pointer-events-auto inline-flex size-5 items-center justify-center rounded text-zinc-300 transition",
+                                      canControl
+                                        ? "hover:bg-white/10 hover:text-white"
+                                        : "cursor-not-allowed opacity-40",
+                                    )}
+                                    aria-label={controlAriaLabel}
+                                    title={controlTitle}
+                                    disabled={!canControl || isLoading}
+                                  >
+                                    <ControlIcon className="size-3" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      void callbacks.deleteSession(
+                                        session.sessionId,
+                                      );
+                                    }}
+                                    disabled={isLoading}
+                                    className={cn(
+                                      "pointer-events-auto inline-flex size-5 items-center justify-center rounded text-zinc-300 transition",
+                                      isLoading
+                                        ? "cursor-not-allowed opacity-40"
+                                        : "hover:bg-white/10 hover:text-rose-300",
+                                    )}
+                                    aria-label={`Delete ${sessionTitle}`}
+                                    title="Delete session"
+                                  >
+                                    <Trash2 className="size-3" />
+                                  </button>
+                                </div>
+                              </div>
+                            </ContextMenuTrigger>
+                            <ContextMenuContent>
+                              {canControl ? (
+                                <ContextMenuItem
+                                  disabled={isLoading}
+                                  onClick={() => {
+                                    if (canResume) {
+                                      void callbacks.resumeSession(
+                                        session.sessionId,
+                                      );
+                                    } else {
+                                      void callbacks.stopSession(
+                                        session.sessionId,
+                                      );
+                                    }
+                                  }}
+                                >
+                                  <ControlIcon className="size-3.5" />
+                                  {canResume ? "Resume" : "Stop"}
+                                </ContextMenuItem>
+                              ) : null}
+                              {canFork ? (
+                                <ContextMenuItem
+                                  disabled={isLoading}
+                                  onClick={() => {
+                                    void callbacks.forkSession(
+                                      session.sessionId,
+                                    );
+                                  }}
+                                >
+                                  <GitFork className="size-3.5" />
+                                  Fork session
+                                </ContextMenuItem>
+                              ) : null}
+                              {canControl || canFork ? (
+                                <ContextMenuSeparator />
+                              ) : null}
+                              <ContextMenuItem
+                                onClick={() => {
+                                  void navigator.clipboard.writeText(
+                                    session.sessionId,
+                                  );
+                                  toast.success("Session ID copied");
+                                }}
+                              >
+                                <Copy className="size-3.5" />
+                                Copy session ID
+                              </ContextMenuItem>
+                              <ContextMenuItem
+                                onClick={() => {
+                                  void navigator.clipboard.writeText(
+                                    session.cwd,
+                                  );
+                                  toast.success("Working directory copied");
+                                }}
+                              >
+                                <Copy className="size-3.5" />
+                                Copy working directory
+                              </ContextMenuItem>
+                              <ContextMenuSeparator />
+                              <ContextMenuItem
+                                variant="destructive"
+                                disabled={isLoading}
+                                onClick={() => {
+                                  void callbacks.deleteSession(
+                                    session.sessionId,
+                                  );
+                                }}
+                              >
+                                <Trash2 className="size-3.5" />
+                                Delete session
+                              </ContextMenuItem>
+                            </ContextMenuContent>
+                          </ContextMenu>
                         </li>
                       );
                     })
