@@ -88,7 +88,12 @@ async function createWindow(): Promise<void> {
   }
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith("https:")) {
+    if (
+      url.startsWith("https:") ||
+      url.startsWith("http:") ||
+      url.startsWith("chrome:") ||
+      url.startsWith("file:")
+    ) {
       void shell.openExternal(url);
     }
     return { action: "deny" };

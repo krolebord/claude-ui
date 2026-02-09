@@ -1,5 +1,6 @@
 import { cn } from "@renderer/lib/utils";
 import { FitAddon } from "@xterm/addon-fit";
+import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Terminal } from "@xterm/xterm";
 import {
   forwardRef,
@@ -76,6 +77,7 @@ function TerminalPaneComponent(
     const fitAddon = new FitAddon();
 
     terminal.loadAddon(fitAddon);
+    terminal.loadAddon(new WebLinksAddon());
     terminal.open(container);
     terminalRef.current = terminal;
 
