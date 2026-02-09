@@ -71,6 +71,7 @@ function App() {
       <SessionSidebar
         groups={groups}
         activeSessionId={state.activeSessionId}
+        loadingSessionIds={state.loadingSessionIds}
         isAddingProject={state.isSelecting}
         callbacks={{
           addProject: () => void actions.addProject(),

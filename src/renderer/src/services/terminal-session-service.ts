@@ -46,6 +46,7 @@ export interface TerminalSessionState {
   isSelecting: boolean;
   isStarting: boolean;
   isStopping: boolean;
+  loadingSessionIds: Set<SessionId>;
   errorMessage: string;
 }
 
@@ -82,6 +83,7 @@ export class TerminalSessionService {
       isSelecting: false,
       isStarting: false,
       isStopping: false,
+      loadingSessionIds: new Set(),
       errorMessage: "",
     };
 

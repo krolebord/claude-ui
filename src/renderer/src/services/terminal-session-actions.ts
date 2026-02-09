@@ -264,6 +264,7 @@ export function createTerminalSessionActions(
       deps.updateState((prev) => ({
         ...prev,
         isStopping: true,
+        loadingSessionIds: new Set(prev.loadingSessionIds).add(sessionId),
       }));
 
       try {
@@ -271,10 +272,11 @@ export function createTerminalSessionActions(
       } catch (error) {
         setError(deps, error, "Failed to stop session.");
       } finally {
-        deps.updateState((prev) => ({
-          ...prev,
-          isStopping: false,
-        }));
+        deps.updateState((prev) => {
+          const next = new Set(prev.loadingSessionIds);
+          next.delete(sessionId);
+          return { ...prev, isStopping: false, loadingSessionIds: next };
+        });
       }
     },
     stopSession: async (sessionId: SessionId): Promise<void> => {
@@ -282,10 +284,21 @@ export function createTerminalSessionActions(
         return;
       }
 
+      deps.updateState((prev) => ({
+        ...prev,
+        loadingSessionIds: new Set(prev.loadingSessionIds).add(sessionId),
+      }));
+
       try {
         await claudeIpc.stopClaudeSession({ sessionId });
       } catch (error) {
         setError(deps, error, "Failed to stop session.");
+      } finally {
+        deps.updateState((prev) => {
+          const next = new Set(prev.loadingSessionIds);
+          next.delete(sessionId);
+          return { ...prev, loadingSessionIds: next };
+        });
       }
     },
     resumeSession: async (
@@ -303,6 +316,7 @@ export function createTerminalSessionActions(
         cols: input.cols,
         rows: input.rows,
         resumeSessionId: sessionId,
+        permissionMode: session.permissionMode,
       });
     },
     forkSession: async (
@@ -320,6 +334,7 @@ export function createTerminalSessionActions(
         cols: input.cols,
         rows: input.rows,
         forkSessionId: sessionId,
+        permissionMode: session.permissionMode,
       });
     },
     deleteProject: async (projectPath: string): Promise<void> => {
@@ -335,11 +350,22 @@ export function createTerminalSessionActions(
         return;
       }
 
+      deps.updateState((prev) => ({
+        ...prev,
+        loadingSessionIds: new Set(prev.loadingSessionIds).add(sessionId),
+      }));
+
       try {
         await claudeIpc.deleteClaudeSession({ sessionId });
         await deps.refreshSessions();
       } catch (error) {
         setError(deps, error, "Failed to delete session.");
+      } finally {
+        deps.updateState((prev) => {
+          const next = new Set(prev.loadingSessionIds);
+          next.delete(sessionId);
+          return { ...prev, loadingSessionIds: next };
+        });
       }
     },
     setActiveSession: async (sessionId: SessionId): Promise<void> => {

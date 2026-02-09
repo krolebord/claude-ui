@@ -113,9 +113,14 @@ export class ClaudeSessionManager {
       const token = ++this.tokenCounter;
       this.activeSession = { pty, token };
 
+      let receivedFirstData = false;
       pty.onData((chunk) => {
         if (this.activeSession?.token !== token) {
           return;
+        }
+        if (!receivedFirstData) {
+          receivedFirstData = true;
+          this.setStatus("running");
         }
         this.callbacks.emitData(chunk);
       });
@@ -140,7 +145,6 @@ export class ClaudeSessionManager {
         });
       });
 
-      this.setStatus("running");
       return { ok: true };
     } catch (error) {
       this.activeSession = null;

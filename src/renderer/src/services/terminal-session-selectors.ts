@@ -15,6 +15,7 @@ export interface ProjectSessionGroup {
 
 export type SessionSidebarIndicatorState =
   | "idle"
+  | "loading"
   | "pending"
   | "running"
   | "awaiting_approval"
@@ -112,7 +113,12 @@ export function getSessionLastActivityLabel(
 
 export function getSessionSidebarIndicatorState(
   session: ClaudeSessionSnapshot,
+  options?: { isLoading?: boolean },
 ): SessionSidebarIndicatorState {
+  if (options?.isLoading || session.status === "starting") {
+    return "loading";
+  }
+
   if (session.status === "error") {
     return "error";
   }
@@ -129,7 +135,7 @@ export function getSessionSidebarIndicatorState(
     return "awaiting_user_response";
   }
 
-  if (session.status === "starting" || session.activityState === "working") {
+  if (session.activityState === "working") {
     return "pending";
   }
 

@@ -179,7 +179,7 @@ describe("getSessionSidebarIndicatorState", () => {
     expect(state).toBe("awaiting_user_response");
   });
 
-  it("maps starting status to pending", () => {
+  it("maps starting status to loading", () => {
     const state = getSessionSidebarIndicatorState(
       makeIndicatorSession({
         status: "starting",
@@ -187,7 +187,19 @@ describe("getSessionSidebarIndicatorState", () => {
       }),
     );
 
-    expect(state).toBe("pending");
+    expect(state).toBe("loading");
+  });
+
+  it("maps isLoading flag to loading regardless of session state", () => {
+    const state = getSessionSidebarIndicatorState(
+      makeIndicatorSession({
+        status: "running",
+        activityState: "working",
+      }),
+      { isLoading: true },
+    );
+
+    expect(state).toBe("loading");
   });
 
   it("maps working activity to pending", () => {
@@ -646,6 +658,68 @@ describe("TerminalSessionService", () => {
       cols: 132,
       rows: 44,
       resumeSessionId: "session-2",
+    });
+
+    service.release();
+  });
+
+  it("resumes a stopped session with its original permissionMode", async () => {
+    ipcHarness.claudeIpc.getSessions.mockResolvedValueOnce({
+      projects: [],
+      activeSessionId: "session-2",
+      sessions: [
+        {
+          sessionId: "session-2",
+          cwd: "/workspace/two",
+          sessionName: null,
+          permissionMode: "yolo",
+          status: "stopped",
+          activityState: "idle",
+          activityWarning: null,
+          lastError: null,
+          createdAt: "2026-02-06T00:00:01.000Z",
+          lastActivityAt: "2026-02-06T00:00:01.000Z",
+        },
+      ],
+    });
+    ipcHarness.claudeIpc.startClaudeSession.mockResolvedValueOnce({
+      ok: true,
+      sessionId: "session-2",
+      snapshot: {
+        projects: [],
+        activeSessionId: "session-2",
+        sessions: [
+          {
+            sessionId: "session-2",
+            cwd: "/workspace/two",
+            sessionName: null,
+            permissionMode: "yolo",
+            status: "running",
+            activityState: "working",
+            activityWarning: null,
+            lastError: null,
+            createdAt: "2026-02-06T00:00:01.000Z",
+            lastActivityAt: "2026-02-06T00:00:01.000Z",
+          },
+        ],
+      },
+    });
+
+    const service = new TerminalSessionService();
+    service.retain();
+
+    await vi.waitFor(() => {
+      expect(ipcHarness.claudeIpc.getSessions).toHaveBeenCalledTimes(1);
+    });
+
+    await service.actions.resumeSession("session-2", { cols: 132, rows: 44 });
+
+    expect(ipcHarness.claudeIpc.startClaudeSession).toHaveBeenCalledWith({
+      cwd: "/workspace/two",
+      cols: 132,
+      rows: 44,
+      resumeSessionId: "session-2",
+      permissionMode: "yolo",
     });
 
     service.release();

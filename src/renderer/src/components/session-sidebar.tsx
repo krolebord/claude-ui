@@ -48,6 +48,7 @@ export interface SidebarCallbacks {
 interface SessionSidebarProps {
   groups: ProjectSessionGroup[];
   activeSessionId: SessionId | null;
+  loadingSessionIds: Set<SessionId>;
   isAddingProject: boolean;
   callbacks: SidebarCallbacks;
 }
@@ -65,6 +66,12 @@ const statusIndicatorMeta: Record<
     icon: CircleDot,
     label: "Idle",
     className: "text-zinc-500",
+  },
+  loading: {
+    icon: LoaderCircle,
+    label: "Loading",
+    className: "text-zinc-400",
+    animate: true,
   },
   pending: {
     icon: LoaderCircle,
@@ -102,6 +109,7 @@ const statusIndicatorMeta: Record<
 export function SessionSidebar({
   groups,
   activeSessionId,
+  loadingSessionIds,
   isAddingProject,
   callbacks,
 }: SessionSidebarProps) {
@@ -221,8 +229,9 @@ export function SessionSidebar({
                   {group.sessions.length > 0 ? (
                     group.sessions.map((session) => {
                       const isActive = activeSessionId === session.sessionId;
+                      const isLoading = loadingSessionIds.has(session.sessionId);
                       const statusState =
-                        getSessionSidebarIndicatorState(session);
+                        getSessionSidebarIndicatorState(session, { isLoading });
                       const statusMeta = statusIndicatorMeta[statusState];
                       const StatusIcon = statusMeta.icon;
                       const sessionTitle = getSessionTitle(session);
