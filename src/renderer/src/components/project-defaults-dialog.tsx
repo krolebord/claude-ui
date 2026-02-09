@@ -18,6 +18,10 @@ import {
   SelectValue,
 } from "@renderer/components/ui/select";
 import { claudeIpc } from "@renderer/lib/ipc";
+import {
+  MODEL_OPTIONS,
+  getProjectNameFromPath,
+} from "@renderer/services/terminal-session-selectors";
 import type {
   ClaudeModel,
   ClaudePermissionMode,
@@ -37,19 +41,6 @@ interface ProjectDefaultsDialogProps {
   onCancel: () => void;
   onSaved: (snapshot: ClaudeSessionsSnapshot) => void;
 }
-
-function getProjectNameFromPath(path: string): string {
-  const normalized = path.replace(/\\/g, "/");
-  const segments = normalized.split("/").filter(Boolean);
-
-  return segments[segments.length - 1] ?? path;
-}
-
-const MODEL_OPTIONS: { value: ClaudeModel; label: string }[] = [
-  { value: "opus", label: "Opus" },
-  { value: "sonnet", label: "Sonnet" },
-  { value: "haiku", label: "Haiku" },
-];
 
 export function ProjectDefaultsDialog({
   open,

@@ -1,4 +1,5 @@
-import { type ClaudeUsageResult, getUsage } from "./claude-usage-service";
+import type { ClaudeUsageResult } from "../shared/claude-types";
+import { getUsage } from "./claude-usage-service";
 import log from "./logger";
 
 export class ClaudeUsageMonitor {

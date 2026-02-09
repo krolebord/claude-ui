@@ -596,19 +596,11 @@ export class ClaudeSessionService {
   }
 
   private createUniqueSessionId(): SessionId {
-    for (let attempt = 0; attempt < 100; attempt += 1) {
-      const sessionId = normalizeOptionalString(this.sessionIdFactory());
-      if (sessionId && !this.sessions.has(sessionId)) {
-        return sessionId;
-      }
+    let sessionId = normalizeOptionalString(this.sessionIdFactory());
+    while (!sessionId || this.sessions.has(sessionId)) {
+      sessionId = normalizeOptionalString(this.sessionIdFactory());
     }
-
-    let fallbackSessionId = randomUUID();
-    while (this.sessions.has(fallbackSessionId)) {
-      fallbackSessionId = randomUUID();
-    }
-
-    return fallbackSessionId;
+    return sessionId;
   }
 
   private persistSessionSnapshots(): void {

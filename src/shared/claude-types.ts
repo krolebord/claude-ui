@@ -194,11 +194,7 @@ export interface ClaudeExtraUsage {
 export interface ClaudeUsageData {
   five_hour: ClaudeUsageBucket | null;
   seven_day: ClaudeUsageBucket | null;
-  seven_day_oauth_apps: ClaudeUsageBucket | null;
-  seven_day_opus: ClaudeUsageBucket | null;
   seven_day_sonnet: ClaudeUsageBucket | null;
-  seven_day_cowork: ClaudeUsageBucket | null;
-  iguana_necktie: ClaudeUsageBucket | null;
   extra_usage: ClaudeExtraUsage | null;
 }
 

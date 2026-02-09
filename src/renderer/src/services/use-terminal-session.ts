@@ -1,5 +1,4 @@
 import { useEffect, useSyncExternalStore } from "react";
-import { buildProjectSessionGroups } from "./terminal-session-selectors";
 import {
   type TerminalSessionService,
   type TerminalSessionState,
@@ -33,5 +32,3 @@ export function useTerminalSession(): UseTerminalSessionResult {
     actions: service.actions,
   };
 }
-
-export { buildProjectSessionGroups };

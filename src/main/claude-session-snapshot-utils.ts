@@ -1,35 +1,29 @@
-import type {
-  ClaudeActivityState,
-  ClaudeSessionSnapshot,
-  ClaudeSessionStatus,
-  SessionId,
-} from "../shared/claude-types";
+import type { ClaudeSessionSnapshot } from "../shared/claude-types";
 
-export interface SessionSnapshotSource {
-  sessionId: SessionId;
-  cwd: string;
-  sessionName: string | null;
-  status: ClaudeSessionStatus;
-  activityState: ClaudeActivityState;
-  activityWarning: string | null;
-  lastError: string | null;
-  createdAt: string;
-  lastActivityAt: string;
-}
-
-export function toSnapshot(
-  record: SessionSnapshotSource,
+export function toSnapshot<T extends ClaudeSessionSnapshot>(
+  record: T,
 ): ClaudeSessionSnapshot {
+  const {
+    sessionId,
+    cwd,
+    sessionName,
+    status,
+    activityState,
+    activityWarning,
+    lastError,
+    createdAt,
+    lastActivityAt,
+  } = record;
   return {
-    sessionId: record.sessionId,
-    cwd: record.cwd,
-    sessionName: record.sessionName,
-    status: record.status,
-    activityState: record.activityState,
-    activityWarning: record.activityWarning,
-    lastError: record.lastError,
-    createdAt: record.createdAt,
-    lastActivityAt: record.lastActivityAt,
+    sessionId,
+    cwd,
+    sessionName,
+    status,
+    activityState,
+    activityWarning,
+    lastError,
+    createdAt,
+    lastActivityAt,
   };
 }
 

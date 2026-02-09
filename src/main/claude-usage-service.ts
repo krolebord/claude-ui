@@ -1,5 +1,6 @@
 import spawn from "nano-spawn";
 import * as z from "zod";
+import type { ClaudeUsageResult } from "../shared/claude-types";
 import log from "./logger";
 
 const CredentialsSchema = z.object({
@@ -34,12 +35,6 @@ const UsageResponseSchema = z.object({
   seven_day_sonnet: UsageBucketSchema,
   extra_usage: ExtraUsageSchema,
 });
-
-export type ClaudeUsageResponse = z.infer<typeof UsageResponseSchema>;
-
-export type ClaudeUsageResult =
-  | { ok: true; usage: ClaudeUsageResponse }
-  | { ok: false; message: string };
 
 export async function getUsage(): Promise<ClaudeUsageResult> {
   let credentialsJson: string;

@@ -1,4 +1,5 @@
 import type {
+  ClaudeModel,
   ClaudeProject,
   ClaudeSessionSnapshot,
   SessionId,
@@ -21,6 +22,12 @@ export type SessionSidebarIndicatorState =
   | "stopped"
   | "error";
 
+export const MODEL_OPTIONS: { value: ClaudeModel; label: string }[] = [
+  { value: "opus", label: "Opus" },
+  { value: "sonnet", label: "Sonnet" },
+  { value: "haiku", label: "Haiku" },
+];
+
 interface BuildProjectSessionGroupsInput {
   projects: ClaudeProject[];
   sessionsById: Record<SessionId, ClaudeSessionSnapshot>;
@@ -38,7 +45,7 @@ function compareSessionsByCreatedAtDesc(
   return toTimestamp(b.createdAt) - toTimestamp(a.createdAt);
 }
 
-function getProjectNameFromPath(path: string): string {
+export function getProjectNameFromPath(path: string): string {
   const normalized = path.replace(/\\/g, "/");
   const segments = normalized.split("/").filter(Boolean);
 
