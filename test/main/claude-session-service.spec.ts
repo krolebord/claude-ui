@@ -123,7 +123,7 @@ function createHarness(options?: {
         start: vi.fn(
           async () => options?.managerStartImpl?.() ?? ({ ok: true as const }),
         ),
-        stop: vi.fn(async () => ({ ok: true as const })),
+        stop: vi.fn(async () => {}),
         write: vi.fn(),
         resize: vi.fn(),
         dispose: vi.fn(),
@@ -181,13 +181,13 @@ describe("ClaudeSessionService", () => {
       path: "/workspace",
     });
 
-    expect(first.snapshot.projects).toEqual([
+    expect(first.projects).toEqual([
       {
         path: "/workspace",
         collapsed: false,
       },
     ]);
-    expect(second.snapshot.projects).toEqual([
+    expect(second.projects).toEqual([
       {
         path: "/workspace",
         collapsed: false,
@@ -211,7 +211,7 @@ describe("ClaudeSessionService", () => {
       collapsed: true,
     });
 
-    expect(result.snapshot.projects).toEqual([
+    expect(result.projects).toEqual([
       {
         path: "/workspace",
         collapsed: true,
@@ -234,7 +234,7 @@ describe("ClaudeSessionService", () => {
       collapsed: true,
     });
 
-    expect(result.snapshot.projects).toEqual([]);
+    expect(result.projects).toEqual([]);
     expect(harness.projectStore.writeProjects).not.toHaveBeenCalled();
   });
 
@@ -752,8 +752,7 @@ describe("ClaudeSessionService", () => {
     harness.service.addProject({ path: "/workspace" });
     const result = harness.service.deleteProject({ path: "/workspace" });
 
-    expect(result.ok).toBe(true);
-    expect(result.snapshot.projects).toEqual([]);
+    expect(result.projects).toEqual([]);
     expect(harness.storedProjects).toEqual([]);
   });
 

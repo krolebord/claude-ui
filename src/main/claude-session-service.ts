@@ -4,22 +4,16 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type {
   AddClaudeProjectInput,
-  AddClaudeProjectResult,
   ClaudeProject,
   ClaudeSessionsSnapshot,
   DeleteClaudeProjectInput,
-  DeleteClaudeProjectResult,
   DeleteClaudeSessionInput,
-  DeleteClaudeSessionResult,
   SessionId,
   SetClaudeProjectCollapsedInput,
-  SetClaudeProjectCollapsedResult,
   SetClaudeProjectDefaultsInput,
-  SetClaudeProjectDefaultsResult,
   StartClaudeSessionInput,
   StartClaudeSessionResult,
   StopClaudeSessionInput,
-  StopClaudeSessionResult,
 } from "../shared/claude-types";
 import { ClaudeActivityMonitor } from "./claude-activity-monitor";
 import type { ClaudeProjectStoreLike } from "./claude-project-store";
@@ -40,14 +34,11 @@ import {
   createSessionRecord,
   flushPendingSessionEvents,
 } from "./claude-session-record-factory";
-import { resumeStoppedSession } from "./claude-session-resume";
 import type { ClaudeSessionSnapshotStoreLike } from "./claude-session-snapshot-store";
 import {
   isTimestampNewer,
-  normalizeCreatedAt,
-  normalizeLastActivityAt,
-  normalizeResumeSessionId,
-  normalizeSessionName,
+  normalizeOptionalString,
+  normalizeStringWithFallback,
   toSnapshot,
 } from "./claude-session-snapshot-utils";
 import { generateSessionTitle } from "./generate-session-title";
@@ -142,50 +133,41 @@ export class ClaudeSessionService {
     };
   }
 
-  addProject(input: AddClaudeProjectInput): AddClaudeProjectResult {
+  addProject(input: AddClaudeProjectInput): ClaudeSessionsSnapshot {
     const next = addProjectToList(this.projects, input);
     if (next.didChange) {
       this.projects = next.projects;
       this.persistProjects();
     }
 
-    return {
-      ok: true,
-      snapshot: this.getSessionsSnapshot(),
-    };
+    return this.getSessionsSnapshot();
   }
 
   setProjectCollapsed(
     input: SetClaudeProjectCollapsedInput,
-  ): SetClaudeProjectCollapsedResult {
+  ): ClaudeSessionsSnapshot {
     const next = setProjectCollapsedInList(this.projects, input);
     if (next.didChange) {
       this.projects = next.projects;
       this.persistProjects();
     }
 
-    return {
-      ok: true,
-      snapshot: this.getSessionsSnapshot(),
-    };
+    return this.getSessionsSnapshot();
   }
 
   setProjectDefaults(
     input: SetClaudeProjectDefaultsInput,
-  ): SetClaudeProjectDefaultsResult {
+  ): ClaudeSessionsSnapshot {
     const next = setProjectDefaultsInList(this.projects, input);
     if (next.didChange) {
       this.projects = next.projects;
       this.persistProjects();
     }
 
-    return {
-      ok: true,
-      snapshot: this.getSessionsSnapshot(),
-    };
+    return this.getSessionsSnapshot();
   }
 
-  deleteProject(input: DeleteClaudeProjectInput): DeleteClaudeProjectResult {
+  deleteProject(input: DeleteClaudeProjectInput): ClaudeSessionsSnapshot {
     const normalizedPath = normalizeProjectPath(input.path);
     const hasSession = Array.from(this.sessions.values()).some(
       (record) => record.cwd === normalizedPath,
@@ -202,16 +184,13 @@ export class ClaudeSessionService {
       this.persistProjects();
     }
 
-    return {
-      ok: true,
-      snapshot: this.getSessionsSnapshot(),
-    };
+    return this.getSessionsSnapshot();
   }
 
   async startSession(
     input: StartClaudeSessionInput,
   ): Promise<StartClaudeSessionResult> {
-    const forkSessionId = normalizeResumeSessionId(input.forkSessionId);
+    const forkSessionId = normalizeOptionalString(input.forkSessionId);
     if (forkSessionId) {
       const sourceRecord = this.sessions.get(forkSessionId);
       if (!sourceRecord) {
@@ -230,69 +209,54 @@ export class ClaudeSessionService {
       this.sessions.set(sessionId, record);
       this.persistSessionSnapshots();
 
-      try {
-        const stateFilePath = await this.stateFileFactory(sessionId);
-        record.stateFilePath = stateFilePath;
-        record.monitor.startMonitoring(stateFilePath);
+      return this.startAndMonitor(
+        record,
+        { cwd: sourceRecord.cwd, cols: input.cols, rows: input.rows },
+        {
+          pluginDir: this.pluginDir,
+          sessionId: record.sessionId,
+          resumeSessionId: forkSessionId,
+          forkSession: true,
+        },
+        { isNewRecord: true, errorPrefix: "Failed to fork session" },
+      );
+    }
 
-        const result = await record.manager.start(
-          { cwd: sourceRecord.cwd, cols: input.cols, rows: input.rows },
-          {
-            pluginDir: this.pluginDir,
-            stateFilePath,
-            sessionId: record.sessionId,
-            resumeSessionId: forkSessionId,
-            forkSession: true,
-          },
-        );
+    const resumeSessionId = normalizeOptionalString(input.resumeSessionId);
+    if (resumeSessionId) {
+      const record = this.sessions.get(resumeSessionId);
+      if (!record) {
+        return {
+          ok: false,
+          message: `Session does not exist: ${resumeSessionId}`,
+        };
+      }
 
-        if (!result.ok) {
-          this.cleanupStateFile(record);
-          this.removeSessionRecord(sessionId, record);
-          record.monitor.stopMonitoring();
-          record.manager.dispose();
-          return result;
-        }
-
-        record.ready = true;
+      if (record.status === "starting" || record.status === "running") {
         this.setActiveSessionInternal(record.sessionId);
-        flushPendingSessionEvents(record);
-
         return {
           ok: true,
           sessionId: record.sessionId,
           snapshot: this.getSessionsSnapshot(),
         };
-      } catch (error) {
-        this.cleanupStateFile(record);
-        this.removeSessionRecord(sessionId, record);
-        record.monitor.stopMonitoring();
-        record.manager.dispose();
-        return {
-          ok: false,
-          message:
-            error instanceof Error
-              ? `Failed to fork session: ${error.message}`
-              : "Failed to fork session due to an unknown error.",
-        };
       }
-    }
 
-    const resumeSessionId = normalizeResumeSessionId(input.resumeSessionId);
-    if (resumeSessionId) {
-      return resumeStoppedSession(
+      this.cleanupStateFile(record);
+
+      return this.startAndMonitor(
+        record,
         {
-          getRecord: (sessionId) => this.sessions.get(sessionId),
-          stateFileFactory: this.stateFileFactory,
-          cleanupStateFile: (record) => this.cleanupStateFile(record),
-          pluginDir: this.pluginDir,
-          setActiveSession: (sessionId) => {
-            this.setActiveSessionInternal(sessionId);
-          },
-          getSessionsSnapshot: () => this.getSessionsSnapshot(),
+          cwd: record.cwd,
+          cols: input.cols,
+          rows: input.rows,
+          permissionMode: input.permissionMode,
+          model: input.model,
         },
-        resumeSessionId,
-        input,
+        {
+          pluginDir: this.pluginDir,
+          resumeSessionId: record.sessionId,
+        },
+        { isNewRecord: false, errorPrefix: "Failed to resume session" },
       );
     }
 
@@ -305,109 +269,67 @@ export class ClaudeSessionService {
     const record = this.createRecord(
       sessionId,
       input.cwd,
-      normalizeSessionName(input.sessionName),
+      normalizeOptionalString(input.sessionName),
     );
     this.sessions.set(sessionId, record);
     this.persistSessionSnapshots();
 
-    try {
-      const stateFilePath = await this.stateFileFactory(sessionId);
-      record.stateFilePath = stateFilePath;
-      record.monitor.startMonitoring(stateFilePath);
-
-      const result = await record.manager.start(startInput, {
+    const result = await this.startAndMonitor(
+      record,
+      startInput,
+      {
         pluginDir: this.pluginDir,
-        stateFilePath,
+        sessionId: record.sessionId,
+      },
+      { isNewRecord: true, errorPrefix: "Failed to start session" },
+    );
+
+    if (result.ok && initialPrompt && !record.titleGenerationTriggered) {
+      record.titleGenerationTriggered = true;
+      log.info("Title generation triggered from startSession", {
         sessionId: record.sessionId,
       });
+      void this.generateTitleFactory(initialPrompt)
+        .then((title) => {
+          if (!this.sessions.has(record.sessionId)) {
+            return;
+          }
 
-      if (!result.ok) {
-        this.cleanupStateFile(record);
-        this.removeSessionRecord(sessionId, record);
-        record.monitor.stopMonitoring();
-        record.manager.dispose();
-        if (this.activeSessionId === sessionId) {
-          this.setActiveSessionInternal(null);
-        }
-        return result;
-      }
-
-      record.ready = true;
-      this.setActiveSessionInternal(record.sessionId);
-      flushPendingSessionEvents(record);
-
-      if (initialPrompt && !record.titleGenerationTriggered) {
-        record.titleGenerationTriggered = true;
-        log.info("Title generation triggered from startSession", {
-          sessionId: record.sessionId,
-        });
-        void this.generateTitleFactory(initialPrompt)
-          .then((title) => {
-            if (!this.sessions.has(record.sessionId)) {
-              return;
-            }
-
-            log.info("Title generation completed from startSession", {
-              sessionId: record.sessionId,
-              title,
-            });
-            record.sessionName = title;
-            this.persistSessionSnapshots();
-            this.callbacks.emitSessionUpdated({
-              sessionId: record.sessionId,
-              updates: { sessionName: title },
-            });
-          })
-          .catch((error) => {
-            log.error("Title generation failed from startSession", {
-              sessionId: record.sessionId,
-              error,
-            });
+          log.info("Title generation completed from startSession", {
+            sessionId: record.sessionId,
+            title,
           });
-      }
-
-      return {
-        ok: true,
-        sessionId: record.sessionId,
-        snapshot: this.getSessionsSnapshot(),
-      };
-    } catch (error) {
-      this.cleanupStateFile(record);
-      this.removeSessionRecord(sessionId, record);
-      record.monitor.stopMonitoring();
-      record.manager.dispose();
-      if (this.activeSessionId === sessionId) {
-        this.setActiveSessionInternal(null);
-      }
-
-      return {
-        ok: false,
-        message:
-          error instanceof Error
-            ? `Failed to start session: ${error.message}`
-            : "Failed to start session due to an unknown error.",
-      };
+          record.sessionName = title;
+          this.persistSessionSnapshots();
+          this.callbacks.emitSessionUpdated({
+            sessionId: record.sessionId,
+            updates: { sessionName: title },
+          });
+        })
+        .catch((error) => {
+          log.error("Title generation failed from startSession", {
+            sessionId: record.sessionId,
+            error,
+          });
+        });
     }
+
+    return result;
   }
 
-  async stopSession(
-    input: StopClaudeSessionInput,
-  ): Promise<StopClaudeSessionResult> {
+  async stopSession(input: StopClaudeSessionInput): Promise<void> {
     const record = this.sessions.get(input.sessionId);
     if (!record) {
-      return { ok: true };
+      return;
     }
 
     await record.manager.stop();
-    return { ok: true };
   }
 
-  async deleteSession(
-    input: DeleteClaudeSessionInput,
-  ): Promise<DeleteClaudeSessionResult> {
+  async deleteSession(input: DeleteClaudeSessionInput): Promise<void> {
     const record = this.sessions.get(input.sessionId);
     if (!record) {
-      return { ok: true };
+      return;
     }
 
     let stopError: unknown = null;
@@ -431,8 +353,6 @@ export class ClaudeSessionService {
     if (stopError) {
       throw stopError;
     }
-
-    return { ok: true };
   }
 
   async setActiveSession(sessionId: SessionId): Promise<void> {
@@ -501,6 +421,63 @@ export class ClaudeSessionService {
     });
   }
 
+  private async startAndMonitor(
+    record: SessionRecord,
+    startInput: StartClaudeSessionInput,
+    managerOptions: {
+      pluginDir: string | null;
+      sessionId?: string;
+      resumeSessionId?: string;
+      forkSession?: boolean;
+    },
+    opts: { isNewRecord: boolean; errorPrefix: string },
+  ): Promise<StartClaudeSessionResult> {
+    try {
+      const stateFilePath = await this.stateFileFactory(record.sessionId);
+      record.stateFilePath = stateFilePath;
+      record.monitor.startMonitoring(stateFilePath);
+
+      const result = await record.manager.start(startInput, {
+        ...managerOptions,
+        stateFilePath,
+      });
+
+      if (!result.ok) {
+        record.monitor.stopMonitoring();
+        this.cleanupStateFile(record);
+        if (opts.isNewRecord) {
+          this.removeSessionRecord(record.sessionId, record);
+          record.manager.dispose();
+        }
+        return result;
+      }
+
+      record.ready = true;
+      this.setActiveSessionInternal(record.sessionId);
+      flushPendingSessionEvents(record);
+
+      return {
+        ok: true,
+        sessionId: record.sessionId,
+        snapshot: this.getSessionsSnapshot(),
+      };
+    } catch (error) {
+      record.monitor.stopMonitoring();
+      this.cleanupStateFile(record);
+      if (opts.isNewRecord) {
+        this.removeSessionRecord(record.sessionId, record);
+        record.manager.dispose();
+      }
+      return {
+        ok: false,
+        message:
+          error instanceof Error
+            ? `${opts.errorPrefix}: ${error.message}`
+            : `${opts.errorPrefix} due to an unknown error.`,
+      };
+    }
+  }
+
   private setActiveSessionInternal(sessionId: SessionId | null): void {
     if (sessionId !== null && !this.sessions.has(sessionId)) {
       return;
@@ -560,7 +537,7 @@ export class ClaudeSessionService {
     const seenSessionIds = new Set<SessionId>();
 
     for (const snapshot of persisted.sessions) {
-      const sessionId = normalizeResumeSessionId(snapshot.sessionId);
+      const sessionId = normalizeOptionalString(snapshot.sessionId);
       const cwd = normalizeProjectPath(snapshot.cwd);
       if (!sessionId || !cwd || seenSessionIds.has(sessionId)) {
         continue;
@@ -571,14 +548,14 @@ export class ClaudeSessionService {
       const record = this.createRecord(
         sessionId,
         cwd,
-        normalizeSessionName(snapshot.sessionName),
+        normalizeOptionalString(snapshot.sessionName),
       );
 
-      record.createdAt = normalizeCreatedAt(
+      record.createdAt = normalizeStringWithFallback(
         snapshot.createdAt,
-        this.nowFactory,
+        this.nowFactory(),
       );
-      record.lastActivityAt = normalizeLastActivityAt(
+      record.lastActivityAt = normalizeStringWithFallback(
         snapshot.lastActivityAt,
         record.createdAt,
       );
@@ -592,7 +569,7 @@ export class ClaudeSessionService {
       this.sessions.set(sessionId, record);
     }
 
-    const normalizedActiveSessionId = normalizeResumeSessionId(
+    const normalizedActiveSessionId = normalizeOptionalString(
       persisted.activeSessionId ?? undefined,
     );
     this.activeSessionId =
@@ -607,7 +584,7 @@ export class ClaudeSessionService {
   ): string | null {
     const nextTimestamp =
       typeof sourceTimestamp === "string"
-        ? normalizeLastActivityAt(sourceTimestamp, this.nowFactory())
+        ? normalizeStringWithFallback(sourceTimestamp, this.nowFactory())
         : this.nowFactory();
 
     if (!isTimestampNewer(nextTimestamp, record.lastActivityAt)) {
@@ -620,7 +597,7 @@ export class ClaudeSessionService {
 
   private createUniqueSessionId(): SessionId {
     for (let attempt = 0; attempt < 100; attempt += 1) {
-      const sessionId = normalizeResumeSessionId(this.sessionIdFactory());
+      const sessionId = normalizeOptionalString(this.sessionIdFactory());
       if (sessionId && !this.sessions.has(sessionId)) {
         return sessionId;
       }

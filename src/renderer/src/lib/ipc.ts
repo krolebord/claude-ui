@@ -1,6 +1,5 @@
 import type {
   AddClaudeProjectInput,
-  AddClaudeProjectResult,
   ClaudeActiveSessionChangedEvent,
   ClaudeSessionDataEvent,
   ClaudeSessionErrorEvent,
@@ -10,19 +9,14 @@ import type {
   ClaudeUsageResult,
   ClaudeUsageUpdateEvent,
   DeleteClaudeProjectInput,
-  DeleteClaudeProjectResult,
   DeleteClaudeSessionInput,
-  DeleteClaudeSessionResult,
   ResizeClaudeSessionInput,
   SetActiveSessionInput,
   SetClaudeProjectCollapsedInput,
-  SetClaudeProjectCollapsedResult,
   SetClaudeProjectDefaultsInput,
-  SetClaudeProjectDefaultsResult,
   StartClaudeSessionInput,
   StartClaudeSessionResult,
   StopClaudeSessionInput,
-  StopClaudeSessionResult,
   WriteClaudeSessionInput,
 } from "@shared/claude-types";
 
@@ -32,29 +26,26 @@ export const claudeIpc = {
     window.claude.getSessions(),
   addClaudeProject: (
     input: AddClaudeProjectInput,
-  ): Promise<AddClaudeProjectResult> => window.claude.addClaudeProject(input),
+  ): Promise<ClaudeSessionsSnapshot> => window.claude.addClaudeProject(input),
   setClaudeProjectCollapsed: (
     input: SetClaudeProjectCollapsedInput,
-  ): Promise<SetClaudeProjectCollapsedResult> =>
+  ): Promise<ClaudeSessionsSnapshot> =>
     window.claude.setClaudeProjectCollapsed(input),
   setClaudeProjectDefaults: (
     input: SetClaudeProjectDefaultsInput,
-  ): Promise<SetClaudeProjectDefaultsResult> =>
+  ): Promise<ClaudeSessionsSnapshot> =>
     window.claude.setClaudeProjectDefaults(input),
   deleteClaudeProject: (
     input: DeleteClaudeProjectInput,
-  ): Promise<DeleteClaudeProjectResult> =>
+  ): Promise<ClaudeSessionsSnapshot> =>
     window.claude.deleteClaudeProject(input),
   startClaudeSession: (
     input: StartClaudeSessionInput,
   ): Promise<StartClaudeSessionResult> =>
     window.claude.startClaudeSession(input),
-  stopClaudeSession: (
-    input: StopClaudeSessionInput,
-  ): Promise<StopClaudeSessionResult> => window.claude.stopClaudeSession(input),
-  deleteClaudeSession: (
-    input: DeleteClaudeSessionInput,
-  ): Promise<DeleteClaudeSessionResult> =>
+  stopClaudeSession: (input: StopClaudeSessionInput): Promise<void> =>
+    window.claude.stopClaudeSession(input),
+  deleteClaudeSession: (input: DeleteClaudeSessionInput): Promise<void> =>
     window.claude.deleteClaudeSession(input),
   setActiveSession: (input: SetActiveSessionInput): Promise<void> =>
     window.claude.setActiveSession(input),

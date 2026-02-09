@@ -7,7 +7,6 @@ import type {
   ClaudeSessionExitEvent,
   ClaudeSessionStatus,
   StartClaudeSessionInput,
-  StopClaudeSessionResult,
 } from "../shared/claude-types";
 import log from "./logger";
 
@@ -153,9 +152,9 @@ export class ClaudeSessionManager {
     }
   }
 
-  async stop(): Promise<StopClaudeSessionResult> {
+  async stop(): Promise<void> {
     if (!this.activeSession) {
-      return { ok: true };
+      return;
     }
 
     const currentSession = this.activeSession;
@@ -185,8 +184,6 @@ export class ClaudeSessionManager {
       this.setStatus("stopped");
       this.callbacks.emitExit({ exitCode: null });
     }
-
-    return { ok: true };
   }
 
   write(data: string): void {

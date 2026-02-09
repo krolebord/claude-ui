@@ -63,8 +63,8 @@ export function ProjectDefaultsDialog({
 }: ProjectDefaultsDialogProps) {
   const mutation = useMutation({
     mutationFn: claudeIpc.setClaudeProjectDefaults,
-    onSuccess: (result) => {
-      onSaved(result.snapshot);
+    onSuccess: (snapshot) => {
+      onSaved(snapshot);
     },
   });
 

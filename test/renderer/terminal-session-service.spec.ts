@@ -310,27 +310,21 @@ describe("TerminalSessionService", () => {
     });
     ipcHarness.claudeIpc.addClaudeProject.mockImplementation(
       async ({ path }: { path: string }) => ({
-        ok: true,
-        snapshot: {
-          projects: [{ path, collapsed: false }],
-          sessions: [],
-          activeSessionId: null,
-        },
+        projects: [{ path, collapsed: false }],
+        sessions: [],
+        activeSessionId: null,
       }),
     );
     ipcHarness.claudeIpc.setClaudeProjectCollapsed.mockImplementation(
       async ({ path, collapsed }: { path: string; collapsed: boolean }) => ({
-        ok: true,
-        snapshot: {
-          projects: [{ path, collapsed }],
-          sessions: [],
-          activeSessionId: null,
-        },
+        projects: [{ path, collapsed }],
+        sessions: [],
+        activeSessionId: null,
       }),
     );
     ipcHarness.claudeIpc.selectFolder.mockResolvedValue("/workspace");
-    ipcHarness.claudeIpc.stopClaudeSession.mockResolvedValue({ ok: true });
-    ipcHarness.claudeIpc.deleteClaudeSession.mockResolvedValue({ ok: true });
+    ipcHarness.claudeIpc.stopClaudeSession.mockResolvedValue(undefined);
+    ipcHarness.claudeIpc.deleteClaudeSession.mockResolvedValue(undefined);
     ipcHarness.claudeIpc.setActiveSession.mockResolvedValue(undefined);
   });
 
@@ -408,17 +402,14 @@ describe("TerminalSessionService", () => {
       activeSessionId: null,
     });
     ipcHarness.claudeIpc.setClaudeProjectCollapsed.mockResolvedValueOnce({
-      ok: true,
-      snapshot: {
-        projects: [
-          {
-            path: "/workspace",
-            collapsed: true,
-          },
-        ],
-        sessions: [],
-        activeSessionId: null,
-      },
+      projects: [
+        {
+          path: "/workspace",
+          collapsed: true,
+        },
+      ],
+      sessions: [],
+      activeSessionId: null,
     });
     const service = new TerminalSessionService();
     service.retain();
@@ -459,15 +450,15 @@ describe("TerminalSessionService", () => {
       permissionMode: "default",
     });
 
-    service.actions.setNewSessionInitialPrompt("fix the bug");
+    service.actions.updateNewSessionDialog("initialPrompt", "fix the bug");
     state = service.getSnapshot();
     expect(state.newSessionDialog.initialPrompt).toBe("fix the bug");
 
-    service.actions.setNewSessionName("Refactor runner");
+    service.actions.updateNewSessionDialog("sessionName", "Refactor runner");
     state = service.getSnapshot();
     expect(state.newSessionDialog.sessionName).toBe("Refactor runner");
 
-    service.actions.setNewSessionModel("haiku");
+    service.actions.updateNewSessionDialog("model", "haiku");
     state = service.getSnapshot();
     expect(state.newSessionDialog.model).toBe("haiku");
 

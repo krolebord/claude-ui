@@ -33,42 +33,21 @@ export function toSnapshot(
   };
 }
 
-export function normalizeSessionName(
-  sessionName?: string | null,
-): string | null {
-  if (typeof sessionName !== "string") {
+export function normalizeOptionalString(value: unknown): string | null {
+  if (typeof value !== "string") {
     return null;
   }
 
-  const trimmed = sessionName.trim();
+  const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
 }
 
-export function normalizeResumeSessionId(
-  sessionId?: SessionId,
-): SessionId | null {
-  if (typeof sessionId !== "string") {
-    return null;
-  }
-
-  const trimmed = sessionId.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
-export function normalizeCreatedAt(
-  createdAt: string,
-  nowFactory: () => string,
+export function normalizeStringWithFallback(
+  value: string,
+  fallback: string,
 ): string {
-  const normalized = createdAt.trim();
-  return normalized.length > 0 ? normalized : nowFactory();
-}
-
-export function normalizeLastActivityAt(
-  lastActivityAt: string,
-  fallbackTimestamp: string,
-): string {
-  const normalized = lastActivityAt.trim();
-  return normalized.length > 0 ? normalized : fallbackTimestamp;
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : fallback;
 }
 
 export function isTimestampNewer(next: string, current: string): boolean {

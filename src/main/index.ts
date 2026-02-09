@@ -100,6 +100,13 @@ async function createWindow(): Promise<void> {
 }
 
 function registerIpcHandlers(): void {
+  if (!sessionService) {
+    throw new Error(
+      "registerIpcHandlers called before sessionService was initialized",
+    );
+  }
+  const service = sessionService;
+
   ipcMain.handle(CLAUDE_IPC_CHANNELS.selectFolder, async () => {
     const options: Electron.OpenDialogOptions = {
       title: "Select Project Folder",
@@ -116,111 +123,65 @@ function registerIpcHandlers(): void {
     return result.filePaths[0] ?? null;
   });
 
-  ipcMain.handle(
-    CLAUDE_IPC_CHANNELS.getSessions,
-    () =>
-      sessionService?.getSessionsSnapshot() ?? {
-        projects: [],
-        sessions: [],
-        activeSessionId: null,
-      },
+  ipcMain.handle(CLAUDE_IPC_CHANNELS.getSessions, () =>
+    service.getSessionsSnapshot(),
   );
 
   ipcMain.handle(
     CLAUDE_IPC_CHANNELS.addProject,
-    (_event, input: AddClaudeProjectInput) =>
-      sessionService?.addProject(input) ?? {
-        ok: true,
-        snapshot: {
-          projects: [],
-          sessions: [],
-          activeSessionId: null,
-        },
-      },
+    (_event, input: AddClaudeProjectInput) => service.addProject(input),
   );
 
   ipcMain.handle(
     CLAUDE_IPC_CHANNELS.setProjectCollapsed,
     (_event, input: SetClaudeProjectCollapsedInput) =>
-      sessionService?.setProjectCollapsed(input) ?? {
-        ok: true,
-        snapshot: {
-          projects: [],
-          sessions: [],
-          activeSessionId: null,
-        },
-      },
+      service.setProjectCollapsed(input),
   );
 
   ipcMain.handle(
     CLAUDE_IPC_CHANNELS.setProjectDefaults,
     (_event, input: SetClaudeProjectDefaultsInput) =>
-      sessionService?.setProjectDefaults(input) ?? {
-        ok: true,
-        snapshot: {
-          projects: [],
-          sessions: [],
-          activeSessionId: null,
-        },
-      },
+      service.setProjectDefaults(input),
   );
 
   ipcMain.handle(
     CLAUDE_IPC_CHANNELS.deleteProject,
-    (_event, input: DeleteClaudeProjectInput) =>
-      sessionService?.deleteProject(input) ?? {
-        ok: true,
-        snapshot: {
-          projects: [],
-          sessions: [],
-          activeSessionId: null,
-        },
-      },
+    (_event, input: DeleteClaudeProjectInput) => service.deleteProject(input),
   );
 
   ipcMain.handle(
     CLAUDE_IPC_CHANNELS.startSession,
-    async (_event, input: StartClaudeSessionInput) => {
-      if (!sessionService) {
-        return {
-          ok: false,
-          message: "Session service is unavailable.",
-        };
-      }
-
-      return sessionService.startSession(input);
-    },
+    async (_event, input: StartClaudeSessionInput) =>
+      service.startSession(input),
   );
 
   ipcMain.handle(
     CLAUDE_IPC_CHANNELS.stopSession,
-    (_event, input: StopClaudeSessionInput) =>
-      sessionService?.stopSession(input) ?? Promise.resolve({ ok: true }),
+    (_event, input: StopClaudeSessionInput) => service.stopSession(input),
   );
 
   ipcMain.handle(
     CLAUDE_IPC_CHANNELS.deleteSession,
-    (_event, input: DeleteClaudeSessionInput) =>
-      sessionService?.deleteSession(input) ?? Promise.resolve({ ok: true }),
+    (_event, input: DeleteClaudeSessionInput) => service.deleteSession(input),
   );
 
   ipcMain.handle(
     CLAUDE_IPC_CHANNELS.setActiveSession,
     (_event, input: SetActiveSessionInput) =>
-      sessionService?.setActiveSession(input.sessionId) ?? Promise.resolve(),
+      service.setActiveSession(input.sessionId),
   );
 
   ipcMain.on(
     CLAUDE_IPC_CHANNELS.writeSession,
     (_event, input: WriteClaudeSessionInput) => {
-      sessionService?.writeToSession(input.sessionId, input.data);
+      service.writeToSession(input.sessionId, input.data);
     },
   );
 
   ipcMain.on(
     CLAUDE_IPC_CHANNELS.resizeSession,
     (_event, input: ResizeClaudeSessionInput) => {
-      sessionService?.resizeSession(input.sessionId, input.cols, input.rows);
+      service.resizeSession(input.sessionId, input.cols, input.rows);
     },
   );
 

@@ -71,30 +71,15 @@ export interface AddClaudeProjectInput {
   path: string;
 }
 
-export interface AddClaudeProjectResult {
-  ok: true;
-  snapshot: ClaudeSessionsSnapshot;
-}
-
 export interface SetClaudeProjectCollapsedInput {
   path: string;
   collapsed: boolean;
-}
-
-export interface SetClaudeProjectCollapsedResult {
-  ok: true;
-  snapshot: ClaudeSessionsSnapshot;
 }
 
 export interface SetClaudeProjectDefaultsInput {
   path: string;
   defaultModel?: ClaudeModel;
   defaultPermissionMode?: ClaudePermissionMode;
-}
-
-export interface SetClaudeProjectDefaultsResult {
-  ok: true;
-  snapshot: ClaudeSessionsSnapshot;
 }
 
 export interface StartClaudeSessionInput {
@@ -124,25 +109,12 @@ export interface StopClaudeSessionInput {
   sessionId: SessionId;
 }
 
-export interface StopClaudeSessionResult {
-  ok: true;
-}
-
 export interface DeleteClaudeProjectInput {
   path: string;
 }
 
-export interface DeleteClaudeProjectResult {
-  ok: true;
-  snapshot: ClaudeSessionsSnapshot;
-}
-
 export interface DeleteClaudeSessionInput {
   sessionId: SessionId;
-}
-
-export interface DeleteClaudeSessionResult {
-  ok: true;
 }
 
 export interface SetActiveSessionInput {
@@ -243,25 +215,21 @@ export interface ClaudeDesktopApi {
   getSessions: () => Promise<ClaudeSessionsSnapshot>;
   addClaudeProject: (
     input: AddClaudeProjectInput,
-  ) => Promise<AddClaudeProjectResult>;
+  ) => Promise<ClaudeSessionsSnapshot>;
   setClaudeProjectCollapsed: (
     input: SetClaudeProjectCollapsedInput,
-  ) => Promise<SetClaudeProjectCollapsedResult>;
+  ) => Promise<ClaudeSessionsSnapshot>;
   setClaudeProjectDefaults: (
     input: SetClaudeProjectDefaultsInput,
-  ) => Promise<SetClaudeProjectDefaultsResult>;
+  ) => Promise<ClaudeSessionsSnapshot>;
   startClaudeSession: (
     input: StartClaudeSessionInput,
   ) => Promise<StartClaudeSessionResult>;
-  stopClaudeSession: (
-    input: StopClaudeSessionInput,
-  ) => Promise<StopClaudeSessionResult>;
+  stopClaudeSession: (input: StopClaudeSessionInput) => Promise<void>;
   deleteClaudeProject: (
     input: DeleteClaudeProjectInput,
-  ) => Promise<DeleteClaudeProjectResult>;
-  deleteClaudeSession: (
-    input: DeleteClaudeSessionInput,
-  ) => Promise<DeleteClaudeSessionResult>;
+  ) => Promise<ClaudeSessionsSnapshot>;
+  deleteClaudeSession: (input: DeleteClaudeSessionInput) => Promise<void>;
   setActiveSession: (input: SetActiveSessionInput) => Promise<void>;
   writeToClaudeSession: (input: WriteClaudeSessionInput) => void;
   resizeClaudeSession: (input: ResizeClaudeSessionInput) => void;

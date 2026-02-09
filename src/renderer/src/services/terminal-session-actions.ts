@@ -13,7 +13,11 @@ import type {
   StartClaudeSessionInput,
 } from "@shared/claude-types";
 import * as z from "zod";
-import type { TerminalSessionState } from "./terminal-session-service";
+import type {
+  NewSessionDialogState,
+  ProjectDefaultsDialogState,
+  TerminalSessionState,
+} from "./terminal-session-service";
 
 interface StartSessionInProjectInput {
   cwd: string;
@@ -156,10 +160,10 @@ export function createTerminalSessionActions(
           return;
         }
 
-        const result = await claudeIpc.addClaudeProject({
+        const snapshot = await claudeIpc.addClaudeProject({
           path: normalizedPath,
         });
-        deps.applySnapshot(result.snapshot);
+        deps.applySnapshot(snapshot);
 
         const addedProject = deps
           .getState()
@@ -195,11 +199,11 @@ export function createTerminalSessionActions(
       }
 
       try {
-        const result = await claudeIpc.setClaudeProjectCollapsed({
+        const snapshot = await claudeIpc.setClaudeProjectCollapsed({
           path: projectPath,
           collapsed: !project.collapsed,
         });
-        deps.applySnapshot(result.snapshot);
+        deps.applySnapshot(snapshot);
       } catch (error) {
         deps.updateState((prev) => ({
           ...prev,
@@ -225,39 +229,15 @@ export function createTerminalSessionActions(
         newSessionDialog: getDefaultDialogState(null, false),
       }));
     },
-    setNewSessionName: (value: string): void => {
+    updateNewSessionDialog: <K extends keyof NewSessionDialogState>(
+      field: K,
+      value: NewSessionDialogState[K],
+    ): void => {
       deps.updateState((prev) => ({
         ...prev,
         newSessionDialog: {
           ...prev.newSessionDialog,
-          sessionName: value,
-        },
-      }));
-    },
-    setNewSessionModel: (value: ClaudeModel): void => {
-      deps.updateState((prev) => ({
-        ...prev,
-        newSessionDialog: {
-          ...prev.newSessionDialog,
-          model: value,
-        },
-      }));
-    },
-    setNewSessionInitialPrompt: (value: string): void => {
-      deps.updateState((prev) => ({
-        ...prev,
-        newSessionDialog: {
-          ...prev.newSessionDialog,
-          initialPrompt: value,
-        },
-      }));
-    },
-    setNewSessionPermissionMode: (value: ClaudePermissionMode): void => {
-      deps.updateState((prev) => ({
-        ...prev,
-        newSessionDialog: {
-          ...prev.newSessionDialog,
-          permissionMode: value,
+          [field]: value,
         },
       }));
     },
@@ -443,23 +423,15 @@ export function createTerminalSessionActions(
         },
       }));
     },
-    setProjectDefaultModel: (value: ClaudeModel | undefined): void => {
-      deps.updateState((prev) => ({
-        ...prev,
-        projectDefaultsDialog: {
-          ...prev.projectDefaultsDialog,
-          defaultModel: value,
-        },
-      }));
-    },
-    setProjectDefaultPermissionMode: (
-      value: ClaudePermissionMode | undefined,
+    updateProjectDefaultsDialog: <K extends keyof ProjectDefaultsDialogState>(
+      field: K,
+      value: ProjectDefaultsDialogState[K],
     ): void => {
       deps.updateState((prev) => ({
         ...prev,
         projectDefaultsDialog: {
           ...prev.projectDefaultsDialog,
-          defaultPermissionMode: value,
+          [field]: value,
         },
       }));
     },

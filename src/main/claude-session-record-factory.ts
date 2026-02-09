@@ -11,7 +11,7 @@ import type {
 } from "../shared/claude-types";
 import type { ClaudeActivityMonitor } from "./claude-activity-monitor";
 import type { ClaudeSessionManager } from "./claude-session";
-import { normalizeLastActivityAt } from "./claude-session-snapshot-utils";
+import { normalizeStringWithFallback } from "./claude-session-snapshot-utils";
 import log from "./logger";
 
 export interface ClaudeSessionServiceCallbacks {
@@ -202,7 +202,7 @@ export function createSessionRecord(
     emitHookEvent: (event) => {
       const updatedAt = options.touchSessionActivity(
         record,
-        normalizeLastActivityAt(event.timestamp, options.nowFactory()),
+        normalizeStringWithFallback(event.timestamp, options.nowFactory()),
       );
       if (updatedAt) {
         options.persistSessionSnapshots();

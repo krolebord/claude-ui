@@ -138,10 +138,10 @@ function App() {
         model={state.newSessionDialog.model}
         permissionMode={state.newSessionDialog.permissionMode}
         getTerminalSize={getTerminalSize}
-        onInitialPromptChange={actions.setNewSessionInitialPrompt}
-        onSessionNameChange={actions.setNewSessionName}
-        onModelChange={actions.setNewSessionModel}
-        onPermissionModeChange={actions.setNewSessionPermissionMode}
+        onInitialPromptChange={(v) => actions.updateNewSessionDialog("initialPrompt", v)}
+        onSessionNameChange={(v) => actions.updateNewSessionDialog("sessionName", v)}
+        onModelChange={(v) => actions.updateNewSessionDialog("model", v)}
+        onPermissionModeChange={(v) => actions.updateNewSessionDialog("permissionMode", v)}
         onCancel={actions.closeNewSessionDialog}
         onStarted={actions.newSessionStarted}
       />
@@ -153,10 +153,8 @@ function App() {
         defaultPermissionMode={
           state.projectDefaultsDialog.defaultPermissionMode
         }
-        onDefaultModelChange={actions.setProjectDefaultModel}
-        onDefaultPermissionModeChange={
-          actions.setProjectDefaultPermissionMode
-        }
+        onDefaultModelChange={(v) => actions.updateProjectDefaultsDialog("defaultModel", v)}
+        onDefaultPermissionModeChange={(v) => actions.updateProjectDefaultsDialog("defaultPermissionMode", v)}
         onCancel={actions.closeProjectDefaultsDialog}
         onSaved={actions.projectDefaultsSaved}
       />

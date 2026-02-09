@@ -1,7 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import {
   type AddClaudeProjectInput,
-  type AddClaudeProjectResult,
   CLAUDE_IPC_CHANNELS,
   type ClaudeActiveSessionChangedEvent,
   type ClaudeDesktopApi,
@@ -13,19 +12,14 @@ import {
   type ClaudeUsageResult,
   type ClaudeUsageUpdateEvent,
   type DeleteClaudeProjectInput,
-  type DeleteClaudeProjectResult,
   type DeleteClaudeSessionInput,
-  type DeleteClaudeSessionResult,
   type ResizeClaudeSessionInput,
   type SetActiveSessionInput,
   type SetClaudeProjectCollapsedInput,
-  type SetClaudeProjectCollapsedResult,
   type SetClaudeProjectDefaultsInput,
-  type SetClaudeProjectDefaultsResult,
   type StartClaudeSessionInput,
   type StartClaudeSessionResult,
   type StopClaudeSessionInput,
-  type StopClaudeSessionResult,
   type WriteClaudeSessionInput,
 } from "../shared/claude-types";
 
@@ -50,31 +44,27 @@ const claudeApi: ClaudeDesktopApi = {
     ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.getSessions),
   addClaudeProject: (
     input: AddClaudeProjectInput,
-  ): Promise<AddClaudeProjectResult> =>
+  ): Promise<ClaudeSessionsSnapshot> =>
     ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.addProject, input),
   setClaudeProjectCollapsed: (
     input: SetClaudeProjectCollapsedInput,
-  ): Promise<SetClaudeProjectCollapsedResult> =>
+  ): Promise<ClaudeSessionsSnapshot> =>
     ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.setProjectCollapsed, input),
   setClaudeProjectDefaults: (
     input: SetClaudeProjectDefaultsInput,
-  ): Promise<SetClaudeProjectDefaultsResult> =>
+  ): Promise<ClaudeSessionsSnapshot> =>
     ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.setProjectDefaults, input),
   deleteClaudeProject: (
     input: DeleteClaudeProjectInput,
-  ): Promise<DeleteClaudeProjectResult> =>
+  ): Promise<ClaudeSessionsSnapshot> =>
     ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.deleteProject, input),
   startClaudeSession: (
     input: StartClaudeSessionInput,
   ): Promise<StartClaudeSessionResult> =>
     ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.startSession, input),
-  stopClaudeSession: (
-    input: StopClaudeSessionInput,
-  ): Promise<StopClaudeSessionResult> =>
+  stopClaudeSession: (input: StopClaudeSessionInput): Promise<void> =>
     ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.stopSession, input),
-  deleteClaudeSession: (
-    input: DeleteClaudeSessionInput,
-  ): Promise<DeleteClaudeSessionResult> =>
+  deleteClaudeSession: (input: DeleteClaudeSessionInput): Promise<void> =>
     ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.deleteSession, input),
   setActiveSession: (input: SetActiveSessionInput): Promise<void> =>
     ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.setActiveSession, input),
