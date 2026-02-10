@@ -5,7 +5,7 @@ import type {
   ClaudePermissionMode,
   ClaudeProject,
   ClaudeSessionSnapshot,
-  ClaudeSessionsSnapshot,
+  ClaudeSessionsState,
   SessionId,
 } from "@shared/claude-types";
 import {
@@ -13,6 +13,7 @@ import {
   SESSION_OUTPUT_MAX_LINES,
   SessionOutputRingBuffer,
 } from "./session-output-ring-buffer";
+import { StateSyncClient } from "./state-sync-client";
 import {
   createTerminalSessionActions,
   getDefaultDialogState,
@@ -36,7 +37,7 @@ export interface ProjectDefaultsDialogState {
   defaultPermissionMode: ClaudePermissionMode | undefined;
 }
 
-export interface TerminalSessionState {
+export interface SessionStoreState {
   projects: ClaudeProject[];
   sessionsById: Record<SessionId, ClaudeSessionSnapshot>;
   activeSessionId: SessionId | null;
@@ -46,14 +47,15 @@ export interface TerminalSessionState {
   isSelecting: boolean;
   isStarting: boolean;
   isStopping: boolean;
+  isSavingProjectDefaults: boolean;
   loadingSessionIds: Set<SessionId>;
   errorMessage: string;
 }
 
 type Listener = () => void;
 
-export class TerminalSessionService {
-  private state: TerminalSessionState;
+export class SessionStore {
+  private state: SessionStoreState;
   private sessionOutputById: Record<SessionId, SessionOutputRingBuffer> = {};
   private renderedSessionId: SessionId | null = null;
   private renderedOutputLength = 0;
@@ -63,7 +65,12 @@ export class TerminalSessionService {
   private unsubscribers: Array<() => void> = [];
   private initialized = false;
   private subscribers = 0;
-  private refreshInFlight: Promise<void> | null = null;
+
+  private readonly stateSyncClient = new StateSyncClient({
+    onStateChanged: () => {
+      this.syncStateFromSyncedStates();
+    },
+  });
 
   readonly actions: ReturnType<typeof createTerminalSessionActions>;
 
@@ -83,6 +90,7 @@ export class TerminalSessionService {
       isSelecting: false,
       isStarting: false,
       isStopping: false,
+      isSavingProjectDefaults: false,
       loadingSessionIds: new Set(),
       errorMessage: "",
     };
@@ -92,12 +100,11 @@ export class TerminalSessionService {
       updateState: (updater) => {
         this.updateState(updater);
       },
-      updateSession: (sessionId, mutate) =>
-        this.updateSession(sessionId, mutate),
-      applySnapshot: (snapshot) => {
-        this.applySnapshot(snapshot);
-      },
-      refreshSessions: async () => this.refreshSessions(),
+      getTerminalSize: () =>
+        this.terminal?.getSize() ?? {
+          cols: 80,
+          rows: 24,
+        },
       setTerminal: (handle) => {
         this.terminal = handle;
       },
@@ -121,7 +128,7 @@ export class TerminalSessionService {
     };
   };
 
-  readonly getSnapshot = (): TerminalSessionState => this.state;
+  readonly getSnapshot = (): SessionStoreState => this.state;
 
   retain(): void {
     this.subscribers += 1;
@@ -157,28 +164,7 @@ export class TerminalSessionService {
           );
         }
       }),
-      claudeIpc.onClaudeSessionExit((payload) => {
-        if (
-          !this.updateSession(payload.sessionId, (session) => ({
-            ...session,
-            status: "stopped",
-          }))
-        ) {
-          void this.refreshSessions();
-        }
-      }),
       claudeIpc.onClaudeSessionError((payload) => {
-        if (
-          !this.updateSession(payload.sessionId, (session) => ({
-            ...session,
-            lastError: payload.message,
-            status: "error",
-          }))
-        ) {
-          void this.refreshSessions();
-          return;
-        }
-
         if (payload.sessionId === this.state.activeSessionId) {
           this.updateState((prev) => ({
             ...prev,
@@ -186,116 +172,39 @@ export class TerminalSessionService {
           }));
         }
       }),
-      claudeIpc.onClaudeSessionUpdated((payload) => {
-        const { sessionId, updates } = payload;
-
-        const didUpdate = this.updateSession(sessionId, (session) => {
-          const merged = { ...session, ...updates };
-          if ("status" in updates && updates.status !== "error") {
-            merged.lastError = null;
-          }
-          return merged;
-        });
-
-        if (
-          !didUpdate &&
-          ("status" in updates ||
-            "activityState" in updates ||
-            "activityWarning" in updates)
-        ) {
-          void this.refreshSessions();
-        }
-      }),
-      claudeIpc.onClaudeActiveSessionChanged((payload) => {
-        if (this.state.activeSessionId !== payload.activeSessionId) {
-          this.updateState((prev) => ({
-            ...prev,
-            activeSessionId: payload.activeSessionId,
-          }));
-          this.renderActiveSessionOutput(true);
-          if (payload.activeSessionId) {
-            this.focusTerminal();
-          }
-        }
-
-        if (
-          payload.activeSessionId &&
-          !(payload.activeSessionId in this.state.sessionsById)
-        ) {
-          void this.refreshSessions();
-        }
-      }),
     ];
 
-    await this.refreshSessions();
+    await this.stateSyncClient.initialize();
+    this.syncStateFromSyncedStates();
   }
 
-  private async refreshSessions(): Promise<void> {
-    if (this.refreshInFlight) {
-      return this.refreshInFlight;
-    }
-
-    this.refreshInFlight = claudeIpc
-      .getSessions()
-      .then((snapshot) => {
-        this.applySnapshot(snapshot);
-      })
-      .finally(() => {
-        this.refreshInFlight = null;
-      });
-
-    return this.refreshInFlight;
-  }
-
-  private applySnapshot(snapshot: ClaudeSessionsSnapshot): void {
+  private syncStateFromSyncedStates(): void {
     const previousActiveSessionId = this.state.activeSessionId;
-    const sessionsById = snapshot.sessions.reduce<
-      Record<SessionId, ClaudeSessionSnapshot>
-    >((acc, session) => {
-      acc[session.sessionId] = session;
-      return acc;
-    }, {});
+    const projects = this.stateSyncClient.getState("projects") ?? [];
+    const sessionsById: ClaudeSessionsState =
+      this.stateSyncClient.getState("sessions") ?? {};
+    const activeSessionState = this.stateSyncClient.getState("activeSession");
+    const activeSessionId = activeSessionState?.activeSessionId ?? null;
 
-    this.pruneSessionOutput(
-      snapshot.sessions.map((session) => session.sessionId),
-    );
+    this.pruneSessionOutput(Object.keys(sessionsById));
 
     this.updateState((prev) => ({
       ...prev,
-      projects: snapshot.projects,
+      projects,
       sessionsById,
-      activeSessionId: snapshot.activeSessionId,
+      activeSessionId,
     }));
 
-    if (previousActiveSessionId !== snapshot.activeSessionId) {
-      this.renderActiveSessionOutput();
+    if (previousActiveSessionId !== activeSessionId) {
+      this.renderActiveSessionOutput(true);
+      if (activeSessionId) {
+        this.focusTerminal();
+      }
     }
-  }
-
-  private updateSession(
-    sessionId: SessionId,
-    mutate: (session: ClaudeSessionSnapshot) => ClaudeSessionSnapshot,
-  ): boolean {
-    const existing = this.state.sessionsById[sessionId];
-    if (!existing) {
-      return false;
-    }
-
-    const nextSession = mutate(existing);
-
-    this.updateState((prev) => ({
-      ...prev,
-      sessionsById: {
-        ...prev.sessionsById,
-        [sessionId]: nextSession,
-      },
-    }));
-
-    return true;
   }
 
   private updateState(
-    updater: (prev: TerminalSessionState) => TerminalSessionState,
+    updater: (prev: SessionStoreState) => SessionStoreState,
   ): void {
     const next = updater(this.state);
     if (next === this.state) {
@@ -318,8 +227,8 @@ export class TerminalSessionService {
     }
 
     this.unsubscribers = [];
+    this.stateSyncClient.dispose();
     this.initialized = false;
-    this.refreshInFlight = null;
     this.terminal = null;
     this.renderedSessionId = null;
     this.renderedOutputLength = 0;
@@ -405,11 +314,11 @@ export class TerminalSessionService {
   }
 }
 
-let singleton: TerminalSessionService | null = null;
+let singleton: SessionStore | null = null;
 
-export function getTerminalSessionService(): TerminalSessionService {
+export function getSessionStore(): SessionStore {
   if (!singleton) {
-    singleton = new TerminalSessionService();
+    singleton = new SessionStore();
   }
 
   return singleton;

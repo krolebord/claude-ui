@@ -11,7 +11,7 @@ import type {
   StartClaudeSessionInput,
 } from "../../src/shared/claude-types";
 import { describe, expect, it, vi } from "vitest";
-import { ClaudeSessionService } from "../../src/main/claude-session-service";
+import { SessionOrchestrator } from "../../src/main/session-orchestrator";
 
 interface SessionManagerCallbacks {
   emitData: (chunk: string) => void;
@@ -95,7 +95,7 @@ function createHarness(options?: {
     ),
   };
 
-  const service = new ClaudeSessionService({
+  const service = new SessionOrchestrator({
     userDataPath: "/tmp",
     pluginDir: "/plugin",
     pluginWarning: null,
@@ -170,24 +170,19 @@ const START_INPUT: StartClaudeSessionInput = {
   rows: 24,
 };
 
-describe("ClaudeSessionService", () => {
+describe("SessionOrchestrator", () => {
   it("adds projects and persists them", () => {
     const harness = createHarness();
 
-    const first = harness.service.addProject({
+    harness.service.addProject({
       path: " /workspace ",
     });
-    const second = harness.service.addProject({
+    harness.service.addProject({
       path: "/workspace",
     });
+    const snapshot = harness.service.getSessionsSnapshot();
 
-    expect(first.projects).toEqual([
-      {
-        path: "/workspace",
-        collapsed: false,
-      },
-    ]);
-    expect(second.projects).toEqual([
+    expect(snapshot.projects).toEqual([
       {
         path: "/workspace",
         collapsed: false,
@@ -206,12 +201,13 @@ describe("ClaudeSessionService", () => {
     const harness = createHarness();
 
     harness.service.addProject({ path: "/workspace" });
-    const result = harness.service.setProjectCollapsed({
+    harness.service.setProjectCollapsed({
       path: "/workspace",
       collapsed: true,
     });
+    const snapshot = harness.service.getSessionsSnapshot();
 
-    expect(result.projects).toEqual([
+    expect(snapshot.projects).toEqual([
       {
         path: "/workspace",
         collapsed: true,
@@ -229,12 +225,13 @@ describe("ClaudeSessionService", () => {
   it("ignores collapse updates for unknown projects", () => {
     const harness = createHarness();
 
-    const result = harness.service.setProjectCollapsed({
+    harness.service.setProjectCollapsed({
       path: "/workspace",
       collapsed: true,
     });
+    const snapshot = harness.service.getSessionsSnapshot();
 
-    expect(result.projects).toEqual([]);
+    expect(snapshot.projects).toEqual([]);
     expect(harness.projectStore.writeProjects).not.toHaveBeenCalled();
   });
 
@@ -366,10 +363,11 @@ describe("ClaudeSessionService", () => {
 
     expect(first.sessionId).toBe("session-1");
     expect(second.sessionId).toBe("session-2");
-    expect(second.snapshot.sessions).toHaveLength(2);
-    expect(second.snapshot.activeSessionId).toBe("session-2");
-    expect(second.snapshot.sessions[0]?.sessionName).toBeNull();
-    expect(second.snapshot.sessions[1]?.sessionName).toBeNull();
+    const snapshot = harness.service.getSessionsSnapshot();
+    expect(snapshot.sessions).toHaveLength(2);
+    expect(snapshot.activeSessionId).toBe("session-2");
+    expect(snapshot.sessions[0]?.sessionName).toBeNull();
+    expect(snapshot.sessions[1]?.sessionName).toBeNull();
     expect(harness.storedSessionSnapshotState.sessions).toHaveLength(2);
     expect(harness.storedSessionSnapshotState.activeSessionId).toBe(
       "session-2",
@@ -389,7 +387,8 @@ describe("ClaudeSessionService", () => {
       return;
     }
 
-    expect(result.snapshot.sessions[0]?.sessionName).toBe(
+    const snapshot = harness.service.getSessionsSnapshot();
+    expect(snapshot.sessions[0]?.sessionName).toBe(
       "Refactor terminal service",
     );
   });
@@ -831,9 +830,9 @@ describe("ClaudeSessionService", () => {
     const harness = createHarness();
 
     harness.service.addProject({ path: "/workspace" });
-    const result = harness.service.deleteProject({ path: "/workspace" });
-
-    expect(result.projects).toEqual([]);
+    harness.service.deleteProject({ path: "/workspace" });
+    const snapshot = harness.service.getSessionsSnapshot();
+    expect(snapshot.projects).toEqual([]);
     expect(harness.storedProjects).toEqual([]);
   });
 

@@ -24,7 +24,7 @@ Desktop Electron app that embeds Claude CLI in an xterm terminal. Runtime state 
 - Renderer (`src/renderer/src`): state service + React UI; no direct Node/Electron main APIs.
 
 ### Core services
-- `src/main/claude-session-service.ts`
+- `src/main/session-orchestrator.ts`
   - Source of truth for sessions/projects/active session.
   - Creates and coordinates one `ClaudeSessionManager` and one `ClaudeActivityMonitor` per session.
   - Hydrates persisted snapshots at startup.
@@ -44,8 +44,8 @@ Desktop Electron app that embeds Claude CLI in an xterm terminal. Runtime state 
   - Persists project list/collapse state in `electron-store`.
 - `src/main/claude-session-snapshot-store.ts`
   - Persists session snapshots and `activeSessionId` in `electron-store`.
-- `src/renderer/src/services/terminal-session-service.ts`
-  - Renderer-side state orchestration (React-independent).
+- `src/renderer/src/services/session-store.ts`
+  - Renderer-side reactive state store (React-independent).
   - Handles all IPC calls/events and terminal attachment.
   - Maintains per-session output ring buffers (10,000 lines, 2MB cap).
 - `src/renderer/src/services/use-terminal-session.ts`
@@ -73,7 +73,7 @@ Desktop Electron app that embeds Claude CLI in an xterm terminal. Runtime state 
 - Session operations are always `sessionId` scoped.
 - Terminal writes are sent only for the active session; inactive session output is buffered for replay on activation.
 - Session switch UI state changes only after main emits `active-session-changed`.
-- Renderer business logic belongs in `terminal-session-service`; components stay presentation-focused.
+- Renderer business logic belongs in `session-store`; components stay presentation-focused.
 - Session title auto-generation triggers once, only for unnamed sessions, on first non-empty `UserPromptSubmit`.
 
 ## Directory Structure
@@ -81,7 +81,7 @@ Desktop Electron app that embeds Claude CLI in an xterm terminal. Runtime state 
 src/
   main/
     index.ts                           # Electron bootstrap + IPC wiring
-    claude-session-service.ts          # Main orchestration / source of truth
+    session-orchestrator.ts            # Main orchestration / source of truth
     claude-session.ts                  # PTY lifecycle for claude process
     claude-activity-monitor.ts         # Hook event file monitor
     claude-state-plugin.ts             # Managed plugin generator
@@ -94,7 +94,7 @@ src/
     claude-types.ts                    # IPC channels and shared contracts
   renderer/src/
     services/
-      terminal-session-service.ts      # Renderer state orchestration
+      session-store.ts                 # Renderer reactive state store
       use-terminal-session.ts          # React store subscription
     components/
       terminal-pane.tsx                # xterm integration
@@ -103,11 +103,11 @@ src/
 ```
 
 ## Test Coverage Map
-- `test/main/claude-session-service.spec.ts`
+- `test/main/session-orchestrator.spec.ts`
   - Multi-session behavior, persistence, resume/delete/active transitions, event scoping, title generation triggers.
 - `test/main/claude-activity-monitor.spec.ts`
   - Watch-first flow, polling fallback, malformed line handling, state transitions.
-- `test/renderer/terminal-session-service.spec.ts`
+- `test/renderer/session-store.spec.ts`
   - Renderer state actions, IPC bridging, active-session replay semantics, output ring-buffer limits.
 
 ## Logs
@@ -123,6 +123,6 @@ src/
 - Format (lint + format fix): `pnpm format`
 - Run unit tests: `pnpm exec vitest --run`
 - Run targeted tests:
-  - `pnpm exec vitest --run test/main/claude-session-service.spec.ts`
+  - `pnpm exec vitest --run test/main/session-orchestrator.spec.ts`
   - `pnpm exec vitest --run test/main/claude-activity-monitor.spec.ts`
-  - `pnpm exec vitest --run test/renderer/terminal-session-service.spec.ts`
+  - `pnpm exec vitest --run test/renderer/session-store.spec.ts`

@@ -1,17 +1,17 @@
 import { useEffect, useSyncExternalStore } from "react";
 import {
-  type TerminalSessionService,
-  type TerminalSessionState,
-  getTerminalSessionService,
-} from "./terminal-session-service";
+  type SessionStore,
+  type SessionStoreState,
+  getSessionStore,
+} from "./session-store";
 
 interface UseTerminalSessionResult {
-  state: TerminalSessionState;
-  actions: TerminalSessionService["actions"];
+  state: SessionStoreState;
+  actions: SessionStore["actions"];
 }
 
 export function useTerminalSession(): UseTerminalSessionResult {
-  const service = getTerminalSessionService();
+  const service = getSessionStore();
 
   useEffect(() => {
     service.retain();

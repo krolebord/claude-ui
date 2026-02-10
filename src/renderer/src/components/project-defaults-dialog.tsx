@@ -1,4 +1,3 @@
-import { useMutation } from "@tanstack/react-query";
 import { PermissionModeToggleGroup } from "@renderer/components/permission-mode-toggle-group";
 import { Button } from "@renderer/components/ui/button";
 import {
@@ -17,52 +16,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@renderer/components/ui/select";
-import { claudeIpc } from "@renderer/lib/ipc";
+import { useTerminalSession } from "@renderer/services/use-terminal-session";
 import {
   MODEL_OPTIONS,
   getProjectNameFromPath,
 } from "@renderer/services/terminal-session-selectors";
-import type {
-  ClaudeModel,
-  ClaudePermissionMode,
-  ClaudeSessionsSnapshot,
-} from "@shared/claude-types";
+import type { ClaudeModel } from "@shared/claude-types";
 import { AlertCircle } from "lucide-react";
 
-interface ProjectDefaultsDialogProps {
-  open: boolean;
-  projectPath: string | null;
-  defaultModel: ClaudeModel | undefined;
-  defaultPermissionMode: ClaudePermissionMode | undefined;
-  onDefaultModelChange: (value: ClaudeModel | undefined) => void;
-  onDefaultPermissionModeChange: (
-    value: ClaudePermissionMode | undefined,
-  ) => void;
-  onCancel: () => void;
-  onSaved: (snapshot: ClaudeSessionsSnapshot) => void;
-}
-
-export function ProjectDefaultsDialog({
-  open,
-  projectPath,
-  defaultModel,
-  defaultPermissionMode,
-  onDefaultModelChange,
-  onDefaultPermissionModeChange,
-  onCancel,
-  onSaved,
-}: ProjectDefaultsDialogProps) {
-  const mutation = useMutation({
-    mutationFn: claudeIpc.setClaudeProjectDefaults,
-    onSuccess: (snapshot) => {
-      onSaved(snapshot);
-    },
-  });
-
-  const handleCancel = () => {
-    mutation.reset();
-    onCancel();
-  };
+export function ProjectDefaultsDialog() {
+  const { state, actions } = useTerminalSession();
+  const { projectDefaultsDialog } = state;
+  const {
+    open,
+    projectPath,
+    defaultModel,
+    defaultPermissionMode,
+  } = projectDefaultsDialog;
 
   if (!open || !projectPath) {
     return null;
@@ -75,7 +45,9 @@ export function ProjectDefaultsDialog({
     <Dialog
       open={open}
       onOpenChange={(isOpen) => {
-        if (!isOpen) handleCancel();
+        if (!isOpen) {
+          actions.closeProjectDefaultsDialog();
+        }
       }}
     >
       <DialogContent showCloseButton={false}>
@@ -93,20 +65,16 @@ export function ProjectDefaultsDialog({
           className="space-y-4"
           onSubmit={(event) => {
             event.preventDefault();
-            mutation.mutate({
-              path: projectPath,
-              defaultModel,
-              defaultPermissionMode,
-            });
+            void actions.saveProjectDefaults();
           }}
         >
           <div className="space-y-2">
             <Label>Default model</Label>
             <Select
               value={defaultModel ?? "opus"}
-              onValueChange={(value) =>
-                onDefaultModelChange(value as ClaudeModel)
-              }
+              onValueChange={(value) => {
+                actions.updateProjectDefaultsDialog("defaultModel", value as ClaudeModel);
+              }}
             >
               <SelectTrigger className="w-full">
                 <SelectValue />
@@ -125,18 +93,14 @@ export function ProjectDefaultsDialog({
             label="Default permission mode"
             permissionMode={effectivePermissionMode}
             onPermissionModeChange={(value) => {
-              onDefaultPermissionModeChange(value);
+              actions.updateProjectDefaultsDialog("defaultPermissionMode", value);
             }}
           />
 
-          {mutation.error ? (
+          {state.errorMessage ? (
             <div className="flex items-center gap-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
               <AlertCircle className="size-4 shrink-0" />
-              <span>
-                {mutation.error instanceof Error
-                  ? mutation.error.message
-                  : "Failed to save project defaults."}
-              </span>
+              <span>{state.errorMessage}</span>
             </div>
           ) : null}
 
@@ -144,13 +108,13 @@ export function ProjectDefaultsDialog({
             <Button
               type="button"
               variant="outline"
-              onClick={handleCancel}
-              disabled={mutation.isPending}
+              onClick={actions.closeProjectDefaultsDialog}
+              disabled={state.isSavingProjectDefaults}
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? "Saving..." : "Save"}
+            <Button type="submit" disabled={state.isSavingProjectDefaults}>
+              {state.isSavingProjectDefaults ? "Saving..." : "Save"}
             </Button>
           </DialogFooter>
         </form>
@@ -158,3 +122,4 @@ export function ProjectDefaultsDialog({
     </Dialog>
   );
 }
+

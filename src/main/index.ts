@@ -8,6 +8,7 @@ import type {
   AddClaudeProjectInput,
   DeleteClaudeProjectInput,
   DeleteClaudeSessionInput,
+  GetClaudeStateInput,
   ResizeClaudeSessionInput,
   SetActiveSessionInput,
   SetClaudeProjectCollapsedInput,
@@ -18,11 +19,12 @@ import type {
 } from "../shared/claude-types";
 import { CLAUDE_IPC_CHANNELS } from "../shared/claude-types";
 import { ClaudeProjectStore } from "./claude-project-store";
-import { ClaudeSessionService } from "./claude-session-service";
 import { ClaudeSessionSnapshotStore } from "./claude-session-snapshot-store";
 import { ensureManagedClaudeStatePlugin } from "./claude-state-plugin";
 import { getUsage } from "./claude-usage-service";
 import log from "./logger";
+import { SessionOrchestrator } from "./session-orchestrator";
+import { StateOrchestrator } from "./state-orchestrator";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -41,7 +43,8 @@ const preload = path.join(__dirname, "../preload/index.mjs");
 const indexHtml = path.join(rendererDist, "index.html");
 
 let mainWindow: BrowserWindow | null = null;
-let sessionService: ClaudeSessionService | null = null;
+let sessionService: SessionOrchestrator | null = null;
+let stateService: StateOrchestrator | null = null;
 let managedPluginDir: string | null = null;
 let pluginWarning: string | null = null;
 
@@ -104,12 +107,13 @@ async function createWindow(): Promise<void> {
 }
 
 function registerIpcHandlers(): void {
-  if (!sessionService) {
+  if (!sessionService || !stateService) {
     throw new Error(
-      "registerIpcHandlers called before sessionService was initialized",
+      "registerIpcHandlers called before services were initialized",
     );
   }
   const service = sessionService;
+  const stateOrchestrator = stateService;
 
   ipcMain.handle(CLAUDE_IPC_CHANNELS.selectFolder, async () => {
     const options: Electron.OpenDialogOptions = {
@@ -127,8 +131,14 @@ function registerIpcHandlers(): void {
     return result.filePaths[0] ?? null;
   });
 
-  ipcMain.handle(CLAUDE_IPC_CHANNELS.getSessions, () =>
-    service.getSessionsSnapshot(),
+  ipcMain.handle(CLAUDE_IPC_CHANNELS.getAllStates, () =>
+    stateOrchestrator.getAllStatesSnapshot(),
+  );
+
+  ipcMain.handle(
+    CLAUDE_IPC_CHANNELS.getState,
+    (_event, input: GetClaudeStateInput) =>
+      stateOrchestrator.getStateSnapshot(input.key),
   );
 
   ipcMain.handle(
@@ -223,7 +233,7 @@ app.whenReady().then(async () => {
     pluginWarning,
   });
 
-  sessionService = new ClaudeSessionService({
+  sessionService = new SessionOrchestrator({
     userDataPath,
     pluginDir: managedPluginDir,
     pluginWarning,
@@ -236,10 +246,16 @@ app.whenReady().then(async () => {
         sendToRenderer(CLAUDE_IPC_CHANNELS.sessionExit, payload),
       emitSessionError: (payload) =>
         sendToRenderer(CLAUDE_IPC_CHANNELS.sessionError, payload),
-      emitSessionUpdated: (payload) =>
-        sendToRenderer(CLAUDE_IPC_CHANNELS.sessionUpdated, payload),
-      emitActiveSessionChanged: (payload) =>
-        sendToRenderer(CLAUDE_IPC_CHANNELS.activeSessionChanged, payload),
+    },
+  });
+
+  stateService = new StateOrchestrator({
+    serviceStates: sessionService.getServiceStates(),
+    callbacks: {
+      emitStateSet: (payload) =>
+        sendToRenderer(CLAUDE_IPC_CHANNELS.stateSet, payload),
+      emitStateUpdate: (payload) =>
+        sendToRenderer(CLAUDE_IPC_CHANNELS.stateUpdate, payload),
     },
   });
 
@@ -247,17 +263,18 @@ app.whenReady().then(async () => {
 
   registerIpcHandlers();
   await createWindow();
+  stateService.emitAllStateSets();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      void createWindow();
+      void createWindow().then(() => {
+        stateService?.emitAllStateSets();
+      });
     }
   });
 });
 
 app.on("window-all-closed", () => {
-  sessionService?.dispose();
-
   if (process.platform !== "darwin") {
     app.quit();
   }
@@ -265,4 +282,5 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   sessionService?.dispose();
+  stateService?.dispose();
 });

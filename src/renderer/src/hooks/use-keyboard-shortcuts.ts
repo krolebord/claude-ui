@@ -1,7 +1,10 @@
 import type { ClaudeSessionSnapshot, SessionId } from "@shared/claude-types";
 import { useEffect, useRef } from "react";
-import type { TerminalSessionState } from "../services/terminal-session-service";
-import type { TerminalSessionService } from "../services/terminal-session-service";
+import { useLocation } from "wouter";
+import type { SessionStoreState } from "../services/session-store";
+import type { SessionStore } from "../services/session-store";
+import { useTerminalSession } from "../services/use-terminal-session";
+import { useActiveSessionId } from "./use-active-session-id";
 
 export const SHORTCUT_DEFINITIONS = [
   { id: "new-session", label: "New session", key: "N", cmdOrCtrl: true },
@@ -15,10 +18,11 @@ export const SHORTCUT_DEFINITIONS = [
 ] as const;
 
 export function getNextSession(
-  state: TerminalSessionState,
+  state: SessionStoreState,
+  activeSessionId: SessionId | null,
   excludeSessionId?: SessionId,
 ): SessionId | null {
-  const activeId = state.activeSessionId;
+  const activeId = activeSessionId;
   const sessions = Object.values(state.sessionsById);
   const activeSession = activeId ? state.sessionsById[activeId] : null;
   const activeCwd = activeSession?.cwd ?? null;
@@ -63,14 +67,18 @@ export function getNextSession(
   return null;
 }
 
-export function useKeyboardShortcuts(
-  state: TerminalSessionState,
-  actions: TerminalSessionService["actions"],
-): void {
+export function useKeyboardShortcuts(): void {
+  const { state, actions } = useTerminalSession();
+  const activeSessionId = useActiveSessionId();
+  const [, navigate] = useLocation();
   const stateRef = useRef(state);
   const actionsRef = useRef(actions);
+  const navigateRef = useRef(navigate);
+  const activeSessionIdRef = useRef(activeSessionId);
   stateRef.current = state;
   actionsRef.current = actions;
+  navigateRef.current = navigate;
+  activeSessionIdRef.current = activeSessionId;
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -88,12 +96,14 @@ export function useKeyboardShortcuts(
 
       const key = event.key.toLowerCase();
 
+      const currentActiveId = activeSessionIdRef.current;
+
       if (key === "n") {
         event.preventDefault();
         event.stopPropagation();
 
-        const activeSession = s.activeSessionId
-          ? s.sessionsById[s.activeSessionId]
+        const activeSession = currentActiveId
+          ? s.sessionsById[currentActiveId]
           : null;
         if (!activeSession) return;
 
@@ -105,9 +115,11 @@ export function useKeyboardShortcuts(
         event.preventDefault();
         event.stopPropagation();
 
-        const nextId = getNextSession(s);
+        const nextId = getNextSession(s, currentActiveId);
         if (nextId) {
-          void actionsRef.current.setActiveSession(nextId);
+          void actionsRef.current.setActiveSession(nextId).then(() => {
+            navigateRef.current(`/session/${nextId}`);
+          });
         }
         return;
       }
@@ -116,15 +128,15 @@ export function useKeyboardShortcuts(
         event.preventDefault();
         event.stopPropagation();
 
-        const activeId = s.activeSessionId;
-        if (!activeId) return;
+        if (!currentActiveId) return;
 
-        const nextId = getNextSession(s, activeId);
-        void actionsRef.current.deleteSession(activeId).then(() => {
-          if (nextId) {
-            void actionsRef.current.setActiveSession(nextId);
-          }
-        });
+        const nextId = getNextSession(s, currentActiveId, currentActiveId);
+        if (nextId) {
+          navigateRef.current(`/session/${nextId}`);
+        } else {
+          navigateRef.current("/");
+        }
+        void actionsRef.current.deleteSession(currentActiveId);
         return;
       }
     }

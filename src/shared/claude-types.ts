@@ -1,6 +1,9 @@
+import type { INTERNAL_Op } from "valtio";
+
 export const CLAUDE_IPC_CHANNELS = {
   selectFolder: "claude:select-folder",
-  getSessions: "claude:get-sessions",
+  getAllStates: "claude:get-all-states",
+  getState: "claude:get-state",
   addProject: "claude:add-project",
   setProjectCollapsed: "claude:set-project-collapsed",
   setProjectDefaults: "claude:set-project-defaults",
@@ -12,10 +15,10 @@ export const CLAUDE_IPC_CHANNELS = {
   writeSession: "claude:write-session",
   resizeSession: "claude:resize-session",
   sessionData: "claude:session-data",
+  stateSet: "claude:state-set",
+  stateUpdate: "claude:state-update",
   sessionExit: "claude:session-exit",
   sessionError: "claude:session-error",
-  sessionUpdated: "claude:session-updated",
-  activeSessionChanged: "claude:active-session-changed",
   getUsage: "claude:get-usage",
   openLogFolder: "claude:open-log-folder",
   openStatePluginFolder: "claude:open-state-plugin-folder",
@@ -68,6 +71,53 @@ export interface ClaudeSessionsSnapshot {
   activeSessionId: SessionId | null;
 }
 
+export type ClaudeSessionsState = Record<SessionId, ClaudeSessionSnapshot>;
+
+export interface ClaudeActiveSessionState {
+  activeSessionId: SessionId | null;
+}
+
+export interface ClaudeStateByKey {
+  projects: ClaudeProject[];
+  sessions: ClaudeSessionsState;
+  activeSession: ClaudeActiveSessionState;
+}
+
+export type ClaudeStateKey = keyof ClaudeStateByKey;
+export const CLAUDE_STATE_KEYS = [
+  "projects",
+  "sessions",
+  "activeSession",
+] as const satisfies readonly ClaudeStateKey[];
+
+export type ClaudeStatePath = string[];
+
+export interface ClaudeStateSetEvent<
+  K extends ClaudeStateKey = ClaudeStateKey,
+> {
+  key: K;
+  state: ClaudeStateByKey[K];
+  version: number;
+}
+
+export interface ClaudeStateUpdateEvent<
+  K extends ClaudeStateKey = ClaudeStateKey,
+> {
+  key: K;
+  ops: INTERNAL_Op[];
+  version: number;
+}
+
+export interface ClaudeAllStatesSnapshot {
+  projects: ClaudeStateSetEvent<"projects">;
+  sessions: ClaudeStateSetEvent<"sessions">;
+  activeSession: ClaudeStateSetEvent<"activeSession">;
+}
+
+export interface GetClaudeStateInput {
+  key: ClaudeStateKey;
+}
+
 export interface AddClaudeProjectInput {
   path: string;
 }
@@ -99,7 +149,6 @@ export type StartClaudeSessionResult =
   | {
       ok: true;
       sessionId: SessionId;
-      snapshot: ClaudeSessionsSnapshot;
     }
   | {
       ok: false;
@@ -205,23 +254,20 @@ export type ClaudeUsageResult =
 
 export interface ClaudeDesktopApi {
   selectFolder: () => Promise<string | null>;
-  getSessions: () => Promise<ClaudeSessionsSnapshot>;
-  addClaudeProject: (
-    input: AddClaudeProjectInput,
-  ) => Promise<ClaudeSessionsSnapshot>;
+  getAllStates: () => Promise<ClaudeAllStatesSnapshot>;
+  getState: (input: GetClaudeStateInput) => Promise<ClaudeStateSetEvent>;
+  addClaudeProject: (input: AddClaudeProjectInput) => Promise<void>;
   setClaudeProjectCollapsed: (
     input: SetClaudeProjectCollapsedInput,
-  ) => Promise<ClaudeSessionsSnapshot>;
+  ) => Promise<void>;
   setClaudeProjectDefaults: (
     input: SetClaudeProjectDefaultsInput,
-  ) => Promise<ClaudeSessionsSnapshot>;
+  ) => Promise<void>;
   startClaudeSession: (
     input: StartClaudeSessionInput,
   ) => Promise<StartClaudeSessionResult>;
   stopClaudeSession: (input: StopClaudeSessionInput) => Promise<void>;
-  deleteClaudeProject: (
-    input: DeleteClaudeProjectInput,
-  ) => Promise<ClaudeSessionsSnapshot>;
+  deleteClaudeProject: (input: DeleteClaudeProjectInput) => Promise<void>;
   deleteClaudeSession: (input: DeleteClaudeSessionInput) => Promise<void>;
   setActiveSession: (input: SetActiveSessionInput) => Promise<void>;
   writeToClaudeSession: (input: WriteClaudeSessionInput) => void;
@@ -229,17 +275,17 @@ export interface ClaudeDesktopApi {
   onClaudeSessionData: (
     callback: (payload: ClaudeSessionDataEvent) => void,
   ) => () => void;
+  onClaudeStateSet: (
+    callback: (payload: ClaudeStateSetEvent) => void,
+  ) => () => void;
+  onClaudeStateUpdate: (
+    callback: (payload: ClaudeStateUpdateEvent) => void,
+  ) => () => void;
   onClaudeSessionExit: (
     callback: (payload: ClaudeSessionExitEvent) => void,
   ) => () => void;
   onClaudeSessionError: (
     callback: (payload: ClaudeSessionErrorEvent) => void,
-  ) => () => void;
-  onClaudeSessionUpdated: (
-    callback: (payload: ClaudeSessionUpdatedEvent) => void,
-  ) => () => void;
-  onClaudeActiveSessionChanged: (
-    callback: (payload: ClaudeActiveSessionChangedEvent) => void,
   ) => () => void;
   getUsage: () => Promise<ClaudeUsageResult>;
   openLogFolder: () => Promise<void>;

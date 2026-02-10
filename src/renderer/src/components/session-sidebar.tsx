@@ -1,16 +1,20 @@
 import { UsagePanel } from "@renderer/components/usage-panel";
 import { cn } from "@renderer/lib/utils";
+import { useTerminalSession } from "@renderer/services/use-terminal-session";
 import type {
   ProjectSessionGroup,
   SessionSidebarIndicatorState,
 } from "@renderer/services/terminal-session-selectors";
 import {
+  buildProjectSessionGroups,
   getSessionLastActivityLabel,
   getSessionSidebarIndicatorState,
   getSessionTitle,
 } from "@renderer/services/terminal-session-selectors";
+import { useActiveSessionId } from "@renderer/hooks/use-active-session-id";
 import type { SessionId } from "@shared/claude-types";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "wouter";
 import {
   CircleDot,
   ChevronDown,
@@ -39,28 +43,6 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@renderer/components/ui/context-menu";
-
-export interface SidebarCallbacks {
-  addProject: () => void;
-  openSettings: () => void;
-  toggleProject: (projectPath: string) => void;
-  openNewSessionDialog: (projectPath: string) => void;
-  selectSession: (sessionId: SessionId) => void;
-  stopSession: (sessionId: SessionId) => void;
-  resumeSession: (sessionId: SessionId) => void;
-  forkSession: (sessionId: SessionId) => void;
-  deleteSession: (sessionId: SessionId) => void;
-  deleteProject: (projectPath: string) => void;
-  openProjectDefaults: (projectPath: string) => void;
-}
-
-interface SessionSidebarProps {
-  groups: ProjectSessionGroup[];
-  activeSessionId: SessionId | null;
-  loadingSessionIds: Set<SessionId>;
-  isAddingProject: boolean;
-  callbacks: SidebarCallbacks;
-}
 
 const statusIndicatorMeta: Record<
   SessionSidebarIndicatorState,
@@ -115,13 +97,18 @@ const statusIndicatorMeta: Record<
   },
 };
 
-export function SessionSidebar({
-  groups,
-  activeSessionId,
-  loadingSessionIds,
-  isAddingProject,
-  callbacks,
-}: SessionSidebarProps) {
+export function SessionSidebar() {
+  const { state, actions } = useTerminalSession();
+  const [, navigate] = useLocation();
+  const activeSessionId = useActiveSessionId();
+  const groups: ProjectSessionGroup[] = useMemo(
+    () =>
+      buildProjectSessionGroups({
+        projects: state.projects,
+        sessionsById: state.sessionsById,
+      }),
+    [state.projects, state.sessionsById],
+  );
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -139,7 +126,7 @@ export function SessionSidebar({
       <div className="flex items-center gap-1.5 border-b border-border/70 p-2">
         <button
           type="button"
-          onClick={callbacks.openSettings}
+          onClick={actions.openSettingsDialog}
           className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-white/5 text-zinc-300 transition hover:bg-white/10 hover:text-white"
           aria-label="Settings"
         >
@@ -147,12 +134,12 @@ export function SessionSidebar({
         </button>
         <button
           type="button"
-          onClick={callbacks.addProject}
-          disabled={isAddingProject}
+          onClick={() => void actions.addProject()}
+          disabled={state.isSelecting}
           className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-2.5 py-1.5 text-xs font-medium text-zinc-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <FolderPlus className="size-3.5" />
-          {isAddingProject ? "Selecting project..." : "Add new project"}
+          {state.isSelecting ? "Selecting project..." : "Add new project"}
         </button>
       </div>
 
@@ -166,11 +153,11 @@ export function SessionSidebar({
               <div className="flex items-center gap-1.5 rounded-md px-0.5 py-0.5">
                 <button
                   type="button"
-                  onClick={() => {
-                    if (group.fromProjectList) {
-                      callbacks.toggleProject(group.path);
-                    }
-                  }}
+                    onClick={() => {
+                      if (group.fromProjectList) {
+                        void actions.toggleProjectCollapsed(group.path);
+                      }
+                    }}
                   className={cn(
                     "flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1.5 py-1.5 text-left text-sm font-medium text-zinc-100 transition",
                     group.fromProjectList
@@ -201,7 +188,7 @@ export function SessionSidebar({
                       <button
                         type="button"
                         onClick={() => {
-                          callbacks.deleteProject(group.path);
+                          void actions.deleteProject(group.path);
                         }}
                         className="inline-flex size-6 items-center justify-center rounded-md text-zinc-300 opacity-0 transition hover:bg-white/10 hover:text-rose-300 focus-visible:opacity-100 group-hover/project:opacity-100"
                         aria-label={`Delete project ${group.name}`}
@@ -212,7 +199,7 @@ export function SessionSidebar({
                     <button
                       type="button"
                       onClick={() => {
-                        callbacks.openProjectDefaults(group.path);
+                        actions.openProjectDefaultsDialog(group.path);
                       }}
                       className="inline-flex size-6 items-center justify-center rounded-md text-zinc-300 opacity-0 transition hover:bg-white/10 hover:text-white focus-visible:opacity-100 group-hover/project:opacity-100"
                       aria-label={`Project defaults for ${group.name}`}
@@ -222,7 +209,7 @@ export function SessionSidebar({
                     <button
                       type="button"
                       onClick={() => {
-                        callbacks.openNewSessionDialog(group.path);
+                        actions.openNewSessionDialog(group.path);
                       }}
                       className="inline-flex size-6 items-center justify-center rounded-md text-zinc-300 opacity-0 transition hover:bg-white/10 hover:text-white focus-visible:opacity-100 group-hover/project:opacity-100"
                       aria-label={`New session in ${group.name}`}
@@ -238,7 +225,7 @@ export function SessionSidebar({
                   {group.sessions.length > 0 ? (
                     group.sessions.map((session) => {
                       const isActive = activeSessionId === session.sessionId;
-                      const isLoading = loadingSessionIds.has(
+                      const isLoading = state.loadingSessionIds.has(
                         session.sessionId,
                       );
                       const statusState = getSessionSidebarIndicatorState(
@@ -282,7 +269,11 @@ export function SessionSidebar({
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    callbacks.selectSession(session.sessionId);
+                                    void actions
+                                      .setActiveSession(session.sessionId)
+                                      .then(() => {
+                                        navigate(`/session/${session.sessionId}`);
+                                      });
                                   }}
                                   className={cn(
                                     "flex w-full items-center justify-start gap-1.5 rounded-md px-1.5 py-1 pr-[3rem] text-sm transition",
@@ -318,12 +309,16 @@ export function SessionSidebar({
                                     onClick={(event) => {
                                       event.stopPropagation();
                                       if (canResume) {
-                                        void callbacks.resumeSession(
-                                          session.sessionId,
-                                        );
+                                        void actions
+                                          .resumeSession(session.sessionId)
+                                          .then((newId) => {
+                                            if (newId) {
+                                              navigate(`/session/${newId}`);
+                                            }
+                                          });
                                         return;
                                       }
-                                      void callbacks.stopSession(
+                                      void actions.stopSession(
                                         session.sessionId,
                                       );
                                     }}
@@ -343,9 +338,10 @@ export function SessionSidebar({
                                     type="button"
                                     onClick={(event) => {
                                       event.stopPropagation();
-                                      void callbacks.deleteSession(
-                                        session.sessionId,
-                                      );
+                                      if (activeSessionId === session.sessionId) {
+                                        navigate("/", { replace: true });
+                                      }
+                                      void actions.deleteSession(session.sessionId);
                                     }}
                                     disabled={isLoading}
                                     className={cn(
@@ -368,11 +364,15 @@ export function SessionSidebar({
                                   disabled={isLoading}
                                   onClick={() => {
                                     if (canResume) {
-                                      void callbacks.resumeSession(
-                                        session.sessionId,
-                                      );
+                                      void actions
+                                        .resumeSession(session.sessionId)
+                                        .then((newId) => {
+                                          if (newId) {
+                                            navigate(`/session/${newId}`);
+                                          }
+                                        });
                                     } else {
-                                      void callbacks.stopSession(
+                                      void actions.stopSession(
                                         session.sessionId,
                                       );
                                     }
@@ -386,9 +386,13 @@ export function SessionSidebar({
                                 <ContextMenuItem
                                   disabled={isLoading}
                                   onClick={() => {
-                                    void callbacks.forkSession(
-                                      session.sessionId,
-                                    );
+                                    void actions
+                                      .forkSession(session.sessionId)
+                                      .then((newId) => {
+                                        if (newId) {
+                                          navigate(`/session/${newId}`);
+                                        }
+                                      });
                                   }}
                                 >
                                   <GitFork className="size-3.5" />
@@ -425,9 +429,10 @@ export function SessionSidebar({
                                 variant="destructive"
                                 disabled={isLoading}
                                 onClick={() => {
-                                  void callbacks.deleteSession(
-                                    session.sessionId,
-                                  );
+                                  if (activeSessionId === session.sessionId) {
+                                    navigate("/", { replace: true });
+                                  }
+                                  void actions.deleteSession(session.sessionId);
                                 }}
                               >
                                 <Trash2 className="size-3.5" />

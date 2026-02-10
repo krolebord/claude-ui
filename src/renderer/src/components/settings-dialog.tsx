@@ -10,19 +10,17 @@ import {
 import { Kbd, KbdGroup } from "@renderer/components/ui/kbd";
 import { SHORTCUT_DEFINITIONS } from "@renderer/hooks/use-keyboard-shortcuts";
 import { claudeIpc } from "@renderer/lib/ipc";
+import { useTerminalSession } from "@renderer/services/use-terminal-session";
 import { FolderOpen, Keyboard } from "lucide-react";
 
-interface SettingsDialogProps {
-  open: boolean;
-  onClose: () => void;
-}
+export function SettingsDialog() {
+  const { state, actions } = useTerminalSession();
 
-export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   return (
     <Dialog
-      open={open}
+      open={state.settingsDialogOpen}
       onOpenChange={(isOpen) => {
-        if (!isOpen) onClose();
+        if (!isOpen) actions.closeSettingsDialog();
       }}
     >
       <DialogContent>

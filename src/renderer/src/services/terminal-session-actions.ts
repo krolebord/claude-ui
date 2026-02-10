@@ -8,7 +8,6 @@ import type {
   ClaudeModel,
   ClaudePermissionMode,
   ClaudeProject,
-  ClaudeSessionsSnapshot,
   SessionId,
   StartClaudeSessionInput,
 } from "@shared/claude-types";
@@ -16,8 +15,8 @@ import * as z from "zod";
 import type {
   NewSessionDialogState,
   ProjectDefaultsDialogState,
-  TerminalSessionState,
-} from "./terminal-session-service";
+  SessionStoreState,
+} from "./session-store";
 
 interface StartSessionInProjectInput {
   cwd: string;
@@ -32,20 +31,11 @@ interface StartSessionInProjectInput {
 }
 
 interface CreateTerminalSessionActionsDeps {
-  getState: () => TerminalSessionState;
+  getState: () => SessionStoreState;
   updateState: (
-    updater: (prev: TerminalSessionState) => TerminalSessionState,
+    updater: (prev: SessionStoreState) => SessionStoreState,
   ) => void;
-  updateSession: (
-    sessionId: SessionId,
-    mutate: (
-      session: TerminalSessionState["sessionsById"][SessionId],
-    ) => TerminalSessionState["sessionsById"][SessionId],
-  ) => boolean;
-  applySnapshot: (
-    snapshot: Awaited<ReturnType<typeof claudeIpc.getSessions>>,
-  ) => void;
-  refreshSessions: () => Promise<void>;
+  getTerminalSize: () => { cols: number; rows: number };
   setTerminal: (handle: TerminalPaneHandle | null) => void;
   renderActiveSessionOutput: () => void;
   clearTerminal: () => void;
@@ -92,7 +82,7 @@ const closedProjectDefaultsDialog: ProjectDefaultsDialogState = {
 async function startSessionInProject(
   deps: CreateTerminalSessionActionsDeps,
   input: StartSessionInProjectInput,
-): Promise<void> {
+): Promise<SessionId | null> {
   deps.updateState((prev) => ({
     ...prev,
     isStarting: true,
@@ -122,14 +112,15 @@ async function startSessionInProject(
 
     if (!result.ok) {
       setError(deps, new Error(result.message), result.message);
-      return;
+      return null;
     }
 
-    deps.applySnapshot(result.snapshot);
     deps.clearTerminal();
     deps.focusTerminal();
+    return result.sessionId;
   } catch (error) {
     setError(deps, error, "Failed to start session.");
+    return null;
   } finally {
     deps.updateState((prev) => ({
       ...prev,
@@ -141,6 +132,11 @@ async function startSessionInProject(
 export function createTerminalSessionActions(
   deps: CreateTerminalSessionActionsDeps,
 ) {
+  const resolveTerminalSize = (input?: { cols: number; rows: number }): {
+    cols: number;
+    rows: number;
+  } => input ?? deps.getTerminalSize();
+
   return {
     addProject: async (): Promise<void> => {
       if (deps.getState().isSelecting) {
@@ -171,10 +167,9 @@ export function createTerminalSessionActions(
           return;
         }
 
-        const snapshot = await claudeIpc.addClaudeProject({
+        await claudeIpc.addClaudeProject({
           path: normalizedPath,
         });
-        deps.applySnapshot(snapshot);
 
         const addedProject = deps
           .getState()
@@ -206,11 +201,10 @@ export function createTerminalSessionActions(
       }
 
       try {
-        const snapshot = await claudeIpc.setClaudeProjectCollapsed({
+        await claudeIpc.setClaudeProjectCollapsed({
           path: projectPath,
           collapsed: !project.collapsed,
         });
-        deps.applySnapshot(snapshot);
       } catch (error) {
         setError(deps, error, "Failed to update project state.");
       }
@@ -242,14 +236,38 @@ export function createTerminalSessionActions(
         },
       }));
     },
-    newSessionStarted: (snapshot: ClaudeSessionsSnapshot): void => {
-      deps.applySnapshot(snapshot);
-      deps.clearTerminal();
-      deps.focusTerminal();
+    startNewSession: async (
+      input: {
+        cols: number;
+        rows: number;
+      } | null = null,
+    ): Promise<SessionId | null> => {
+      const state = deps.getState();
+      const projectPath = state.newSessionDialog.projectPath;
+      if (!projectPath || state.isStarting) {
+        return null;
+      }
+      const size = resolveTerminalSize(input ?? undefined);
+
+      const result = await startSessionInProject(deps, {
+        cwd: projectPath,
+        cols: size.cols,
+        rows: size.rows,
+        initialPrompt: state.newSessionDialog.initialPrompt,
+        sessionName: state.newSessionDialog.sessionName,
+        model: state.newSessionDialog.model,
+        permissionMode: state.newSessionDialog.permissionMode,
+      });
+
+      if (!result) {
+        return null;
+      }
+
       deps.updateState((prev) => ({
         ...prev,
         newSessionDialog: getDefaultDialogState(null, false),
       }));
+      return result;
     },
     stopActiveSession: async (): Promise<void> => {
       if (deps.getState().isStopping) {
@@ -303,36 +321,38 @@ export function createTerminalSessionActions(
     },
     resumeSession: async (
       sessionId: SessionId,
-      input: { cols: number; rows: number },
-    ): Promise<void> => {
+      input?: { cols: number; rows: number },
+    ): Promise<SessionId | null> => {
       const state = deps.getState();
       const session = state.sessionsById[sessionId];
       if (!session || session.status !== "stopped" || state.isStarting) {
-        return;
+        return null;
       }
+      const size = resolveTerminalSize(input);
 
-      await startSessionInProject(deps, {
+      return startSessionInProject(deps, {
         cwd: session.cwd,
-        cols: input.cols,
-        rows: input.rows,
+        cols: size.cols,
+        rows: size.rows,
         resumeSessionId: sessionId,
         permissionMode: session.permissionMode,
       });
     },
     forkSession: async (
       sessionId: SessionId,
-      input: { cols: number; rows: number },
-    ): Promise<void> => {
+      input?: { cols: number; rows: number },
+    ): Promise<SessionId | null> => {
       const state = deps.getState();
       const session = state.sessionsById[sessionId];
       if (!session || state.isStarting) {
-        return;
+        return null;
       }
+      const size = resolveTerminalSize(input);
 
-      await startSessionInProject(deps, {
+      return startSessionInProject(deps, {
         cwd: session.cwd,
-        cols: input.cols,
-        rows: input.rows,
+        cols: size.cols,
+        rows: size.rows,
         forkSessionId: sessionId,
         permissionMode: session.permissionMode,
       });
@@ -340,7 +360,6 @@ export function createTerminalSessionActions(
     deleteProject: async (projectPath: string): Promise<void> => {
       try {
         await claudeIpc.deleteClaudeProject({ path: projectPath });
-        await deps.refreshSessions();
       } catch (error) {
         setError(deps, error, "Failed to delete project.");
       }
@@ -357,7 +376,6 @@ export function createTerminalSessionActions(
 
       try {
         await claudeIpc.deleteClaudeSession({ sessionId });
-        await deps.refreshSessions();
       } catch (error) {
         setError(deps, error, "Failed to delete session.");
       } finally {
@@ -431,12 +449,37 @@ export function createTerminalSessionActions(
         },
       }));
     },
-    projectDefaultsSaved: (snapshot: ClaudeSessionsSnapshot): void => {
-      deps.applySnapshot(snapshot);
+    saveProjectDefaults: async (): Promise<void> => {
+      const state = deps.getState();
+      const path = state.projectDefaultsDialog.projectPath;
+      if (!path) {
+        return;
+      }
+
       deps.updateState((prev) => ({
         ...prev,
-        projectDefaultsDialog: closedProjectDefaultsDialog,
+        isSavingProjectDefaults: true,
       }));
+
+      try {
+        await claudeIpc.setClaudeProjectDefaults({
+          path,
+          defaultModel: state.projectDefaultsDialog.defaultModel,
+          defaultPermissionMode:
+            state.projectDefaultsDialog.defaultPermissionMode,
+        });
+        deps.updateState((prev) => ({
+          ...prev,
+          projectDefaultsDialog: closedProjectDefaultsDialog,
+        }));
+      } catch (error) {
+        setError(deps, error, "Failed to save project defaults.");
+      } finally {
+        deps.updateState((prev) => ({
+          ...prev,
+          isSavingProjectDefaults: false,
+        }));
+      }
     },
     openSettingsDialog: (): void => {
       deps.updateState((prev) => ({

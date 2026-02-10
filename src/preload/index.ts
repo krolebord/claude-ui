@@ -2,16 +2,17 @@ import { contextBridge, ipcRenderer } from "electron";
 import {
   type AddClaudeProjectInput,
   CLAUDE_IPC_CHANNELS,
-  type ClaudeActiveSessionChangedEvent,
+  type ClaudeAllStatesSnapshot,
   type ClaudeDesktopApi,
   type ClaudeSessionDataEvent,
   type ClaudeSessionErrorEvent,
   type ClaudeSessionExitEvent,
-  type ClaudeSessionUpdatedEvent,
-  type ClaudeSessionsSnapshot,
+  type ClaudeStateSetEvent,
+  type ClaudeStateUpdateEvent,
   type ClaudeUsageResult,
   type DeleteClaudeProjectInput,
   type DeleteClaudeSessionInput,
+  type GetClaudeStateInput,
   type ResizeClaudeSessionInput,
   type SetActiveSessionInput,
   type SetClaudeProjectCollapsedInput,
@@ -39,23 +40,21 @@ function subscribe<T>(
 
 const claudeApi: ClaudeDesktopApi = {
   selectFolder: () => ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.selectFolder),
-  getSessions: (): Promise<ClaudeSessionsSnapshot> =>
-    ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.getSessions),
-  addClaudeProject: (
-    input: AddClaudeProjectInput,
-  ): Promise<ClaudeSessionsSnapshot> =>
+  getAllStates: (): Promise<ClaudeAllStatesSnapshot> =>
+    ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.getAllStates),
+  getState: (input: GetClaudeStateInput): Promise<ClaudeStateSetEvent> =>
+    ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.getState, input),
+  addClaudeProject: (input: AddClaudeProjectInput): Promise<void> =>
     ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.addProject, input),
   setClaudeProjectCollapsed: (
     input: SetClaudeProjectCollapsedInput,
-  ): Promise<ClaudeSessionsSnapshot> =>
+  ): Promise<void> =>
     ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.setProjectCollapsed, input),
   setClaudeProjectDefaults: (
     input: SetClaudeProjectDefaultsInput,
-  ): Promise<ClaudeSessionsSnapshot> =>
+  ): Promise<void> =>
     ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.setProjectDefaults, input),
-  deleteClaudeProject: (
-    input: DeleteClaudeProjectInput,
-  ): Promise<ClaudeSessionsSnapshot> =>
+  deleteClaudeProject: (input: DeleteClaudeProjectInput): Promise<void> =>
     ipcRenderer.invoke(CLAUDE_IPC_CHANNELS.deleteProject, input),
   startClaudeSession: (
     input: StartClaudeSessionInput,
@@ -78,6 +77,13 @@ const claudeApi: ClaudeDesktopApi = {
       CLAUDE_IPC_CHANNELS.sessionData,
       callback,
     ),
+  onClaudeStateSet: (callback) =>
+    subscribe<ClaudeStateSetEvent>(CLAUDE_IPC_CHANNELS.stateSet, callback),
+  onClaudeStateUpdate: (callback) =>
+    subscribe<ClaudeStateUpdateEvent>(
+      CLAUDE_IPC_CHANNELS.stateUpdate,
+      callback,
+    ),
   onClaudeSessionExit: (callback) =>
     subscribe<ClaudeSessionExitEvent>(
       CLAUDE_IPC_CHANNELS.sessionExit,
@@ -86,16 +92,6 @@ const claudeApi: ClaudeDesktopApi = {
   onClaudeSessionError: (callback) =>
     subscribe<ClaudeSessionErrorEvent>(
       CLAUDE_IPC_CHANNELS.sessionError,
-      callback,
-    ),
-  onClaudeSessionUpdated: (callback) =>
-    subscribe<ClaudeSessionUpdatedEvent>(
-      CLAUDE_IPC_CHANNELS.sessionUpdated,
-      callback,
-    ),
-  onClaudeActiveSessionChanged: (callback) =>
-    subscribe<ClaudeActiveSessionChangedEvent>(
-      CLAUDE_IPC_CHANNELS.activeSessionChanged,
       callback,
     ),
   getUsage: (): Promise<ClaudeUsageResult> =>

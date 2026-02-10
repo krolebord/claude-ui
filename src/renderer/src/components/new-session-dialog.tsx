@@ -1,4 +1,3 @@
-import { useMutation } from "@tanstack/react-query";
 import { PermissionModeToggleGroup } from "@renderer/components/permission-mode-toggle-group";
 import { Button } from "@renderer/components/ui/button";
 import {
@@ -19,65 +18,27 @@ import {
   SelectValue,
 } from "@renderer/components/ui/select";
 import { Textarea } from "@renderer/components/ui/textarea";
-import { claudeIpc } from "@renderer/lib/ipc";
+import { useTerminalSession } from "@renderer/services/use-terminal-session";
 import {
   MODEL_OPTIONS,
   getProjectNameFromPath,
 } from "@renderer/services/terminal-session-selectors";
-import type {
-  ClaudeModel,
-  ClaudePermissionMode,
-  ClaudeSessionsSnapshot,
-  StartClaudeSessionInput,
-} from "@shared/claude-types";
+import type { ClaudeModel } from "@shared/claude-types";
 import { AlertCircle } from "lucide-react";
+import { useLocation } from "wouter";
 
-interface NewSessionDialogProps {
-  open: boolean;
-  projectPath: string | null;
-  initialPrompt: string;
-  sessionName: string;
-  model: ClaudeModel;
-  permissionMode: ClaudePermissionMode;
-  getTerminalSize: () => { cols: number; rows: number };
-  onInitialPromptChange: (value: string) => void;
-  onSessionNameChange: (value: string) => void;
-  onModelChange: (value: ClaudeModel) => void;
-  onPermissionModeChange: (value: ClaudePermissionMode) => void;
-  onCancel: () => void;
-  onStarted: (snapshot: ClaudeSessionsSnapshot) => void;
-}
-
-export function NewSessionDialog({
-  open,
-  projectPath,
-  initialPrompt,
-  sessionName,
-  model,
-  permissionMode,
-  getTerminalSize,
-  onInitialPromptChange,
-  onSessionNameChange,
-  onModelChange,
-  onPermissionModeChange,
-  onCancel,
-  onStarted,
-}: NewSessionDialogProps) {
-  const mutation = useMutation({
-    mutationFn: async (input: StartClaudeSessionInput) => {
-      const result = await claudeIpc.startClaudeSession(input);
-      if (!result.ok) throw new Error(result.message);
-      return result;
-    },
-    onSuccess: (result) => {
-      onStarted(result.snapshot);
-    },
-  });
-
-  const handleCancel = () => {
-    mutation.reset();
-    onCancel();
-  };
+export function NewSessionDialog() {
+  const { state, actions } = useTerminalSession();
+  const [, navigate] = useLocation();
+  const { newSessionDialog } = state;
+  const {
+    open,
+    projectPath,
+    initialPrompt,
+    sessionName,
+    model,
+    permissionMode,
+  } = newSessionDialog;
 
   if (!open || !projectPath) {
     return null;
@@ -86,22 +47,10 @@ export function NewSessionDialog({
   const projectName = getProjectNameFromPath(projectPath);
 
   const handleSubmit = () => {
-    if (mutation.isPending) {
-      return;
-    }
-
-    const trimmedName = sessionName.trim();
-    const trimmedPrompt = initialPrompt.trim();
-    const terminalSize = getTerminalSize();
-
-    mutation.mutate({
-      cwd: projectPath,
-      cols: terminalSize.cols,
-      rows: terminalSize.rows,
-      sessionName: trimmedName.length > 0 ? trimmedName : undefined,
-      model,
-      permissionMode,
-      initialPrompt: trimmedPrompt.length > 0 ? trimmedPrompt : undefined,
+    void actions.startNewSession().then((nextSessionId) => {
+      if (nextSessionId) {
+        navigate(`/session/${nextSessionId}`);
+      }
     });
   };
 
@@ -109,7 +58,9 @@ export function NewSessionDialog({
     <Dialog
       open={open}
       onOpenChange={(isOpen) => {
-        if (!isOpen) handleCancel();
+        if (!isOpen) {
+          actions.closeNewSessionDialog();
+        }
       }}
     >
       <DialogContent showCloseButton={false}>
@@ -139,7 +90,7 @@ export function NewSessionDialog({
               placeholder="What would you like Claude to do?"
               value={initialPrompt}
               onChange={(event) => {
-                onInitialPromptChange(event.target.value);
+                actions.updateNewSessionDialog("initialPrompt", event.target.value);
               }}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {
@@ -154,7 +105,9 @@ export function NewSessionDialog({
           <PermissionModeToggleGroup
             label="Permission mode"
             permissionMode={permissionMode}
-            onPermissionModeChange={onPermissionModeChange}
+            onPermissionModeChange={(value) => {
+              actions.updateNewSessionDialog("permissionMode", value);
+            }}
           />
 
           <div className="space-y-2">
@@ -164,7 +117,7 @@ export function NewSessionDialog({
               placeholder="Leave blank for generated name"
               value={sessionName}
               onChange={(event) => {
-                onSessionNameChange(event.target.value);
+                actions.updateNewSessionDialog("sessionName", event.target.value);
               }}
             />
           </div>
@@ -173,9 +126,9 @@ export function NewSessionDialog({
             <Label>Model</Label>
             <Select
               value={model}
-              onValueChange={(value) =>
-                onModelChange(value as ClaudeModel)
-              }
+              onValueChange={(value) => {
+                actions.updateNewSessionDialog("model", value as ClaudeModel);
+              }}
             >
               <SelectTrigger className="w-full">
                 <SelectValue />
@@ -190,14 +143,10 @@ export function NewSessionDialog({
             </Select>
           </div>
 
-          {mutation.error ? (
+          {state.errorMessage ? (
             <div className="flex items-center gap-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
               <AlertCircle className="size-4 shrink-0" />
-              <span>
-                {mutation.error instanceof Error
-                  ? mutation.error.message
-                  : "Failed to start session."}
-              </span>
+              <span>{state.errorMessage}</span>
             </div>
           ) : null}
 
@@ -205,13 +154,13 @@ export function NewSessionDialog({
             <Button
               type="button"
               variant="outline"
-              onClick={handleCancel}
-              disabled={mutation.isPending}
+              onClick={actions.closeNewSessionDialog}
+              disabled={state.isStarting}
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? "Starting..." : "Create"}
+            <Button type="submit" disabled={state.isStarting}>
+              {state.isStarting ? "Starting..." : "Create"}
             </Button>
           </DialogFooter>
         </form>
@@ -219,3 +168,4 @@ export function NewSessionDialog({
     </Dialog>
   );
 }
+
