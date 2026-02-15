@@ -4,10 +4,14 @@ import { shellQuote } from "@shared/utils";
 import { z } from "zod";
 import {
   type ClaudeActivityState,
+  type ClaudeEffort,
   type ClaudeModel,
   type ClaudePermissionMode,
+  type HaikuModelOverride,
+  claudeEffortSchema,
   claudeModelSchema,
   claudePermissionModeSchema,
+  haikuModelOverrideSchema,
 } from "../shared/claude-types";
 import { defineServiceState } from "../shared/service-state";
 import { ClaudeActivityMonitor } from "./claude-activity-monitor";
@@ -49,6 +53,8 @@ const claudeSessionSchema = z.object({
   startupConfig: z.object({
     permissionMode: claudePermissionModeSchema,
     model: claudeModelSchema,
+    effort: claudeEffortSchema.optional(),
+    haikuModelOverride: haikuModelOverrideSchema.optional().catch(undefined),
     initialPrompt: z
       .string()
       .optional()
@@ -91,6 +97,8 @@ const startClaudeSessionSchema = z.object({
     .transform((value) => value?.trim()),
   permissionMode: claudePermissionModeSchema.optional(),
   model: claudeModelSchema.optional(),
+  effort: claudeEffortSchema.optional(),
+  haikuModelOverride: haikuModelOverrideSchema.optional(),
   initialPrompt: z
     .string()
     .optional()
@@ -213,6 +221,8 @@ type ClaudeStartupOptions = {
   permissionMode: ClaudePermissionMode;
   pluginDir: string | null;
   model: ClaudeModel;
+  effort?: ClaudeEffort;
+  haikuModelOverride?: HaikuModelOverride;
   stateFilePath: string;
   initialPrompt?: string;
   start: ClaudeStartOptions;
@@ -251,17 +261,27 @@ function buildClaudeArgs(input: ClaudeStartupOptions): {
     args.push(`--model ${input.model}`);
   }
 
+  if (input.effort) {
+    args.push(`--effort ${input.effort}`);
+  }
+
   if (input.initialPrompt?.trim()) {
     args.push(shellQuote(input.initialPrompt));
   }
 
   args.push(...buildStartNewArgs(input.start));
 
+  const env: Record<string, string> = {
+    CLAUDE_UI_STATE_FILE: input.stateFilePath,
+  };
+
+  if (input.haikuModelOverride) {
+    env.ANTHROPIC_DEFAULT_HAIKU_MODEL = input.haikuModelOverride;
+  }
+
   return {
     args: args.filter(Boolean),
-    env: {
-      CLAUDE_UI_STATE_FILE: input.stateFilePath,
-    },
+    env,
   };
 }
 
@@ -341,6 +361,8 @@ export class SessionsServiceNew {
     const startupOptions: Omit<ClaudeStartupOptions, "stateFilePath"> = {
       cwd: sessionInput.cwd,
       model: sessionInput.model ?? "opus",
+      effort: sessionInput.effort,
+      haikuModelOverride: sessionInput.haikuModelOverride,
       permissionMode: sessionInput.permissionMode ?? "default",
       pluginDir: this.pluginDir,
       initialPrompt: sessionInput.initialPrompt,
@@ -356,6 +378,8 @@ export class SessionsServiceNew {
       startupConfig: {
         initialPrompt: startupOptions.initialPrompt,
         model: startupOptions.model,
+        effort: startupOptions.effort,
+        haikuModelOverride: startupOptions.haikuModelOverride,
         permissionMode: startupOptions.permissionMode,
         cwd: startupOptions.cwd,
       },
@@ -371,6 +395,8 @@ export class SessionsServiceNew {
       cwd: sessionInput.cwd,
       permissionMode: sessionInput.permissionMode ?? "default",
       model: sessionInput.model ?? "opus",
+      effort: sessionInput.effort,
+      haikuModelOverride: sessionInput.haikuModelOverride,
       initialPrompt: sessionInput.initialPrompt,
       start: {
         type: "start-new",
@@ -404,6 +430,8 @@ export class SessionsServiceNew {
       cwd: session.startupConfig.cwd,
       permissionMode: session.startupConfig.permissionMode,
       model: session.startupConfig.model,
+      effort: session.startupConfig.effort,
+      haikuModelOverride: session.startupConfig.haikuModelOverride,
       start: {
         type: "resume",
         sessionId: input.sessionId,
@@ -427,6 +455,8 @@ export class SessionsServiceNew {
       startupConfig: {
         initialPrompt: session.startupConfig.initialPrompt,
         model: session.startupConfig.model,
+        effort: session.startupConfig.effort,
+        haikuModelOverride: session.startupConfig.haikuModelOverride,
         permissionMode: session.startupConfig.permissionMode,
         cwd: session.startupConfig.cwd,
       },
@@ -443,6 +473,8 @@ export class SessionsServiceNew {
       cwd: session.startupConfig.cwd,
       permissionMode: session.startupConfig.permissionMode,
       model: session.startupConfig.model,
+      effort: session.startupConfig.effort,
+      haikuModelOverride: session.startupConfig.haikuModelOverride,
       start: {
         type: "start-new",
         sessionId: sessionId,
@@ -459,6 +491,8 @@ export class SessionsServiceNew {
     rows?: number;
     permissionMode: ClaudePermissionMode;
     model: ClaudeModel;
+    effort?: ClaudeEffort;
+    haikuModelOverride?: HaikuModelOverride;
     initialPrompt?: string;
     start: ClaudeStartOptions;
   }) {
@@ -499,6 +533,8 @@ export class SessionsServiceNew {
       permissionMode: opts.permissionMode,
       pluginDir: this.pluginDir,
       model: opts.model,
+      effort: opts.effort,
+      haikuModelOverride: opts.haikuModelOverride,
       stateFilePath,
       initialPrompt: opts.initialPrompt,
       cwd: opts.cwd,

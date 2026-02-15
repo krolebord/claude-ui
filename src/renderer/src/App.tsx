@@ -48,7 +48,7 @@ function App() {
 
       <SettingsDialog />
 
-      <Toaster />
+      <Toaster closeButton />
     </div>
   );
 }

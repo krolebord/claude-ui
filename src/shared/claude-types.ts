@@ -34,11 +34,24 @@ export const claudePermissionModeSchema = z.enum([
 
 export type ClaudePermissionMode = z.infer<typeof claudePermissionModeSchema>;
 
+export const claudeEffortSchema = z.enum(["low", "medium", "high"]);
+
+export type ClaudeEffort = z.infer<typeof claudeEffortSchema>;
+
+export const haikuModelOverrideSchema = z.enum([
+  "claude-sonnet-4-5-20250929",
+  "claude-opus-4-6",
+]);
+
+export type HaikuModelOverride = z.infer<typeof haikuModelOverrideSchema>;
+
 export interface ClaudeProject {
   path: string;
   collapsed: boolean;
   defaultModel?: ClaudeModel;
   defaultPermissionMode?: ClaudePermissionMode;
+  defaultEffort?: ClaudeEffort;
+  defaultHaikuModelOverride?: HaikuModelOverride;
 }
 
 export interface ClaudeHookEvent {

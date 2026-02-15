@@ -97,8 +97,6 @@ function TerminalPaneComponent(
       return true;
     });
 
-    fitAddon.fit();
-
     const fitAndNotify = () => {
       if (!container.clientWidth || !container.clientHeight) {
         return;
@@ -126,6 +124,7 @@ function TerminalPaneComponent(
     };
 
     window.addEventListener("resize", onWindowResize);
+    fitAndNotify();
     window.requestAnimationFrame(fitAndNotify);
 
     return () => {

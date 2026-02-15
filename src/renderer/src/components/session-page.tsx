@@ -57,6 +57,9 @@ function TerminalPage({ session }: { session: Session }) {
         onError(error) {
           const message =
             error instanceof Error ? error.message : "Unknown error";
+          if (message.includes("closed or aborted")) {
+            return;
+          }
           toast.error(`Terminal stream disconnected: ${message}`);
         },
       },

@@ -1,3 +1,4 @@
+import { EffortToggleGroup } from "@renderer/components/effort-toggle-group";
 import { PermissionModeToggleGroup } from "@renderer/components/permission-mode-toggle-group";
 import { Button } from "@renderer/components/ui/button";
 import {
@@ -17,12 +18,18 @@ import {
   SelectValue,
 } from "@renderer/components/ui/select";
 import {
+  HAIKU_MODEL_OVERRIDE_OPTIONS,
   MODEL_OPTIONS,
   getProjectNameFromPath,
 } from "@renderer/services/terminal-session-selectors";
 import { useAppState } from "@renderer/components/sync-state-provider";
 import { orpc } from "@renderer/orpc-client";
-import type { ClaudeModel, ClaudePermissionMode } from "@shared/claude-types";
+import type {
+  ClaudeEffort,
+  ClaudeModel,
+  ClaudePermissionMode,
+  HaikuModelOverride,
+} from "@shared/claude-types";
 import { useMutation } from "@tanstack/react-query";
 import { AlertCircle } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -56,8 +63,14 @@ export function ProjectDefaultsDialog() {
   });
 
   const [defaultModel, setDefaultModel] = useState<ClaudeModel>("opus");
+  const [defaultEffort, setDefaultEffort] = useState<ClaudeEffort | undefined>(
+    undefined,
+  );
   const [defaultPermissionMode, setDefaultPermissionMode] =
     useState<ClaudePermissionMode>("default");
+  const [defaultHaikuModelOverride, setDefaultHaikuModelOverride] = useState<
+    HaikuModelOverride | undefined
+  >(undefined);
 
   const saveMutation = useMutation(
     orpc.projects.setProjectDefaults.mutationOptions({
@@ -72,7 +85,9 @@ export function ProjectDefaultsDialog() {
       return;
     }
     setDefaultModel(project.defaultModel ?? "opus");
+    setDefaultEffort(project.defaultEffort);
     setDefaultPermissionMode(project.defaultPermissionMode ?? "default");
+    setDefaultHaikuModelOverride(project.defaultHaikuModelOverride);
   }, [project]);
 
   if (!openProjectCwd || !project) {
@@ -117,7 +132,9 @@ export function ProjectDefaultsDialog() {
             saveMutation.mutate({
               path: projectPath,
               defaultModel,
+              defaultEffort,
               defaultPermissionMode,
+              defaultHaikuModelOverride,
             });
           }}
         >
@@ -149,6 +166,38 @@ export function ProjectDefaultsDialog() {
               setDefaultPermissionMode(value);
             }}
           />
+
+          <EffortToggleGroup
+            label="Default effort"
+            effort={defaultEffort}
+            onEffortChange={setDefaultEffort}
+          />
+
+          <div className="space-y-2">
+            <Label>Override haiku model</Label>
+            <Select
+              value={defaultHaikuModelOverride ?? "no"}
+              onValueChange={(value) => {
+                setDefaultHaikuModelOverride(
+                  value === "no"
+                    ? undefined
+                    : (value as HaikuModelOverride),
+                );
+              }}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="no">No</SelectItem>
+                {HAIKU_MODEL_OVERRIDE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
           {saveMutation.error ? (
             <div className="flex items-center gap-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">

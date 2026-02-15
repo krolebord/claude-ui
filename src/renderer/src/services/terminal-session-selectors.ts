@@ -1,4 +1,8 @@
-import type { ClaudeModel, ClaudeProject } from "@shared/claude-types";
+import type {
+  ClaudeModel,
+  ClaudeProject,
+  HaikuModelOverride,
+} from "@shared/claude-types";
 import type { ClaudeSession } from "src/main/session-service";
 
 export interface ProjectSessionGroup {
@@ -24,6 +28,14 @@ export const MODEL_OPTIONS: { value: ClaudeModel; label: string }[] = [
   { value: "opus", label: "Opus" },
   { value: "sonnet", label: "Sonnet" },
   { value: "haiku", label: "Haiku" },
+];
+
+export const HAIKU_MODEL_OVERRIDE_OPTIONS: {
+  value: HaikuModelOverride;
+  label: string;
+}[] = [
+  { value: "claude-sonnet-4-5-20250929", label: "Sonnet 4.5" },
+  { value: "claude-opus-4-6", label: "Opus 4.6" },
 ];
 
 interface BuildProjectSessionGroupsInput {

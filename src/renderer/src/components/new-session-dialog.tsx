@@ -1,3 +1,4 @@
+import { EffortToggleGroup } from "@renderer/components/effort-toggle-group";
 import { PermissionModeToggleGroup } from "@renderer/components/permission-mode-toggle-group";
 import { useAppState } from "@renderer/components/sync-state-provider";
 import { Button } from "@renderer/components/ui/button";
@@ -22,10 +23,16 @@ import { Textarea } from "@renderer/components/ui/textarea";
 import { useActiveSessionStore } from "@renderer/hooks/use-active-session-id";
 import { orpc } from "@renderer/orpc-client";
 import {
+  HAIKU_MODEL_OVERRIDE_OPTIONS,
   MODEL_OPTIONS,
   getProjectNameFromPath,
 } from "@renderer/services/terminal-session-selectors";
-import type { ClaudeModel, ClaudePermissionMode } from "@shared/claude-types";
+import type {
+  ClaudeEffort,
+  ClaudeModel,
+  ClaudePermissionMode,
+  HaikuModelOverride,
+} from "@shared/claude-types";
 import { useMutation } from "@tanstack/react-query";
 import { AlertCircle } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -62,8 +69,12 @@ export function NewSessionDialog() {
   const [initialPrompt, setInitialPrompt] = useState("");
   const [sessionName, setSessionName] = useState("");
   const [model, setModel] = useState<ClaudeModel>("opus");
+  const [effort, setEffort] = useState<ClaudeEffort | undefined>(undefined);
   const [permissionMode, setPermissionMode] =
     useState<ClaudePermissionMode>("default");
+  const [haikuModelOverride, setHaikuModelOverride] = useState<
+    HaikuModelOverride | undefined
+  >(undefined);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const ensureProject = useMutation(orpc.projects.addProject.mutationOptions());
@@ -79,7 +90,9 @@ export function NewSessionDialog() {
     setInitialPrompt("");
     setSessionName("");
     setModel(project?.defaultModel ?? "opus");
+    setEffort(project?.defaultEffort);
     setPermissionMode(project?.defaultPermissionMode ?? "default");
+    setHaikuModelOverride(project?.defaultHaikuModelOverride);
     setErrorMessage(null);
   }, [openProjectCwd, project]);
 
@@ -119,6 +132,8 @@ export function NewSessionDialog() {
           initialPrompt: initialPrompt || undefined,
           sessionName: sessionName || undefined,
           model,
+          effort,
+          haikuModelOverride,
           permissionMode,
         });
 
@@ -190,6 +205,12 @@ export function NewSessionDialog() {
             }}
           />
 
+          <EffortToggleGroup
+            label="Effort"
+            effort={effort}
+            onEffortChange={setEffort}
+          />
+
           <div className="space-y-2">
             <Label htmlFor="new-session-name">Session name (optional)</Label>
             <Input
@@ -215,6 +236,32 @@ export function NewSessionDialog() {
               </SelectTrigger>
               <SelectContent>
                 {MODEL_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Override haiku model</Label>
+            <Select
+              value={haikuModelOverride ?? "no"}
+              onValueChange={(value) => {
+                setHaikuModelOverride(
+                  value === "no"
+                    ? undefined
+                    : (value as HaikuModelOverride),
+                );
+              }}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="no">No</SelectItem>
+                {HAIKU_MODEL_OVERRIDE_OPTIONS.map((option) => (
                   <SelectItem key={option.value} value={option.value}>
                     {option.label}
                   </SelectItem>

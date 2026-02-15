@@ -1,8 +1,10 @@
 import z from "zod";
 import {
   type ClaudeProject,
+  claudeEffortSchema,
   claudeModelSchema,
   claudePermissionModeSchema,
+  haikuModelOverrideSchema,
 } from "../shared/claude-types";
 import { defineServiceState } from "../shared/service-state";
 import { procedure } from "./orpc";
@@ -13,6 +15,10 @@ export const claudeProjectSchema = z.object({
   collapsed: z.boolean().catch(false),
   defaultModel: claudeModelSchema.optional().catch(undefined),
   defaultPermissionMode: claudePermissionModeSchema.optional().catch(undefined),
+  defaultEffort: claudeEffortSchema.optional().catch(undefined),
+  defaultHaikuModelOverride: haikuModelOverrideSchema
+    .optional()
+    .catch(undefined),
 });
 
 function normalizeProjectPath(pathValue: string): string {
@@ -87,6 +93,8 @@ export const projectsRouter = {
         path: projectPathSchema,
         defaultModel: claudeModelSchema.optional(),
         defaultPermissionMode: claudePermissionModeSchema.optional(),
+        defaultEffort: claudeEffortSchema.optional(),
+        defaultHaikuModelOverride: haikuModelOverrideSchema.optional(),
       }),
     )
     .handler(async ({ input, context }) => {
@@ -98,6 +106,8 @@ export const projectsRouter = {
         if (!project) return;
         project.defaultModel = input.defaultModel;
         project.defaultPermissionMode = input.defaultPermissionMode;
+        project.defaultEffort = input.defaultEffort;
+        project.defaultHaikuModelOverride = input.defaultHaikuModelOverride;
       });
     }),
   deleteProject: procedure
