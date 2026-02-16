@@ -1,4 +1,3 @@
-import { StringRingBuffer } from "@shared/string-ring-buffer";
 import { type DeferredPromise, createDeferredPromise } from "@shared/utils";
 import { type IPty, spawn } from "node-pty";
 import log from "./logger";
@@ -18,6 +17,7 @@ type TerminalSessionOpts = {
     signal?: number;
     errorMessage?: string;
   }) => void;
+  onClear?: () => void;
 };
 
 type TerminalStartOpts = {
@@ -65,7 +65,6 @@ function resolveLaunchCommand(launch: TerminalStartOpts): LaunchCommand {
 
 const GRACEFUL_STOP_TIMEOUT_MS = 1000;
 const FORCE_KILL_TIMEOUT_MS = 5000;
-const OUTPUT_BUFFER_MAX_TOTAL_SIZE = 2 * 1024 * 1024;
 
 export function createTerminalSession(events: TerminalSessionOpts) {
   let disposed = false;
@@ -76,10 +75,6 @@ export function createTerminalSession(events: TerminalSessionOpts) {
 
   const exitPromises = new Set<DeferredPromise<boolean>>();
   disposables.push(() => exitPromises.clear());
-
-  const outputBuffer = new StringRingBuffer({
-    maxTotalSize: OUTPUT_BUFFER_MAX_TOTAL_SIZE,
-  });
 
   const dispose = ({
     status,
@@ -149,7 +144,6 @@ export function createTerminalSession(events: TerminalSessionOpts) {
           receivedFirstData = true;
           events.onStatusChange("running");
         }
-        outputBuffer.push(chunk);
         events.onData(chunk);
       });
       disposables.push(() => onData.dispose());
@@ -247,7 +241,7 @@ export function createTerminalSession(events: TerminalSessionOpts) {
       return;
     }
 
-    outputBuffer.clear();
+    events.onClear?.();
     pty.clear();
   };
 
@@ -257,7 +251,6 @@ export function createTerminalSession(events: TerminalSessionOpts) {
     write,
     resize,
     clear,
-    getOutputBuffer: () => outputBuffer.getFullContent(),
   };
 }
 

@@ -33,6 +33,7 @@ function TerminalPage({ session }: { session: Session }) {
 
   useEffect(() => {
     terminalRef.current?.clear();
+    terminalRef.current?.write(session.terminal.bufferedOutput ?? "");
 
     const cancel = consumeEventIterator(
       orpc.sessions.subscribeToSessionTerminal

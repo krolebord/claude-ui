@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { EventPublisher } from "@orpc/client";
-import { shellQuote } from "@shared/utils";
+import { concatAndTruncate, shellQuote } from "@shared/utils";
 import { z } from "zod";
 import {
   type ClaudeActivityState,
@@ -15,6 +15,8 @@ import {
 } from "../shared/claude-types";
 import { defineServiceState } from "../shared/service-state";
 import { ClaudeActivityMonitor } from "./claude-activity-monitor";
+import { withDebouncedRunner } from "./debounce-runner";
+import log from "./logger";
 import { procedure } from "./orpc";
 import {
   type PersistenceOrchestrator,
@@ -28,10 +30,14 @@ import {
   createTerminalSession,
 } from "./terminal-session";
 
+const OUTPUT_BUFFER_MAX_TOTAL_SIZE = 1024 * 1024;
+
 interface SessionRecord {
   terminal: TerminalSession;
   activityMonitor: ClaudeActivityMonitor;
   stateFilePath: string;
+  bufferedOutput: string;
+  dispose: () => Promise<void>;
 }
 
 const claudeSessionSchema = z.object({
@@ -48,6 +54,7 @@ const claudeSessionSchema = z.object({
   terminal: z.object({
     status: z.literal("stopped" as TerminalSessionStatus).catch("stopped"),
     errorMessage: z.string().optional(),
+    bufferedOutput: z.string().optional(),
   }),
 
   startupConfig: z.object({
@@ -159,15 +166,17 @@ export const claudeSessionsRouter = {
   subscribeToSessionTerminal: procedure
     .input(z.object({ sessionId: z.string() }))
     .handler(async function* ({ input, context, signal }) {
-      const { bufferedOutput, stream } =
+      const { bufferedOutput, stream, isLive } =
         context.sessionsService.subscribeToTerminalEvents(
           input.sessionId,
           signal,
         );
 
-      yield { type: "clear" } as TerminalEvent;
-      if (bufferedOutput) {
-        yield { type: "data", data: bufferedOutput };
+      if (isLive) {
+        yield { type: "clear" } as TerminalEvent;
+        if (bufferedOutput) {
+          yield { type: "data", data: bufferedOutput };
+        }
       }
       for await (const event of stream) {
         yield event;
@@ -496,8 +505,19 @@ export class SessionsServiceNew {
     initialPrompt?: string;
     start: ClaudeStartOptions;
   }) {
+    const disposables: Array<() => Promise<unknown> | unknown> = [];
+
     const state = this.sessionsState;
     const stateFilePath = await this.stateFileManager.create(opts.sessionId);
+    disposables.push(() => this.stateFileManager.cleanup(stateFilePath));
+
+    const syncBufferedOutput = withDebouncedRunner(() => {
+      this.sessionsState.updateState((state) => {
+        state[opts.sessionId].terminal.bufferedOutput =
+          liveSession.bufferedOutput;
+      });
+    }, 500);
+    disposables.push(() => syncBufferedOutput.dispose());
 
     const activityMonitor = new ClaudeActivityMonitor({
       onStatusChange(status) {
@@ -505,6 +525,13 @@ export class SessionsServiceNew {
           state[opts.sessionId].activity.state = status;
           state[opts.sessionId].lastActivityAt = Date.now();
         });
+        if (
+          status === "idle" ||
+          status === "awaiting_approval" ||
+          status === "awaiting_user_response"
+        ) {
+          syncBufferedOutput.flush();
+        }
       },
       onHookEvent: (event) => {
         if (event.hook_event_name !== "UserPromptSubmit") {
@@ -527,6 +554,7 @@ export class SessionsServiceNew {
         this.triggerTitleGeneration(opts.sessionId, prompt);
       },
     });
+    disposables.push(() => activityMonitor.stopMonitoring());
 
     const { args, env } = buildClaudeArgs({
       start: opts.start,
@@ -545,6 +573,13 @@ export class SessionsServiceNew {
           type: "data",
           data: chunk,
         });
+
+        liveSession.bufferedOutput = concatAndTruncate({
+          base: liveSession.bufferedOutput ?? "",
+          chunk,
+          maxTotalSize: OUTPUT_BUFFER_MAX_TOTAL_SIZE,
+        });
+        syncBufferedOutput.schedule();
       },
       onExit: (payload) => {
         void this.stopLiveSession(opts.sessionId);
@@ -554,20 +589,41 @@ export class SessionsServiceNew {
             : "stopped";
           state[opts.sessionId].terminal.errorMessage = payload.errorMessage;
         });
+        syncBufferedOutput.flush();
       },
       onStatusChange: (status) => {
         state.updateState((state) => {
           state[opts.sessionId].terminal.status = status;
         });
+        if (status === "stopped") {
+          syncBufferedOutput.flush();
+        }
       },
     });
+    disposables.push(() => terminal.stop());
 
     const liveSession: SessionRecord = {
       terminal,
       activityMonitor,
       stateFilePath,
+      bufferedOutput: "",
+      dispose: async () => {
+        for (const disposable of disposables) {
+          try {
+            await disposable();
+          } catch (error) {
+            log.error(`Error disposing of live session ${opts.sessionId}`, {
+              error,
+            });
+          }
+        }
+      },
     };
+
     this.liveSessions.set(opts.sessionId, liveSession);
+    disposables.push(() => this.liveSessions.delete(opts.sessionId));
+
+    disposables.push(() => this.titleManager.forget(opts.sessionId));
 
     activityMonitor.startMonitoring(stateFilePath);
     terminal.start({
@@ -611,16 +667,7 @@ export class SessionsServiceNew {
     if (!liveSession) {
       return;
     }
-
-    try {
-      liveSession.activityMonitor.stopMonitoring();
-      await liveSession.terminal.stop();
-    } finally {
-      this.stateFileManager.cleanup(liveSession.stateFilePath);
-      this.titleManager.forget(sessionId);
-    }
-
-    this.liveSessions.delete(sessionId);
+    await liveSession.dispose();
   }
 
   async dispose(): Promise<void> {
@@ -646,9 +693,8 @@ export class SessionsServiceNew {
 
   subscribeToTerminalEvents(sessionId: string, signal?: AbortSignal) {
     return {
-      bufferedOutput: this.liveSessions
-        .get(sessionId)
-        ?.terminal.getOutputBuffer(),
+      isLive: this.liveSessions.has(sessionId),
+      bufferedOutput: this.liveSessions.get(sessionId)?.bufferedOutput ?? "",
       stream: this.eventPublisher.subscribe(sessionId, { signal }),
     };
   }

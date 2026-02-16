@@ -59,3 +59,21 @@ export function tryCatch<T>(fn: () => T): TryCatchResult<T> {
 export function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
 }
+
+export function concatAndTruncate(opts: {
+  maxTotalSize: number;
+  base: string;
+  chunk: string;
+}) {
+  if (opts.chunk.length >= opts.maxTotalSize) {
+    return opts.chunk.slice(opts.chunk.length - opts.maxTotalSize);
+  }
+
+  const result = opts.base + opts.chunk;
+
+  if (result.length <= opts.maxTotalSize) {
+    return result;
+  }
+
+  return result.substring(result.length - opts.maxTotalSize);
+}
