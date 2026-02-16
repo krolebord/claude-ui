@@ -284,6 +284,10 @@ function buildClaudeArgs(input: ClaudeStartupOptions): {
   const env: Record<string, string> = {
     CLAUDE_UI_STATE_FILE: input.stateFilePath,
     CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL: "true",
+    CLAUDE_CODE_DISABLE_TERMINAL_TITLE: "1",
+    DISABLE_BUG_COMMAND: "1",
+    DISABLE_ERROR_REPORTING: "1",
+    DISABLE_TELEMETRY: "1",
   };
 
   if (input.haikuModelOverride) {
