@@ -30,6 +30,7 @@ import {
   SquareIcon,
   PlayIcon,
   TrashIcon,
+  ShieldAlert,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -83,6 +84,11 @@ const statusIndicatorMeta: Record<
     icon: MessageCircleQuestionMark,
     label: "Awaiting user response",
     className: "text-violet-400",
+  },
+  awaiting_approval: {
+    icon: ShieldAlert,
+    label: "Awaiting approval",
+    className: "text-amber-400",
   },
   stopped: {
     icon: Square,
@@ -324,7 +330,12 @@ function ClaudeLocalTerminalSessionSidebarItem({
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
-        <SessionSidebarItemTrigger sessionId={sessionId}>
+        <SessionSidebarItemTrigger
+          sessionId={sessionId}
+          onSessionSelect={() => {
+            orpc.sessions.localClaude.markSeen.call({ sessionId });
+          }}
+        >
           {session.status === "stopped" ? (
             <SidebarIconButton
               icon={PlayIcon}
@@ -485,8 +496,12 @@ const SessionSidebarItemTrigger = forwardRef<
   {
     sessionId: string;
     children: React.ReactNode;
+    onSessionSelect?: () => void;
   } & React.HTMLAttributes<HTMLLIElement>
->(function SessionSidebarItemTrigger({ sessionId, children, ...props }, ref) {
+>(function SessionSidebarItemTrigger(
+  { sessionId, children, onSessionSelect, ...props },
+  ref,
+) {
   const session = useAppState((x) => x.sessions[sessionId]);
   const isActive = useActiveSessionStore(
     (x) => x.activeSessionId === sessionId,
@@ -497,11 +512,16 @@ const SessionSidebarItemTrigger = forwardRef<
   const statusMeta = statusIndicatorMeta[session.status];
 
   return (
-    <li ref={ref} {...props} className={cn("group/session relative", props.className)}>
+    <li
+      ref={ref}
+      {...props}
+      className={cn("group/session relative", props.className)}
+    >
       <button
         type="button"
         onClick={() => {
           setActiveSessionId(sessionId);
+          onSessionSelect?.();
         }}
         className={cn(
           "flex w-full items-center justify-start gap-1.5 rounded-md px-1.5 py-1 pr-[3rem] text-sm transition",

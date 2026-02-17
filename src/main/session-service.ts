@@ -130,6 +130,16 @@ export const claudeSessionsRouter = {
     .handler(async ({ input, context }) => {
       return await context.sessionsService.deleteSession(input.sessionId);
     }),
+  markSeen: procedure
+    .input(z.object({ sessionId: z.string() }))
+    .handler(async ({ input, context }) => {
+      context.sessions.state.updateState((state) => {
+        const session = state[input.sessionId];
+        if (session?.status === "awaiting_user_response") {
+          session.status = "idle";
+        }
+      });
+    }),
   subscribeToSessionTerminal: procedure
     .input(z.object({ sessionId: z.string() }))
     .handler(async function* ({ input, context, signal }) {
@@ -309,7 +319,7 @@ function getSessionStatus({
   }
 
   if (activityStatus === "awaiting_approval") {
-    return "awaiting_user_response";
+    return "awaiting_approval";
   }
 
   if (activityStatus === "awaiting_user_response") {
@@ -576,16 +586,12 @@ export class SessionsServiceNew {
         }
 
         this.triggerTitleGeneration(opts.sessionId, prompt);
-
-        if (deferredPrompt) {
-          terminal.write(`${deferredPrompt}\r`);
-          deferredPrompt = null;
-        }
       },
     });
     disposables.push(() => activityMonitor.stopMonitoring());
 
     let deferredPrompt: string | null = null;
+    let deferredPromptChecksLeft = 5;
     let effectiveInitialPrompt = opts.initialPrompt;
     if (opts.initialPrompt?.startsWith("/plan ")) {
       const textAfterPlan = opts.initialPrompt.slice("/plan ".length).trim();
@@ -614,6 +620,15 @@ export class SessionsServiceNew {
           type: "data",
           data: chunk,
         });
+
+        if (deferredPrompt && deferredPromptChecksLeft > 0) {
+          deferredPromptChecksLeft--;
+          if (chunk.includes("/plan")) {
+            terminal.write(deferredPrompt);
+            terminal.write("\r");
+            deferredPrompt = null;
+          }
+        }
 
         syncBufferedOutput.schedule();
       },

@@ -6,6 +6,7 @@ export const sessionStatusSchema = z.enum([
   "stopping",
   "running",
   "awaiting_user_response",
+  "awaiting_approval",
   "stopped",
   "error",
 ]);
