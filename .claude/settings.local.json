@@ -15,7 +15,8 @@
       "Bash(pnpm format:*)",
       "Bash(pnpm dlx:*)",
       "Bash(pnpm lint:*)",
-      "Bash(pnpm add:*)"
+      "Bash(pnpm add:*)",
+      "Bash(pnpm test)"
     ]
   }
 }
