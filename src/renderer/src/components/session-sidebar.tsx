@@ -9,7 +9,7 @@ import {
   useActiveSessionId,
   useActiveSessionStore,
 } from "@renderer/hooks/use-active-session-id";
-import { useMemo } from "react";
+import { forwardRef, useMemo } from "react";
 import {
   CircleDot,
   ChevronDown,
@@ -480,13 +480,13 @@ function LocalTerminalSessionSidebarItem({ sessionId }: { sessionId: string }) {
   );
 }
 
-function SessionSidebarItemTrigger({
-  sessionId,
-  children,
-}: {
-  sessionId: string;
-  children: React.ReactNode;
-}) {
+const SessionSidebarItemTrigger = forwardRef<
+  HTMLLIElement,
+  {
+    sessionId: string;
+    children: React.ReactNode;
+  } & React.HTMLAttributes<HTMLLIElement>
+>(function SessionSidebarItemTrigger({ sessionId, children, ...props }, ref) {
   const session = useAppState((x) => x.sessions[sessionId]);
   const isActive = useActiveSessionStore(
     (x) => x.activeSessionId === sessionId,
@@ -497,7 +497,7 @@ function SessionSidebarItemTrigger({
   const statusMeta = statusIndicatorMeta[session.status];
 
   return (
-    <li className="group/session relative">
+    <li ref={ref} {...props} className={cn("group/session relative", props.className)}>
       <button
         type="button"
         onClick={() => {
@@ -532,7 +532,7 @@ function SessionSidebarItemTrigger({
       </div>
     </li>
   );
-}
+});
 
 function SidebarIconButton({
   icon,
