@@ -16,16 +16,7 @@
       "build",
       "electron",
       "public",
-      "test",
-      "src/App.css",
-      "src/App.tsx",
-      "src/assets",
-      "src/components",
-      "src/demos",
-      "src/index.css",
-      "src/main.tsx",
-      "src/type",
-      "src/vite-env.d.ts"
+      "test"
     ]
   },
   "formatter": {

@@ -30,6 +30,9 @@ import {
   PlayIcon,
   TrashIcon,
   ShieldAlert,
+  Sparkles,
+  TerminalSquare,
+  Repeat,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -99,6 +102,12 @@ const statusIndicatorMeta: Record<
     label: "Error",
     className: "text-rose-400",
   },
+};
+
+const sessionTypeIcon: Record<string, { icon: LucideIcon; label: string }> = {
+  "claude-local-terminal": { icon: Sparkles, label: "Claude" },
+  "local-terminal": { icon: TerminalSquare, label: "Terminal" },
+  "ralph-loop": { icon: Repeat, label: "Ralph Loop" },
 };
 
 export function SessionSidebar() {
@@ -300,6 +309,7 @@ function ClaudeLocalTerminalSessionSidebarItem({
   const setActiveSessionId = useActiveSessionStore((x) => x.setActiveSessionId);
 
   const session = useAppState((x) => x.sessions[sessionId]);
+  const sessions = useAppState((x) => x.sessions);
 
   const deleteSessionMutation = useMutation({
     mutationFn: async (sessionId: string) => {
@@ -338,7 +348,10 @@ function ClaudeLocalTerminalSessionSidebarItem({
       <ContextMenuTrigger asChild>
         <SessionSidebarItemTrigger
           sessionId={sessionId}
-          onSessionSelect={() => {
+          onSessionSelect={(prevSessionId) => {
+            if (prevSessionId && sessions[prevSessionId]?.type === "claude-local-terminal") {
+              orpc.sessions.localClaude.markSeen.call({ sessionId: prevSessionId });
+            }
             orpc.sessions.localClaude.markSeen.call({ sessionId });
           }}
         >
@@ -612,7 +625,7 @@ const SessionSidebarItemTrigger = forwardRef<
   {
     sessionId: string;
     children: React.ReactNode;
-    onSessionSelect?: () => void;
+    onSessionSelect?: (prevSessionId: string | null) => void;
   } & React.HTMLAttributes<HTMLLIElement>
 >(function SessionSidebarItemTrigger(
   { sessionId, children, onSessionSelect, ...props },
@@ -636,8 +649,9 @@ const SessionSidebarItemTrigger = forwardRef<
       <button
         type="button"
         onClick={() => {
+          const prevSessionId = useActiveSessionStore.getState().activeSessionId;
           setActiveSessionId(sessionId);
-          onSessionSelect?.();
+          onSessionSelect?.(prevSessionId !== sessionId ? prevSessionId : null);
         }}
         className={cn(
           "flex w-full items-center justify-start gap-1.5 rounded-md px-1.5 py-1 pr-[3rem] text-sm transition",
@@ -658,6 +672,17 @@ const SessionSidebarItemTrigger = forwardRef<
         </span>
         <span className="min-w-0 flex-1 truncate text-left">
           {session.title}
+          {sessionTypeIcon[session.type] && (() => {
+            const typeMeta = sessionTypeIcon[session.type];
+            return (
+              <span className="ml-1.5 inline-flex align-text-bottom" title={typeMeta.label}>
+                <typeMeta.icon
+                  className="size-3 text-zinc-500"
+                  aria-hidden="true"
+                />
+              </span>
+            );
+          })()}
         </span>
       </button>
       <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs tabular-nums text-zinc-400 transition group-hover/session:opacity-0 group-focus-within/session:opacity-0">
