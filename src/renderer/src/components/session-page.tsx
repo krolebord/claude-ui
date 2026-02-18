@@ -94,32 +94,6 @@ function RalphLoopSessionPage({
 
   const loopReadOnly = session.loopState.autonomousEnabled;
 
-  const [now, setNow] = useState(() => Date.now());
-  const nextRunAt = session.loopState.nextRunAt;
-
-  useEffect(() => {
-    if (!nextRunAt) {
-      return;
-    }
-
-    setNow(Date.now());
-    const interval = setInterval(() => {
-      const current = Date.now();
-      setNow(current);
-      if (current >= nextRunAt) {
-        clearInterval(interval);
-      }
-    }, 1000);
-
-    return () => {
-      clearInterval(interval);
-    };
-  }, [nextRunAt]);
-
-  const nextRunLabel = session.loopState.nextRunAt
-    ? `${Math.max(0, Math.ceil((session.loopState.nextRunAt - now) / 1000))}s`
-    : "-";
-
   return (
     <TerminalPage
       session={session}
@@ -141,7 +115,10 @@ function RalphLoopSessionPage({
             Failures {session.loopState.consecutiveFailures}/
             {session.startupConfig.maxConsecutiveFailures}
           </Badge>
-          <Badge variant="outline">Next run {nextRunLabel}</Badge>
+          <ElapsedTimeBadge
+            createdAt={session.createdAt}
+            completedAt={session.loopState.completedAt}
+          />
           <Badge variant="outline">{session.loopState.completion}</Badge>
 
           <div className="ml-auto flex items-center gap-2">
@@ -187,6 +164,35 @@ function RalphLoopSessionPage({
       }
     />
   );
+}
+
+function ElapsedTimeBadge({
+  createdAt,
+  completedAt,
+}: { createdAt: number; completedAt?: number }) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (completedAt != null) {
+      return;
+    }
+    setNow(Date.now());
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [completedAt]);
+
+  const elapsedMs = (completedAt ?? now) - createdAt;
+  return <Badge variant="outline">Run time {formatElapsed(elapsedMs)}</Badge>;
+}
+
+function formatElapsed(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
 }
 
 function TerminalPage({

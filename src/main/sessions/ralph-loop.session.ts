@@ -8,17 +8,17 @@ import {
   claudeModelSchema,
   claudePermissionModeSchema,
 } from "../../shared/claude-types";
-import { ClaudeActivityMonitor } from "../claude-activity-monitor";
+import type { ClaudeActivityMonitor } from "../claude-activity-monitor";
 import { type ClaudeStartOptions, buildClaudeArgs } from "../claude-cli";
-import { withDebouncedRunner } from "../debounce-runner";
 import log from "../logger";
 import { procedure } from "../orpc";
 import type { SessionStateFileManager } from "../session-state-file-manager";
-import {
-  type TerminalSession,
-  createTerminalSession,
-} from "../terminal-session";
+import type { TerminalSession } from "../terminal-session";
 import { commonSessionSchema, generateUniqueSessionId } from "./common";
+import {
+  type ClaudeProcessHandle,
+  createClaudeProcess,
+} from "./start-claude-process";
 import type { SessionServiceState } from "./state";
 
 const DEFAULT_MAX_ITERATIONS = 20;
@@ -64,7 +64,7 @@ export const ralphLoopSessionSchema = commonSessionSchema.extend({
     autonomousEnabled: z.boolean().catch(true),
     currentIteration: z.number().int().nonnegative().catch(0),
     lastRunAt: z.number().optional().catch(undefined),
-    nextRunAt: z.number().optional().catch(undefined),
+    completedAt: z.number().optional().catch(undefined),
     consecutiveFailures: z.number().int().nonnegative().catch(0),
     completion: loopCompletionSchema.catch("not_done"),
     completeDetected: z.boolean().catch(false),
@@ -134,7 +134,7 @@ interface StartIterationInput {
 interface RalphLoopSessionRecord {
   terminal: TerminalSession;
   activityMonitor: ClaudeActivityMonitor;
-  syncBufferedOutput: ReturnType<typeof withDebouncedRunner>;
+  syncBufferedOutput: ClaudeProcessHandle["syncBufferedOutput"];
   mode: "autonomous" | "single";
   stopHookHandled: boolean;
   stopHookSeen: boolean;
@@ -317,7 +317,7 @@ export class RalphLoopSessionsManager {
       if (target.loopState.completion === "stopped_by_user") {
         target.loopState.completion = "not_done";
       }
-      target.loopState.nextRunAt = undefined;
+      target.loopState.completedAt = undefined;
       if (canResumeLoop) {
         target.loopState.lastError = undefined;
       }
@@ -354,7 +354,7 @@ export class RalphLoopSessionsManager {
         return;
       }
       target.loopState.autonomousEnabled = false;
-      target.loopState.nextRunAt = undefined;
+      target.loopState.completedAt = undefined;
       if (
         target.loopState.completion === "stopped_by_user" ||
         target.loopState.completion === "error"
@@ -384,7 +384,7 @@ export class RalphLoopSessionsManager {
         return;
       }
       session.loopState.autonomousEnabled = false;
-      session.loopState.nextRunAt = undefined;
+      session.loopState.completedAt = Date.now();
       session.loopState.completion = "stopped_by_user";
       session.status = this.liveSessions.has(sessionId)
         ? "stopping"
@@ -555,138 +555,95 @@ export class RalphLoopSessionsManager {
       iteration: iterationNumber,
     });
 
-    const { args, env } = buildClaudeArgs({
-      start: startOpts,
-      permissionMode: session.startupConfig.permissionMode,
-      pluginDir: this.options.pluginDir,
-      model: session.startupConfig.model,
-      effort: session.startupConfig.effort,
-      systemPrompt: session.startupConfig.systemPrompt,
-      stateFilePath,
-      initialPrompt: prompt,
-    });
-
     this.updateSession(input.sessionId, (target) => {
       target.status = "starting";
       target.lastActivityAt = Date.now();
       target.loopState.currentIteration = iterationNumber;
       target.loopState.lastRunAt = Date.now();
-      target.loopState.nextRunAt = undefined;
+      target.loopState.completedAt = undefined;
       target.loopState.lastError = undefined;
     });
 
-    const activityMonitor = new ClaudeActivityMonitor({
-      onStatusChange: (activityStatus) => {
-        const live = this.liveSessions.get(input.sessionId);
-        if (!live) {
-          return;
-        }
+    const size = this.terminalSizes.get(input.sessionId);
 
-        this.updateSession(input.sessionId, (target) => {
-          target.status = getRalphLoopSessionStatus({
-            terminal: live.terminal,
-            activityMonitor,
+    const handle = createClaudeProcess(
+      {
+        stateFilePath,
+        cwd: session.startupConfig.cwd,
+        cols: input.cols ?? size?.cols,
+        rows: input.rows ?? size?.rows,
+        claudeArgs: buildClaudeArgs({
+          start: startOpts,
+          permissionMode: session.startupConfig.permissionMode,
+          pluginDir: this.options.pluginDir,
+          model: session.startupConfig.model,
+          effort: session.startupConfig.effort,
+          systemPrompt: session.startupConfig.systemPrompt,
+          stateFilePath,
+          initialPrompt: prompt,
+        }),
+        syncDebounceMs: 250,
+        stoppedMeansIdle: true,
+      },
+      {
+        onSessionStatusChange: (status) => {
+          this.updateSession(input.sessionId, (target) => {
+            target.status = status;
+            target.lastActivityAt = Date.now();
           });
-          target.lastActivityAt = Date.now();
-        });
-
-        if (
-          activityStatus === "idle" ||
-          activityStatus === "awaiting_approval" ||
-          activityStatus === "awaiting_user_response"
-        ) {
-          live.syncBufferedOutput.flush();
-        }
-      },
-      onHookEvent: (event) => {
-        if (event.hook_event_name !== "Stop") {
-          return;
-        }
-        this.handleStopHookEvent({
-          sessionId: input.sessionId,
-          event,
-        });
-      },
-    });
-
-    const terminal = createTerminalSession({
-      onData: ({ chunk }) => {
-        const live = this.liveSessions.get(input.sessionId);
-        if (!live) {
-          return;
-        }
-
-        this.eventPublisher.publish(input.sessionId, {
-          type: "data",
-          data: chunk,
-        });
-
-        live.syncBufferedOutput.schedule();
-      },
-      onStatusChange: (status) => {
-        this.updateSession(input.sessionId, (target) => {
-          target.status = getRalphLoopSessionStatus({
-            terminal,
-            activityMonitor,
+        },
+        onBufferedOutputSync: (bufferedOutput) => {
+          this.updateSession(input.sessionId, (target) => {
+            target.bufferedOutput = bufferedOutput;
           });
-          target.lastActivityAt = Date.now();
-        });
-        if (status === "stopped") {
+        },
+        onTerminalData: (chunk) => {
+          this.eventPublisher.publish(input.sessionId, {
+            type: "data",
+            data: chunk,
+          });
+        },
+        onTerminalExit: (payload) => {
           const live = this.liveSessions.get(input.sessionId);
-          live?.syncBufferedOutput.flush();
-        }
+          if (!live) {
+            return;
+          }
+
+          live.activityMonitor.stopMonitoring();
+          live.syncBufferedOutput.flush();
+          live.syncBufferedOutput.dispose();
+          this.liveSessions.delete(input.sessionId);
+
+          void this.handleIterationExit({
+            sessionId: input.sessionId,
+            mode: live.mode,
+            stopHookSeen: live.stopHookSeen,
+            stopHookTranscriptPath: live.stopHookTranscriptPath,
+            payload,
+          });
+        },
+        onHookEvent: (event) => {
+          if (event.hook_event_name !== "Stop") {
+            return;
+          }
+          this.handleStopHookEvent({
+            sessionId: input.sessionId,
+            event,
+          });
+        },
       },
-      onExit: (payload) => {
-        const live = this.liveSessions.get(input.sessionId);
-        if (!live) {
-          return;
-        }
-
-        live.activityMonitor.stopMonitoring();
-        live.syncBufferedOutput.flush();
-        live.syncBufferedOutput.dispose();
-        this.liveSessions.delete(input.sessionId);
-
-        void this.handleIterationExit({
-          sessionId: input.sessionId,
-          mode: live.mode,
-          stopHookSeen: live.stopHookSeen,
-          stopHookTranscriptPath: live.stopHookTranscriptPath,
-          payload,
-        });
-      },
-    });
-
-    const syncBufferedOutput = withDebouncedRunner(() => {
-      this.updateSession(input.sessionId, (target) => {
-        target.bufferedOutput = terminal.bufferedOutput;
-        target.lastActivityAt = Date.now();
-      });
-    }, 250);
+    );
 
     this.liveSessions.set(input.sessionId, {
-      terminal,
-      activityMonitor,
-      syncBufferedOutput,
+      terminal: handle.terminal,
+      activityMonitor: handle.activityMonitor,
+      syncBufferedOutput: handle.syncBufferedOutput,
       mode: input.mode,
       stopHookHandled: false,
       stopHookSeen: false,
     });
 
-    const size = this.terminalSizes.get(input.sessionId);
-    const cols = input.cols ?? size?.cols;
-    const rows = input.rows ?? size?.rows;
-
-    activityMonitor.startMonitoring(stateFilePath);
-    terminal.start({
-      cwd: session.startupConfig.cwd,
-      runWithShell: true,
-      file: "claude",
-      args,
-      env,
-      cols,
-      rows,
-    });
+    handle.start();
   }
 
   private async handleIterationExit(input: {
@@ -712,7 +669,7 @@ export class RalphLoopSessionsManager {
         target.status = "stopped";
         target.lastActivityAt = Date.now();
         target.loopState.autonomousEnabled = false;
-        target.loopState.nextRunAt = undefined;
+        target.loopState.completedAt = Date.now();
         target.loopState.completion = "stopped_by_user";
         target.loopState.completeDetected = false;
         target.loopState.lastError = input.payload.errorMessage;
@@ -739,7 +696,7 @@ export class RalphLoopSessionsManager {
         target.status = "stopped";
         target.lastActivityAt = Date.now();
         target.loopState.autonomousEnabled = false;
-        target.loopState.nextRunAt = undefined;
+        target.loopState.completedAt = Date.now();
         target.loopState.completion = "done";
         target.loopState.completeDetected = true;
         target.loopState.lastError = undefined;
@@ -789,7 +746,7 @@ export class RalphLoopSessionsManager {
         target.status = status;
         target.lastActivityAt = Date.now();
         target.loopState.autonomousEnabled = autonomousEnabled;
-        target.loopState.nextRunAt = undefined;
+        target.loopState.completedAt = Date.now();
         target.loopState.completion = completion;
         target.loopState.consecutiveFailures = nextConsecutiveFailures;
         target.loopState.completeDetected = false;
@@ -806,14 +763,12 @@ export class RalphLoopSessionsManager {
         )
       : 0;
 
-    const nextRunAt = Date.now() + delayMs;
-
     this.updateSession(input.sessionId, (target) => {
       target.status = "idle";
       target.lastActivityAt = Date.now();
       target.loopState.autonomousEnabled = true;
       target.loopState.completion = "not_done";
-      target.loopState.nextRunAt = nextRunAt;
+      target.loopState.completedAt = undefined;
       target.loopState.consecutiveFailures = nextConsecutiveFailures;
       target.loopState.completeDetected = false;
       target.loopState.lastError = lastError;
@@ -833,7 +788,7 @@ export class RalphLoopSessionsManager {
           target.status = "error";
           target.loopState.completion = "error";
           target.loopState.autonomousEnabled = false;
-          target.loopState.nextRunAt = undefined;
+          target.loopState.completedAt = Date.now();
           target.loopState.lastError =
             error instanceof Error ? error.message : "Unknown loop error";
         });
@@ -885,27 +840,6 @@ export function hasReachedConsecutiveFailureLimit(
   maxConsecutiveFailures: number,
 ): boolean {
   return nextConsecutiveFailures >= maxConsecutiveFailures;
-}
-
-function getRalphLoopSessionStatus(input: {
-  terminal: TerminalSession;
-  activityMonitor: ClaudeActivityMonitor;
-}): RalphLoopSessionData["status"] {
-  const terminalStatus = input.terminal.status;
-  const activityStatus = input.activityMonitor.getState();
-
-  if (terminalStatus === "starting") return "starting";
-  if (terminalStatus === "stopping") return "stopping";
-  if (terminalStatus === "error") return "error";
-  if (terminalStatus === "stopped") return "idle";
-
-  if (activityStatus === "awaiting_approval") return "awaiting_approval";
-  if (activityStatus === "awaiting_user_response")
-    return "awaiting_user_response";
-
-  if (activityStatus === "working") return "running";
-
-  return "idle";
 }
 
 export function buildRalphLoopPrompt(input: {
