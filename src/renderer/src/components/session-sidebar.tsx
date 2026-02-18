@@ -1,40 +1,3 @@
-import { UsagePanel } from "@renderer/components/usage-panel";
-import { cn } from "@renderer/lib/utils";
-import type { ProjectSessionGroup } from "@renderer/services/terminal-session-selectors";
-import {
-  buildProjectSessionGroups,
-  getSessionLastActivityLabel,
-} from "@renderer/services/terminal-session-selectors";
-import {
-  useActiveSessionStore,
-} from "@renderer/hooks/use-active-session-id";
-import { forwardRef, useMemo } from "react";
-import {
-  CircleDot,
-  ChevronDown,
-  ChevronRight,
-  Copy,
-  Folder,
-  FolderOpen,
-  FolderPlus,
-  GitFork,
-  LoaderCircle,
-  MessageCircleQuestionMark,
-  Plus,
-  Settings,
-  Square,
-  Trash2,
-  TriangleAlert,
-  type LucideIcon,
-  SquareIcon,
-  PlayIcon,
-  TrashIcon,
-  ShieldAlert,
-  Sparkles,
-  TerminalSquare,
-  Repeat,
-} from "lucide-react";
-import { toast } from "sonner";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -42,13 +5,48 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@renderer/components/ui/context-menu";
-import { useAppState } from "./sync-state-provider";
-import { useSettingsStore } from "./settings-dialog";
-import { useProjectDefaultsDialogStore } from "./project-defaults-dialog";
-import { useMutation } from "@tanstack/react-query";
+import { UsagePanel } from "@renderer/components/usage-panel";
+import { useActiveSessionStore } from "@renderer/hooks/use-active-session-id";
+import { cn } from "@renderer/lib/utils";
 import { orpc } from "@renderer/orpc-client";
-import { useNewSessionDialogStore } from "./new-session-dialog";
+import type { ProjectSessionGroup } from "@renderer/services/terminal-session-selectors";
+import {
+  buildProjectSessionGroups,
+  getSessionLastActivityLabel,
+} from "@renderer/services/terminal-session-selectors";
+import { useMutation } from "@tanstack/react-query";
+import {
+  ChevronDown,
+  ChevronRight,
+  CircleDot,
+  Copy,
+  Folder,
+  FolderOpen,
+  FolderPlus,
+  GitFork,
+  LoaderCircle,
+  type LucideIcon,
+  MessageCircleQuestionMark,
+  PlayIcon,
+  Plus,
+  Repeat,
+  Settings,
+  ShieldAlert,
+  Sparkles,
+  Square,
+  SquareIcon,
+  TerminalSquare,
+  Trash2,
+  TrashIcon,
+  TriangleAlert,
+} from "lucide-react";
+import { forwardRef, useMemo } from "react";
+import { toast } from "sonner";
 import type { SessionStatus } from "src/main/sessions/common";
+import { useNewSessionDialogStore } from "./new-session-dialog";
+import { useProjectDefaultsDialogStore } from "./project-defaults-dialog";
+import { useSettingsStore } from "./settings-dialog";
+import { useAppState } from "./sync-state-provider";
 
 const statusIndicatorMeta: Record<
   SessionStatus,
@@ -349,8 +347,13 @@ function ClaudeLocalTerminalSessionSidebarItem({
         <SessionSidebarItemTrigger
           sessionId={sessionId}
           onSessionSelect={(prevSessionId) => {
-            if (prevSessionId && sessions[prevSessionId]?.type === "claude-local-terminal") {
-              orpc.sessions.localClaude.markSeen.call({ sessionId: prevSessionId });
+            if (
+              prevSessionId &&
+              sessions[prevSessionId]?.type === "claude-local-terminal"
+            ) {
+              orpc.sessions.localClaude.markSeen.call({
+                sessionId: prevSessionId,
+              });
             }
             orpc.sessions.localClaude.markSeen.call({ sessionId });
           }}
@@ -649,7 +652,8 @@ const SessionSidebarItemTrigger = forwardRef<
       <button
         type="button"
         onClick={() => {
-          const prevSessionId = useActiveSessionStore.getState().activeSessionId;
+          const prevSessionId =
+            useActiveSessionStore.getState().activeSessionId;
           setActiveSessionId(sessionId);
           onSessionSelect?.(prevSessionId !== sessionId ? prevSessionId : null);
         }}
@@ -672,10 +676,17 @@ const SessionSidebarItemTrigger = forwardRef<
         </span>
         <span className="min-w-0 flex-1 truncate text-left">
           {session.title}
-          {sessionTypeIcon[session.type] && (() => {
+        </span>
+      </button>
+      <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center gap-1.5 transition group-hover/session:opacity-0 group-focus-within/session:opacity-0">
+        <span className="w-7 text-right text-xs tabular-nums text-zinc-400">
+          {getSessionLastActivityLabel(session)}
+        </span>
+        {sessionTypeIcon[session.type] &&
+          (() => {
             const typeMeta = sessionTypeIcon[session.type];
             return (
-              <span className="ml-1.5 inline-flex align-text-bottom" title={typeMeta.label}>
+              <span className="inline-flex" title={typeMeta.label}>
                 <typeMeta.icon
                   className="size-3 text-zinc-500"
                   aria-hidden="true"
@@ -683,10 +694,6 @@ const SessionSidebarItemTrigger = forwardRef<
               </span>
             );
           })()}
-        </span>
-      </button>
-      <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-xs tabular-nums text-zinc-400 transition group-hover/session:opacity-0 group-focus-within/session:opacity-0">
-        {getSessionLastActivityLabel(session)}
       </span>
       <div className="pointer-events-none absolute inset-y-0 right-1 flex items-center gap-0.5 opacity-0 transition group-hover/session:opacity-100 group-focus-within/session:opacity-100">
         {children}
