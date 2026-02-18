@@ -1,5 +1,6 @@
 import { EffortToggleGroup } from "@renderer/components/effort-toggle-group";
 import { PermissionModeToggleGroup } from "@renderer/components/permission-mode-toggle-group";
+import { useAppState } from "@renderer/components/sync-state-provider";
 import { Button } from "@renderer/components/ui/button";
 import {
   Dialog,
@@ -10,7 +11,6 @@ import {
   DialogTitle,
 } from "@renderer/components/ui/dialog";
 import { Label } from "@renderer/components/ui/label";
-import { Textarea } from "@renderer/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -18,12 +18,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@renderer/components/ui/select";
+import { Textarea } from "@renderer/components/ui/textarea";
+import { orpc } from "@renderer/orpc-client";
 import {
   MODEL_OPTIONS,
   getProjectNameFromPath,
 } from "@renderer/services/terminal-session-selectors";
-import { useAppState } from "@renderer/components/sync-state-provider";
-import { orpc } from "@renderer/orpc-client";
 import type {
   ClaudeEffort,
   ClaudeModel,

@@ -1,11 +1,15 @@
-import { Label } from "@renderer/components/ui/label";
 import { Kbd } from "@renderer/components/ui/kbd";
+import { Label } from "@renderer/components/ui/label";
 import {
   ToggleGroup,
   ToggleGroupItem,
 } from "@renderer/components/ui/toggle-group";
 import type { ClaudePermissionMode } from "@shared/claude-types";
-import { formatForDisplay, Hotkey, useHotkey } from "@tanstack/react-hotkeys";
+import {
+  type Hotkey,
+  formatForDisplay,
+  useHotkey,
+} from "@tanstack/react-hotkeys";
 
 interface PermissionModeToggleGroupProps {
   label: string;

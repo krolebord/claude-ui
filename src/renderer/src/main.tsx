@@ -3,9 +3,9 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
-import { createSyncStateStore } from "./services/state-sync-client";
-import { SyncStateProvider } from "./components/sync-state-provider";
 import { toast } from "sonner";
+import { SyncStateProvider } from "./components/sync-state-provider";
+import { createSyncStateStore } from "./services/state-sync-client";
 
 const queryClient = new QueryClient({
   defaultOptions: {

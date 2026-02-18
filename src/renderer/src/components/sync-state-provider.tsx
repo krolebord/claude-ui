@@ -1,6 +1,6 @@
-import { SyncStateStore } from "@renderer/services/state-sync-client";
+import type { SyncStateStore } from "@renderer/services/state-sync-client";
 import { createContext, useContext } from "react";
-import { useStore, ExtractState } from "zustand";
+import { type ExtractState, useStore } from "zustand";
 
 const stateContext = createContext<SyncStateStore | null>(null);
 

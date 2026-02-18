@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from "@renderer/components/ui/dialog";
 import { Input } from "@renderer/components/ui/input";
+import { Kbd } from "@renderer/components/ui/kbd";
 import { Label } from "@renderer/components/ui/label";
 import {
   Select,
@@ -29,7 +30,6 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from "@renderer/components/ui/toggle-group";
-import { Kbd } from "@renderer/components/ui/kbd";
 import { useActiveSessionStore } from "@renderer/hooks/use-active-session-id";
 import { orpc } from "@renderer/orpc-client";
 import {
@@ -42,8 +42,8 @@ import type {
   ClaudePermissionMode,
 } from "@shared/claude-types";
 import {
+  type Hotkey,
   formatForDisplay,
-  Hotkey,
   useHotkey,
 } from "@tanstack/react-hotkeys";
 import { useMutation } from "@tanstack/react-query";
@@ -195,7 +195,9 @@ export function NewSessionDialog() {
 }
 
 function LocalClaudeSessionForm() {
-  const openProjectCwd = useNewSessionDialogStore((s) => s.openProjectCwd)!;
+  const openProjectCwd = useNewSessionDialogStore(
+    (s) => s.openProjectCwd,
+  ) as string;
   const setOpenProjectCwd = useNewSessionDialogStore(
     (s) => s.setOpenProjectCwd,
   );
@@ -461,7 +463,9 @@ function LocalClaudeSessionForm() {
 }
 
 function RalphLoopSessionForm() {
-  const openProjectCwd = useNewSessionDialogStore((s) => s.openProjectCwd)!;
+  const openProjectCwd = useNewSessionDialogStore(
+    (s) => s.openProjectCwd,
+  ) as string;
   const setOpenProjectCwd = useNewSessionDialogStore(
     (s) => s.setOpenProjectCwd,
   );
@@ -718,7 +722,6 @@ function RalphLoopSessionForm() {
               />
             </div>
           </div>
-
         </CollapsibleContent>
       </Collapsible>
 
@@ -747,7 +750,9 @@ function RalphLoopSessionForm() {
 }
 
 function LocalTerminalSessionForm() {
-  const openProjectCwd = useNewSessionDialogStore((s) => s.openProjectCwd)!;
+  const openProjectCwd = useNewSessionDialogStore(
+    (s) => s.openProjectCwd,
+  ) as string;
   const setOpenProjectCwd = useNewSessionDialogStore(
     (s) => s.setOpenProjectCwd,
   );

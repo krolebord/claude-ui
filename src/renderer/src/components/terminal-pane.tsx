@@ -3,11 +3,11 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Terminal } from "@xterm/xterm";
 import {
+  type ForwardedRef,
   forwardRef,
   useEffect,
   useImperativeHandle,
   useRef,
-  type ForwardedRef,
 } from "react";
 import "@xterm/xterm/css/xterm.css";
 
@@ -59,6 +59,7 @@ function TerminalPaneComponent(
     }),
   }));
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: readOnly is handled by the dedicated effect below; this effect initializes the terminal once
   useEffect(() => {
     const container = containerRef.current;
     if (!container) {

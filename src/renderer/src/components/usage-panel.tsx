@@ -1,8 +1,8 @@
 import { cn } from "@renderer/lib/utils";
+import { orpc } from "@renderer/orpc-client";
 import { useQuery } from "@tanstack/react-query";
 import { BarChart3, LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
-import { orpc } from "@renderer/orpc-client";
 
 type UsageBucketKey = "five_hour" | "seven_day" | "seven_day_sonnet";
 
@@ -53,7 +53,7 @@ export function UsagePanel() {
     }
   };
 
-  if (query.data && query.data.ok && query.data.usage) {
+  if (query.data?.ok && query.data.usage) {
     const usage = query.data.usage;
     return (
       <div className="border-t border-border/70 p-2">
@@ -88,7 +88,7 @@ export function UsagePanel() {
               </div>
             );
           })}
-          {usage.extra_usage && usage.extra_usage.is_enabled
+          {usage.extra_usage?.is_enabled
             ? (() => {
                 const used = usage.extra_usage.used_credits / 100;
                 const limit = usage.extra_usage.monthly_limit / 100;

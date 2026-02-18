@@ -3,15 +3,15 @@ import { ProjectDefaultsDialog } from "@renderer/components/project-defaults-dia
 import { SessionPage } from "@renderer/components/session-page";
 import { SessionSidebar } from "@renderer/components/session-sidebar";
 import { SettingsDialog } from "@renderer/components/settings-dialog";
-import { WelcomePage } from "@renderer/components/welcome-page";
 import { Toaster } from "@renderer/components/ui/sonner";
+import { WelcomePage } from "@renderer/components/welcome-page";
 import { useAppShortcuts } from "@renderer/hooks/use-app-shortcuts";
 import { useEffect } from "react";
+import { useAppState } from "./components/sync-state-provider";
 import {
   useActiveSessionId,
   useActiveSessionStore,
 } from "./hooks/use-active-session-id";
-import { useAppState } from "./components/sync-state-provider";
 
 function useValidateActiveSession() {
   const activeSessionId = useActiveSessionId();

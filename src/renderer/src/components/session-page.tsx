@@ -1,18 +1,24 @@
-import { Button } from "@renderer/components/ui/button";
-import { Badge } from "@renderer/components/ui/badge";
-import {
-  type TerminalPaneHandle,
-  TerminalPane,
-} from "@renderer/components/terminal-pane";
-import { AlertCircle } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { useAppState } from "./sync-state-provider";
-import { useActiveSessionId } from "@renderer/hooks/use-active-session-id";
 import { type ClientPromiseResult, consumeEventIterator } from "@orpc/client";
+import {
+  TerminalPane,
+  type TerminalPaneHandle,
+} from "@renderer/components/terminal-pane";
+import { Badge } from "@renderer/components/ui/badge";
+import { Button } from "@renderer/components/ui/button";
+import { useActiveSessionId } from "@renderer/hooks/use-active-session-id";
 import { orpc } from "@renderer/orpc-client";
-import { toast } from "sonner";
 import type { TerminalEvent } from "@shared/terminal-types";
 import { useMutation } from "@tanstack/react-query";
+import { AlertCircle } from "lucide-react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import { toast } from "sonner";
+import { useAppState } from "./sync-state-provider";
 
 function useActiveSession() {
   const activeSessionId = useActiveSessionId();
@@ -218,6 +224,7 @@ function TerminalPage({
 }) {
   const terminalRef = useRef<TerminalPaneHandle | null>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: subscribe and bufferedOutput are intentionally captured once per session switch
   useEffect(() => {
     terminalRef.current?.clear();
     terminalRef.current?.write(session.bufferedOutput ?? "");
@@ -262,7 +269,7 @@ function TerminalPage({
         data,
       });
     },
-    [session.sessionId, readOnly],
+    [session.sessionId, readOnly, writeToTerminal],
   );
 
   const handleTerminalResize = useCallback(
@@ -273,7 +280,7 @@ function TerminalPage({
         rows,
       });
     },
-    [session.sessionId],
+    [session.sessionId, resizeTerminal],
   );
 
   const errorMessage = session.errorMessage || session.warningMessage || "";

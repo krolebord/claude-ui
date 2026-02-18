@@ -20,9 +20,8 @@ export function WelcomePage() {
           <div className="flex items-start gap-3 rounded-lg border border-white/10 bg-white/[0.03] px-4 py-3">
             <MessageSquarePlus className="mt-0.5 size-4 shrink-0 text-zinc-400" />
             <span>
-              Then use the{" "}
-              <strong className="text-zinc-300">+</strong> button on a project
-              to start a Claude session
+              Then use the <strong className="text-zinc-300">+</strong> button
+              on a project to start a Claude session
             </span>
           </div>
         </div>
