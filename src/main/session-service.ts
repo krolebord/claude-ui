@@ -107,6 +107,11 @@ const deleteClaudeSessionSchema = z.object({
   sessionId: z.string(),
 });
 
+const renameClaudeSessionSchema = z.object({
+  sessionId: z.string(),
+  title: z.string().trim().min(1),
+});
+
 export const claudeSessionsRouter = {
   startSession: procedure
     .input(startClaudeSessionSchema)
@@ -132,6 +137,11 @@ export const claudeSessionsRouter = {
     .input(deleteClaudeSessionSchema)
     .handler(async ({ input, context }) => {
       return await context.sessionsService.deleteSession(input.sessionId);
+    }),
+  renameSession: procedure
+    .input(renameClaudeSessionSchema)
+    .handler(async ({ input, context }) => {
+      context.sessionsService.renameSession(input.sessionId, input.title);
     }),
   markSeen: procedure
     .input(z.object({ sessionId: z.string() }))
@@ -539,11 +549,16 @@ export class SessionsServiceNew {
         }
 
         state.updateState((state) => {
-          if (!state[sessionId]) {
+          const session = state[sessionId];
+          if (!session) {
             return;
           }
 
-          state[sessionId].title = nextTitle;
+          if (session.title !== getDefaultSessionTitle(sessionId)) {
+            return;
+          }
+
+          session.title = nextTitle;
         });
       },
     });
@@ -572,6 +587,23 @@ export class SessionsServiceNew {
     this.sessionsState.updateState((state) => {
       delete state[sessionId];
     });
+  }
+
+  renameSession(sessionId: string, title: string) {
+    const nextTitle = title.trim();
+    if (!nextTitle) {
+      return;
+    }
+
+    this.sessionsState.updateState((state) => {
+      const session = state[sessionId];
+      if (!session || session.type !== "claude-local-terminal") {
+        return;
+      }
+      session.title = nextTitle;
+    });
+
+    this.titleManager.forget(sessionId);
   }
 
   getLiveSession(sessionId: string) {

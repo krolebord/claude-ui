@@ -2,9 +2,11 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ClaudeHookEvent } from "../../src/shared/claude-types";
 import {
+  type RalphLoopSessionData,
+  RalphLoopSessionsManager,
   buildRalphLoopPrompt,
   canResumeAutonomousLoop,
   evaluateStopHookOutcome,
@@ -55,6 +57,55 @@ describe("stop hook transcript helpers", () => {
 
     expect(extractTranscriptPathFromStopHook(stopWithoutPath)).toBeNull();
     expect(extractTranscriptPathFromStopHook(preHook)).toBeNull();
+  });
+});
+
+describe("RalphLoopSessionsManager", () => {
+  it("renames loop sessions", () => {
+    const state: Record<string, RalphLoopSessionData> = {
+      "session-1": {
+        sessionId: "session-1",
+        type: "ralph-loop",
+        createdAt: Date.now(),
+        lastActivityAt: Date.now(),
+        status: "stopped",
+        title: "Old Loop Name",
+        startupConfig: {
+          cwd: "/tmp",
+          objectivePrompt: "Keep working",
+          model: "opus",
+          permissionMode: "yolo",
+          maxIterations: 5,
+          maxConsecutiveFailures: 2,
+          backoffInitialMs: 1000,
+          backoffMaxMs: 2000,
+        },
+        loopState: {
+          autonomousEnabled: false,
+          currentIteration: 0,
+          consecutiveFailures: 0,
+          completion: "not_done",
+          completeDetected: false,
+        },
+        bufferedOutput: "",
+      },
+    };
+
+    const manager = new RalphLoopSessionsManager({
+      pluginDir: null,
+      state: {
+        state,
+        updateState: (updater) => updater(state),
+      },
+      stateFileManager: {
+        create: vi.fn(),
+        cleanup: vi.fn(),
+      },
+    });
+
+    manager.renameSession("session-1", "  New Loop Name  ");
+
+    expect(state["session-1"]?.title).toBe("New Loop Name");
   });
 });
 

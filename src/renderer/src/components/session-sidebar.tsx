@@ -1,3 +1,4 @@
+import { Button } from "@renderer/components/ui/button";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -5,6 +6,23 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@renderer/components/ui/context-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@renderer/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@renderer/components/ui/dropdown-menu";
+import { Input } from "@renderer/components/ui/input";
+import { Label } from "@renderer/components/ui/label";
 import { UsagePanel } from "@renderer/components/usage-panel";
 import { useActiveSessionStore } from "@renderer/hooks/use-active-session-id";
 import { cn } from "@renderer/lib/utils";
@@ -16,10 +34,12 @@ import {
 } from "@renderer/services/terminal-session-selectors";
 import { useMutation } from "@tanstack/react-query";
 import {
+  Bot,
   ChevronDown,
   ChevronRight,
   CircleDot,
   Copy,
+  EllipsisVertical,
   Folder,
   FolderOpen,
   FolderPlus,
@@ -27,6 +47,7 @@ import {
   LoaderCircle,
   type LucideIcon,
   MessageCircleQuestionMark,
+  Pencil,
   PlayIcon,
   Plus,
   Repeat,
@@ -40,9 +61,10 @@ import {
   TrashIcon,
   TriangleAlert,
 } from "lucide-react";
-import { forwardRef, useMemo } from "react";
+import { forwardRef, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { SessionStatus } from "src/main/sessions/common";
+import type { Session } from "src/main/sessions/state";
 import { useNewSessionDialogStore } from "./new-session-dialog";
 import { useProjectDefaultsDialogStore } from "./project-defaults-dialog";
 import { useSettingsStore } from "./settings-dialog";
@@ -106,7 +128,16 @@ const sessionTypeIcon: Record<string, { icon: LucideIcon; label: string }> = {
   "claude-local-terminal": { icon: Sparkles, label: "Claude" },
   "local-terminal": { icon: TerminalSquare, label: "Terminal" },
   "ralph-loop": { icon: Repeat, label: "Ralph Loop" },
+  "codex-local-terminal": { icon: Bot, label: "Codex" },
 };
+
+type RenamableSessionType = Session["type"];
+
+interface RenameSessionTarget {
+  sessionId: string;
+  type: RenamableSessionType;
+  title: string;
+}
 
 export function SessionSidebar() {
   const projects = useAppState((x) => x.projects);
@@ -140,13 +171,52 @@ export function SessionSidebar() {
   );
 
   const deleteProjectMutation = useMutation({
-    mutationFn: async (path: string) => {
+    mutationFn: async ({
+      path,
+      sessions,
+    }: {
+      path: string;
+      sessions: ProjectSessionGroup["sessions"];
+    }) => {
+      for (const session of sessions) {
+        switch (session.type) {
+          case "claude-local-terminal":
+            await orpc.sessions.localClaude.deleteSession.call({
+              sessionId: session.sessionId,
+            });
+            break;
+          case "local-terminal":
+            await orpc.sessions.localTerminal.deleteSession.call({
+              sessionId: session.sessionId,
+            });
+            break;
+          case "ralph-loop":
+            await orpc.sessions.ralphLoop.deleteSession.call({
+              sessionId: session.sessionId,
+            });
+            break;
+          case "codex-local-terminal":
+            await orpc.sessions.codex.deleteSession.call({
+              sessionId: session.sessionId,
+            });
+            break;
+        }
+      }
       await orpc.projects.deleteProject.call({ path });
+    },
+  });
+
+  const openFolderMutation = useMutation({
+    mutationFn: async (path: string) => {
+      await orpc.fs.openFolder.call({ path });
     },
   });
 
   const setOpenNewSessionDialogCwd = useNewSessionDialogStore(
     (x) => x.setOpenProjectCwd,
+  );
+  const [renameTarget, setRenameTarget] = useState<RenameSessionTarget | null>(
+    null,
   );
 
   return (
@@ -217,38 +287,51 @@ export function SessionSidebar() {
 
                 {group.fromProjectList ? (
                   <>
-                    {group.sessions.length === 0 ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          deleteProjectMutation.mutate(group.path);
-                        }}
-                        className="inline-flex size-6 items-center justify-center rounded-md text-zinc-300 opacity-0 transition hover:bg-white/10 hover:text-rose-300 focus-visible:opacity-100 group-hover/project:opacity-100"
-                        aria-label={`Delete project ${group.name}`}
-                      >
-                        <Trash2 className="size-3.5" />
-                      </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setOpenProjectCwd(group.path);
-                      }}
-                      className="inline-flex size-6 items-center justify-center rounded-md text-zinc-300 opacity-0 transition hover:bg-white/10 hover:text-white focus-visible:opacity-100 group-hover/project:opacity-100"
-                      aria-label={`Project defaults for ${group.name}`}
-                    >
-                      <Settings className="size-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setOpenNewSessionDialogCwd(group.path);
-                      }}
-                      className="inline-flex size-6 items-center justify-center rounded-md text-zinc-300 opacity-0 transition hover:bg-white/10 hover:text-white focus-visible:opacity-100 group-hover/project:opacity-100"
-                      aria-label={`New session in ${group.name}`}
-                    >
-                      <Plus className="size-3.5" />
-                    </button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <SidebarIconButton
+                          icon={EllipsisVertical}
+                          label={`Project menu for ${group.name}`}
+                          size="md"
+                          className="opacity-0 focus-visible:opacity-100 group-hover/project:opacity-100"
+                        />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start">
+                        <DropdownMenuItem
+                          onClick={() => setOpenProjectCwd(group.path)}
+                        >
+                          <Settings className="size-3.5" />
+                          Settings
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => openFolderMutation.mutate(group.path)}
+                        >
+                          <FolderOpen className="size-3.5" />
+                          Open project folder
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          variant="destructive"
+                          disabled={deleteProjectMutation.isPending}
+                          onClick={() =>
+                            deleteProjectMutation.mutate({
+                              path: group.path,
+                              sessions: group.sessions,
+                            })
+                          }
+                        >
+                          <Trash2 className="size-3.5" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    <SidebarIconButton
+                      icon={Plus}
+                      label={`New session in ${group.name}`}
+                      size="md"
+                      className="opacity-0 focus-visible:opacity-100 group-hover/project:opacity-100"
+                      onClick={() => setOpenNewSessionDialogCwd(group.path)}
+                    />
                   </>
                 ) : null}
               </div>
@@ -263,6 +346,9 @@ export function SessionSidebar() {
                             <ClaudeLocalTerminalSessionSidebarItem
                               key={session.sessionId}
                               sessionId={session.sessionId}
+                              onRenameSession={(target) => {
+                                setRenameTarget(target);
+                              }}
                             />
                           );
                         case "local-terminal":
@@ -270,6 +356,19 @@ export function SessionSidebar() {
                             <LocalTerminalSessionSidebarItem
                               key={session.sessionId}
                               sessionId={session.sessionId}
+                              onRenameSession={(target) => {
+                                setRenameTarget(target);
+                              }}
+                            />
+                          );
+                        case "codex-local-terminal":
+                          return (
+                            <CodexLocalTerminalSessionSidebarItem
+                              key={session.sessionId}
+                              sessionId={session.sessionId}
+                              onRenameSession={(target) => {
+                                setRenameTarget(target);
+                              }}
                             />
                           );
                         case "ralph-loop":
@@ -277,6 +376,9 @@ export function SessionSidebar() {
                             <RalphLoopSessionSidebarItem
                               key={session.sessionId}
                               sessionId={session.sessionId}
+                              onRenameSession={(target) => {
+                                setRenameTarget(target);
+                              }}
                             />
                           );
                         default:
@@ -295,14 +397,20 @@ export function SessionSidebar() {
         </div>
       </div>
       <UsagePanel />
+      <RenameSessionDialog
+        renameTarget={renameTarget}
+        onRenameTargetChange={setRenameTarget}
+      />
     </aside>
   );
 }
 
 function ClaudeLocalTerminalSessionSidebarItem({
   sessionId,
+  onRenameSession,
 }: {
   sessionId: string;
+  onRenameSession: (target: RenameSessionTarget) => void;
 }) {
   const setActiveSessionId = useActiveSessionStore((x) => x.setActiveSessionId);
 
@@ -398,6 +506,18 @@ function ClaudeLocalTerminalSessionSidebarItem({
           <GitFork className="size-3.5" />
           Fork session
         </ContextMenuItem>
+        <ContextMenuItem
+          onClick={() => {
+            onRenameSession({
+              sessionId,
+              type: "claude-local-terminal",
+              title: session.title,
+            });
+          }}
+        >
+          <Pencil className="size-3.5" />
+          Rename session
+        </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem
           onClick={() => {
@@ -422,7 +542,13 @@ function ClaudeLocalTerminalSessionSidebarItem({
   );
 }
 
-function LocalTerminalSessionSidebarItem({ sessionId }: { sessionId: string }) {
+function LocalTerminalSessionSidebarItem({
+  sessionId,
+  onRenameSession,
+}: {
+  sessionId: string;
+  onRenameSession: (target: RenameSessionTarget) => void;
+}) {
   const setActiveSessionId = useActiveSessionStore((x) => x.setActiveSessionId);
 
   const session = useAppState((x) => x.sessions[sessionId]);
@@ -436,11 +562,6 @@ function LocalTerminalSessionSidebarItem({ sessionId }: { sessionId: string }) {
   const stopSessionMutation = useMutation({
     mutationFn: async (sessionId: string) => {
       await orpc.sessions.localTerminal.stopLiveSession.call({ sessionId });
-    },
-    onSuccess: () => {
-      if (useActiveSessionStore.getState().activeSessionId === sessionId) {
-        setActiveSessionId(null);
-      }
     },
   });
 
@@ -492,6 +613,19 @@ function LocalTerminalSessionSidebarItem({ sessionId }: { sessionId: string }) {
       <ContextMenuContent>
         <ContextMenuItem
           onClick={() => {
+            onRenameSession({
+              sessionId,
+              type: "local-terminal",
+              title: session.title,
+            });
+          }}
+        >
+          <Pencil className="size-3.5" />
+          Rename session
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem
+          onClick={() => {
             void navigator.clipboard.writeText(session.sessionId);
             toast.success("Session ID copied");
           }}
@@ -513,7 +647,132 @@ function LocalTerminalSessionSidebarItem({ sessionId }: { sessionId: string }) {
   );
 }
 
-function RalphLoopSessionSidebarItem({ sessionId }: { sessionId: string }) {
+function CodexLocalTerminalSessionSidebarItem({
+  sessionId,
+  onRenameSession,
+}: {
+  sessionId: string;
+  onRenameSession: (target: RenameSessionTarget) => void;
+}) {
+  const setActiveSessionId = useActiveSessionStore((x) => x.setActiveSessionId);
+
+  const session = useAppState((x) => x.sessions[sessionId]);
+  const sessions = useAppState((x) => x.sessions);
+
+  const resumeSessionMutation = useMutation({
+    mutationFn: async (sessionId: string) => {
+      await orpc.sessions.codex.resumeSession.call({ sessionId });
+    },
+  });
+
+  const stopSessionMutation = useMutation({
+    mutationFn: async (sessionId: string) => {
+      await orpc.sessions.codex.stopLiveSession.call({ sessionId });
+    },
+  });
+
+  const deleteSessionMutation = useMutation({
+    mutationFn: async (sessionId: string) => {
+      await orpc.sessions.codex.deleteSession.call({ sessionId });
+    },
+    onSuccess: () => {
+      if (useActiveSessionStore.getState().activeSessionId === sessionId) {
+        setActiveSessionId(null);
+      }
+    },
+  });
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <SessionSidebarItemTrigger
+          sessionId={sessionId}
+          onSessionSelect={(prevSessionId) => {
+            if (
+              prevSessionId &&
+              sessions[prevSessionId]?.type === "codex-local-terminal"
+            ) {
+              orpc.sessions.codex.markSeen.call({
+                sessionId: prevSessionId,
+              });
+            }
+            orpc.sessions.codex.markSeen.call({ sessionId });
+          }}
+        >
+          {session.status === "stopped" ? (
+            <SidebarIconButton
+              icon={PlayIcon}
+              label="Resume session"
+              disabled={resumeSessionMutation.isPending}
+              onClick={() => {
+                resumeSessionMutation.mutate(sessionId);
+              }}
+            />
+          ) : (
+            <SidebarIconButton
+              icon={SquareIcon}
+              label="Stop session"
+              disabled={stopSessionMutation.isPending}
+              onClick={() => {
+                stopSessionMutation.mutate(sessionId);
+              }}
+            />
+          )}
+          <SidebarIconButton
+            icon={TrashIcon}
+            label="Delete session"
+            variant="destructive"
+            disabled={deleteSessionMutation.isPending}
+            onClick={() => {
+              deleteSessionMutation.mutate(sessionId);
+            }}
+          />
+        </SessionSidebarItemTrigger>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem
+          onClick={() => {
+            onRenameSession({
+              sessionId,
+              type: "codex-local-terminal",
+              title: session.title,
+            });
+          }}
+        >
+          <Pencil className="size-3.5" />
+          Rename session
+        </ContextMenuItem>
+        <ContextMenuSeparator />
+        <ContextMenuItem
+          onClick={() => {
+            void navigator.clipboard.writeText(session.sessionId);
+            toast.success("Session ID copied");
+          }}
+        >
+          <Copy className="size-3.5" />
+          Copy session ID
+        </ContextMenuItem>
+        <ContextMenuItem
+          onClick={() => {
+            void navigator.clipboard.writeText(session.startupConfig.cwd);
+            toast.success("Working directory copied");
+          }}
+        >
+          <Copy className="size-3.5" />
+          Copy working directory
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
+
+function RalphLoopSessionSidebarItem({
+  sessionId,
+  onRenameSession,
+}: {
+  sessionId: string;
+  onRenameSession: (target: RenameSessionTarget) => void;
+}) {
   const setActiveSessionId = useActiveSessionStore((x) => x.setActiveSessionId);
   const session = useAppState((x) => x.sessions[sessionId]);
 
@@ -599,6 +858,18 @@ function RalphLoopSessionSidebarItem({ sessionId }: { sessionId: string }) {
           <PlayIcon className="size-3.5" />
           Run single iteration
         </ContextMenuItem>
+        <ContextMenuItem
+          onClick={() => {
+            onRenameSession({
+              sessionId,
+              type: "ralph-loop",
+              title: session.title,
+            });
+          }}
+        >
+          <Pencil className="size-3.5" />
+          Rename session
+        </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem
           onClick={() => {
@@ -620,6 +891,129 @@ function RalphLoopSessionSidebarItem({ sessionId }: { sessionId: string }) {
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
+  );
+}
+
+function RenameSessionDialog({
+  renameTarget,
+  onRenameTargetChange,
+}: {
+  renameTarget: RenameSessionTarget | null;
+  onRenameTargetChange: (target: RenameSessionTarget | null) => void;
+}) {
+  const [title, setTitle] = useState("");
+
+  const renameSessionMutation = useMutation({
+    mutationFn: async (target: RenameSessionTarget) => {
+      switch (target.type) {
+        case "claude-local-terminal":
+          await orpc.sessions.localClaude.renameSession.call({
+            sessionId: target.sessionId,
+            title: target.title,
+          });
+          return;
+        case "local-terminal":
+          await orpc.sessions.localTerminal.renameSession.call({
+            sessionId: target.sessionId,
+            title: target.title,
+          });
+          return;
+        case "codex-local-terminal":
+          await orpc.sessions.codex.renameSession.call({
+            sessionId: target.sessionId,
+            title: target.title,
+          });
+          return;
+        case "ralph-loop":
+          await orpc.sessions.ralphLoop.renameSession.call({
+            sessionId: target.sessionId,
+            title: target.title,
+          });
+          return;
+      }
+    },
+    onSuccess: () => {
+      toast.success("Session renamed");
+      onRenameTargetChange(null);
+    },
+  });
+
+  useEffect(() => {
+    setTitle(renameTarget?.title ?? "");
+  }, [renameTarget]);
+
+  const closeDialog = () => {
+    if (renameSessionMutation.isPending) {
+      return;
+    }
+    onRenameTargetChange(null);
+  };
+
+  return (
+    <Dialog
+      open={renameTarget !== null}
+      onOpenChange={(isOpen) => {
+        if (!isOpen) {
+          closeDialog();
+        }
+      }}
+    >
+      <DialogContent showCloseButton={false}>
+        <DialogHeader>
+          <DialogTitle>Rename session</DialogTitle>
+          <DialogDescription>
+            Update the title shown in the sidebar.
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!renameTarget) {
+              return;
+            }
+
+            const nextTitle = title.trim();
+            if (!nextTitle) {
+              toast.error("Session name cannot be empty");
+              return;
+            }
+
+            renameSessionMutation.mutate({
+              ...renameTarget,
+              title: nextTitle,
+            });
+          }}
+        >
+          <div className="space-y-2">
+            <Label htmlFor="rename-session-title">Session name</Label>
+            <Input
+              id="rename-session-title"
+              value={title}
+              onChange={(event) => {
+                setTitle(event.target.value);
+              }}
+              autoFocus
+              maxLength={120}
+              disabled={renameSessionMutation.isPending}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={closeDialog}
+              disabled={renameSessionMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={renameSessionMutation.isPending}>
+              Save
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -702,40 +1096,46 @@ const SessionSidebarItemTrigger = forwardRef<
   );
 });
 
-function SidebarIconButton({
-  icon,
-  label,
-  onClick,
-  disabled,
-  variant,
-}: {
-  icon: LucideIcon;
-  label: string;
-  onClick: () => void;
-  disabled?: boolean;
-  variant?: "default" | "destructive";
-}) {
+const SidebarIconButton = forwardRef<
+  HTMLButtonElement,
+  {
+    icon: LucideIcon;
+    label: string;
+    onClick?: () => void;
+    disabled?: boolean;
+    variant?: "default" | "destructive";
+    size?: "sm" | "md";
+    className?: string;
+  }
+>(function SidebarIconButton(
+  { icon, label, onClick, disabled, variant, size = "sm", className, ...props },
+  ref,
+) {
   const Icon = icon;
   return (
     <button
+      ref={ref}
       type="button"
       onClick={(event) => {
         event.stopPropagation();
-        onClick();
+        onClick?.();
       }}
       className={cn(
-        "pointer-events-auto inline-flex size-5 items-center justify-center rounded text-zinc-300 transition",
+        "pointer-events-auto inline-flex items-center justify-center text-zinc-300 transition",
+        size === "sm" ? "size-5 rounded" : "size-6 rounded-md",
         disabled
           ? "cursor-not-allowed opacity-40"
           : variant === "destructive"
             ? "hover:bg-white/10 hover:text-rose-300"
             : "hover:bg-white/10 hover:text-white",
+        className,
       )}
       disabled={disabled}
       aria-label={label}
       title={label}
+      {...props}
     >
-      <Icon className="size-3" />
+      <Icon className={size === "sm" ? "size-3" : "size-3.5"} />
     </button>
   );
-}
+});

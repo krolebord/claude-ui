@@ -145,6 +145,11 @@ export function useAppShortcuts(): void {
             sessionId: deletingSessionId,
           });
           break;
+        case "codex-local-terminal":
+          void orpc.sessions.codex.deleteSession.call({
+            sessionId: deletingSessionId,
+          });
+          break;
       }
       setActiveSessionId(nextSessionId);
     },

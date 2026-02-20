@@ -195,9 +195,10 @@ export function createTerminalSession(events: TerminalSessionOpts) {
         }
 
         if (exitCode === 127) {
-          const message =
-            "`claude` was not found in PATH for the interactive shell session.";
-          log.error("PTY exit: claude not found (exit code 127)");
+          const message = `\`${launchCommand.file}\` was not found in PATH for the interactive shell session.`;
+          log.error(
+            `PTY exit: ${launchCommand.file} not found (exit code 127)`,
+          );
           dispose({
             status: "error",
             exitCode: null,
@@ -214,7 +215,7 @@ export function createTerminalSession(events: TerminalSessionOpts) {
       });
       disposable.addDisposable(() => onExit.dispose());
     } catch (error) {
-      const message = getStartErrorMessage(error);
+      const message = getStartErrorMessage(error, launchCommand.file);
 
       dispose({
         status: "error",
@@ -302,13 +303,13 @@ export function createTerminalSession(events: TerminalSessionOpts) {
 
 export type TerminalSession = ReturnType<typeof createTerminalSession>;
 
-function getStartErrorMessage(error: unknown): string {
+function getStartErrorMessage(error: unknown, execName: string): string {
   if (error instanceof Error) {
     if (error.message.includes("ENOENT")) {
-      return "`claude` was not found in PATH. Install Claude CLI or add it to PATH.";
+      return `\`${execName}\` was not found in PATH. Install it or add it to PATH.`;
     }
-    return `Failed to start Claude: ${error.message}`;
+    return `Failed to start ${execName}: ${error.message}`;
   }
 
-  return "Failed to start Claude due to an unknown error.";
+  return `Failed to start ${execName} due to an unknown error.`;
 }

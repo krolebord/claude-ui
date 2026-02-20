@@ -1,8 +1,14 @@
 import path from "node:path";
 import { app, dialog, shell } from "electron";
+import { z } from "zod";
 import { procedure } from "./orpc";
 
 export const fsRouter = {
+  openFolder: procedure
+    .input(z.object({ path: z.string().trim().min(1) }))
+    .handler(async ({ input }) => {
+      await shell.openPath(input.path);
+    }),
   selectFolder: procedure.handler(async ({ context }) => {
     const dialogOptions: Electron.OpenDialogOptions = {
       title: "Select Project Folder",

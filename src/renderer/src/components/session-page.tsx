@@ -68,6 +68,19 @@ export function SessionPage() {
           }
         />
       );
+    case "codex-local-terminal":
+      return (
+        <TerminalPage
+          session={session}
+          subscribe={(sessionId) =>
+            orpc.sessions.codex.subscribeToSessionTerminal.call({
+              sessionId,
+            })
+          }
+          writeToTerminal={orpc.sessions.codex.writeToSessionTerminal.call}
+          resizeTerminal={orpc.sessions.codex.resizeSessionTerminal.call}
+        />
+      );
     case "ralph-loop":
       return <RalphLoopSessionPage session={session} />;
     default:

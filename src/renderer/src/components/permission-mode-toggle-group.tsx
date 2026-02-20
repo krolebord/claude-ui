@@ -5,6 +5,7 @@ import {
   ToggleGroupItem,
 } from "@renderer/components/ui/toggle-group";
 import type { ClaudePermissionMode } from "@shared/claude-types";
+import type { CodexPermissionMode } from "@shared/codex-types";
 import {
   type Hotkey,
   formatForDisplay,
@@ -68,6 +69,81 @@ export function PermissionModeToggleGroup({
         className="w-full"
       >
         {PERMISSION_MODES.map((option) => (
+          <ToggleGroupItem
+            key={option.value}
+            value={option.value}
+            className="flex-1"
+          >
+            {option.label}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+    </div>
+  );
+}
+
+// Codex permission modes
+
+interface CodexPermissionModeToggleGroupProps {
+  label: string;
+  permissionMode: CodexPermissionMode;
+  onPermissionModeChange: (value: CodexPermissionMode) => void;
+}
+
+const CODEX_PERMISSION_MODES: {
+  value: CodexPermissionMode;
+  label: string;
+}[] = [
+  { value: "default", label: "Default" },
+  { value: "full-auto", label: "Full Auto" },
+  { value: "yolo", label: "Yolo" },
+];
+
+function cycleCodexPermissionMode(
+  current: CodexPermissionMode,
+): CodexPermissionMode {
+  const index = CODEX_PERMISSION_MODES.findIndex(
+    (mode) => mode.value === current,
+  );
+  return CODEX_PERMISSION_MODES[(index + 1) % CODEX_PERMISSION_MODES.length]
+    .value;
+}
+
+export function CodexPermissionModeToggleGroup({
+  label,
+  permissionMode,
+  onPermissionModeChange,
+}: CodexPermissionModeToggleGroupProps) {
+  useHotkey(
+    cyclePermissionModeHotkey,
+    () => {
+      onPermissionModeChange(cycleCodexPermissionMode(permissionMode));
+    },
+    {
+      ignoreInputs: false,
+    },
+  );
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <Label>{label}</Label>
+        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+          <Kbd>{formatForDisplay(cyclePermissionModeHotkey)}</Kbd>
+        </span>
+      </div>
+      <ToggleGroup
+        type="single"
+        variant="outline"
+        value={permissionMode}
+        onValueChange={(value) => {
+          if (value) {
+            onPermissionModeChange(value as CodexPermissionMode);
+          }
+        }}
+        className="w-full"
+      >
+        {CODEX_PERMISSION_MODES.map((option) => (
           <ToggleGroupItem
             key={option.value}
             value={option.value}

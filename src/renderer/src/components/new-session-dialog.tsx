@@ -1,5 +1,8 @@
 import { EffortToggleGroup } from "@renderer/components/effort-toggle-group";
-import { PermissionModeToggleGroup } from "@renderer/components/permission-mode-toggle-group";
+import {
+  CodexPermissionModeToggleGroup,
+  PermissionModeToggleGroup,
+} from "@renderer/components/permission-mode-toggle-group";
 import { useAppState } from "@renderer/components/sync-state-provider";
 import { Button } from "@renderer/components/ui/button";
 import {
@@ -41,6 +44,10 @@ import type {
   ClaudeModel,
   ClaudePermissionMode,
 } from "@shared/claude-types";
+import type {
+  CodexModelReasoningEffort,
+  CodexPermissionMode,
+} from "@shared/codex-types";
 import {
   type Hotkey,
   formatForDisplay,
@@ -65,12 +72,30 @@ export const useNewSessionDialogStore = create(
   ),
 );
 
-type SessionType = "claude" | "ralphLoop" | "terminal";
+type SessionType = "claude" | "codex" | "ralphLoop" | "terminal";
 
 const SESSION_TYPE_OPTIONS: { value: SessionType; label: string }[] = [
   { value: "claude", label: "Claude" },
+  { value: "codex", label: "Codex" },
   { value: "ralphLoop", label: "Ralph Loop" },
   { value: "terminal", label: "Terminal" },
+];
+
+const CODEX_MODEL_REASONING_EFFORT_OPTIONS: {
+  value: CodexModelReasoningEffort;
+  label: string;
+}[] = [
+  { value: "minimal", label: "Minimal" },
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+  { value: "xhigh", label: "XHigh" },
+];
+
+const CLAUDE_EFFORT_OPTIONS: { value: ClaudeEffort; label: string }[] = [
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
 ];
 
 const DEFAULT_RALPH_LOOP_OBJECTIVE_PROMPT = [
@@ -184,6 +209,8 @@ export function NewSessionDialog() {
 
         {sessionType === "claude" ? (
           <LocalClaudeSessionForm key={`claude-${openProjectCwd}`} />
+        ) : sessionType === "codex" ? (
+          <CodexSessionForm key={`codex-${openProjectCwd}`} />
         ) : sessionType === "ralphLoop" ? (
           <RalphLoopSessionForm key={`ralph-loop-${openProjectCwd}`} />
         ) : (
@@ -334,12 +361,6 @@ function LocalClaudeSessionForm() {
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent className="space-y-4 pt-2">
-          <EffortToggleGroup
-            label="Effort"
-            effort={effort}
-            onEffortChange={setEffort}
-          />
-
           <div className="space-y-2">
             <Label htmlFor="new-session-name">Session name (optional)</Label>
             <Input
@@ -352,25 +373,57 @@ function LocalClaudeSessionForm() {
             />
           </div>
 
-          <div className="space-y-2">
-            <Label>Model</Label>
-            <Select
-              value={model}
-              onValueChange={(value) => {
-                setModel(value as ClaudeModel);
-              }}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {MODEL_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
+          <div className="flex items-end gap-3">
+            <div className="min-w-0 flex-1 space-y-2">
+              <Label>Model</Label>
+              <Select
+                value={model}
+                onValueChange={(value) => {
+                  setModel(value as ClaudeModel);
+                }}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MODEL_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="w-fit shrink-0 space-y-2">
+              <Label className="whitespace-nowrap">Effort</Label>
+              <Select
+                value={effort ?? "no"}
+                onValueChange={(value) => {
+                  setEffort(
+                    value === "no" ? undefined : (value as ClaudeEffort),
+                  );
+                }}
+              >
+                <SelectTrigger className="w-auto min-w-24 whitespace-nowrap">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="no" className="whitespace-nowrap">
+                    Default
                   </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                  {CLAUDE_EFFORT_OPTIONS.map((option) => (
+                    <SelectItem
+                      key={option.value}
+                      value={option.value}
+                      className="whitespace-nowrap"
+                    >
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -721,6 +774,226 @@ function RalphLoopSessionForm() {
                 }}
               />
             </div>
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+
+      {errorMessage ? (
+        <div className="flex items-center gap-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
+          <AlertCircle className="size-4 shrink-0" />
+          <span>{errorMessage}</span>
+        </div>
+      ) : null}
+
+      <DialogFooter>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setOpenProjectCwd(null)}
+          disabled={isPending}
+        >
+          Cancel
+        </Button>
+        <Button type="submit" disabled={isPending}>
+          {isPending ? "Starting..." : "Create"}
+        </Button>
+      </DialogFooter>
+    </form>
+  );
+}
+
+function CodexSessionForm() {
+  const openProjectCwd = useNewSessionDialogStore(
+    (s) => s.openProjectCwd,
+  ) as string;
+  const setOpenProjectCwd = useNewSessionDialogStore(
+    (s) => s.setOpenProjectCwd,
+  );
+  const project = useAppState(
+    (state) =>
+      state.projects.find((item) => item.path === openProjectCwd) ?? null,
+  );
+  const projectPath = project?.path ?? openProjectCwd;
+  const setActiveSessionId = useActiveSessionStore((s) => s.setActiveSessionId);
+
+  const [initialPrompt, setInitialPrompt] = useState("");
+  const [sessionName, setSessionName] = useState("");
+  const [model, setModel] = useState("");
+  const [modelReasoningEffort, setModelReasoningEffort] =
+    useState<CodexModelReasoningEffort>("high");
+  const [permissionMode, setPermissionMode] =
+    useState<CodexPermissionMode>("default");
+  const [configOverrides, setConfigOverrides] = useState("");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const handleError = (error: unknown) => {
+    if (error instanceof Error && error.message.trim()) {
+      setErrorMessage(error.message);
+      return;
+    }
+    setErrorMessage("Failed to start Codex session.");
+  };
+
+  const startSession = useMutation(
+    orpc.sessions.codex.startSession.mutationOptions({
+      onSuccess: (result) => {
+        setActiveSessionId(result.sessionId);
+        setOpenProjectCwd(null);
+      },
+      onError: handleError,
+    }),
+  );
+
+  const ensureProject = useMutation(
+    orpc.projects.addProject.mutationOptions({
+      onSuccess: () => {
+        startSession.mutate({
+          cwd: projectPath,
+          cols: 80,
+          rows: 24,
+          sessionName: sessionName || undefined,
+          model: model || undefined,
+          modelReasoningEffort,
+          permissionMode,
+          initialPrompt: initialPrompt || undefined,
+          configOverrides: configOverrides || undefined,
+        });
+      },
+      onError: handleError,
+    }),
+  );
+
+  const isPending = ensureProject.isPending || startSession.isPending;
+
+  const handleSubmit = () => {
+    setErrorMessage(null);
+
+    const normalizedPath = projectPath.trim();
+    if (!normalizedPath) {
+      setErrorMessage("Project path is required.");
+      return;
+    }
+
+    ensureProject.mutate({ path: normalizedPath });
+  };
+
+  return (
+    <form
+      className="space-y-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        handleSubmit();
+      }}
+    >
+      <div className="space-y-2">
+        <Label htmlFor="new-codex-initial-prompt">
+          Initial prompt (optional)
+        </Label>
+        <Textarea
+          id="new-codex-initial-prompt"
+          autoFocus
+          placeholder="What would you like Codex to do? (prefix with /plan for plan mode)"
+          value={initialPrompt}
+          onChange={(event) => {
+            setInitialPrompt(event.target.value);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              handleSubmit();
+            }
+          }}
+          rows={3}
+        />
+      </div>
+
+      <CodexPermissionModeToggleGroup
+        label="Permission mode"
+        permissionMode={permissionMode}
+        onPermissionModeChange={setPermissionMode}
+      />
+
+      <Collapsible>
+        <CollapsibleTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="flex w-full items-center justify-between px-2"
+          >
+            <span className="text-sm font-medium">Advanced settings</span>
+            <ChevronsUpDown className="size-4" />
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="space-y-4 pt-2">
+          <div className="space-y-2">
+            <Label htmlFor="new-codex-session-name">
+              Session name (optional)
+            </Label>
+            <Input
+              id="new-codex-session-name"
+              placeholder="Leave blank for generated name"
+              value={sessionName}
+              onChange={(event) => {
+                setSessionName(event.target.value);
+              }}
+            />
+          </div>
+
+          <div className="flex items-end gap-3">
+            <div className="min-w-0 flex-1 space-y-2">
+              <Label htmlFor="new-codex-model">Model (optional)</Label>
+              <Input
+                id="new-codex-model"
+                placeholder="gpt-5.3-codex"
+                value={model}
+                onChange={(event) => {
+                  setModel(event.target.value);
+                }}
+              />
+            </div>
+
+            <div className="w-fit shrink-0 space-y-2">
+              <Label className="whitespace-nowrap">
+                Model reasoning effort
+              </Label>
+              <Select
+                value={modelReasoningEffort}
+                onValueChange={(value) => {
+                  setModelReasoningEffort(value as CodexModelReasoningEffort);
+                }}
+              >
+                <SelectTrigger className="w-auto min-w-28 whitespace-nowrap">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CODEX_MODEL_REASONING_EFFORT_OPTIONS.map((option) => (
+                    <SelectItem
+                      key={option.value}
+                      value={option.value}
+                      className="whitespace-nowrap"
+                    >
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="new-codex-config-overrides">
+              Config overrides (optional)
+            </Label>
+            <Textarea
+              id="new-codex-config-overrides"
+              placeholder="Each line becomes a separate --config argument"
+              value={configOverrides}
+              onChange={(event) => {
+                setConfigOverrides(event.target.value);
+              }}
+              rows={3}
+            />
           </div>
         </CollapsibleContent>
       </Collapsible>

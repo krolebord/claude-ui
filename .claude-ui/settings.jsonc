@@ -2,5 +2,6 @@
   "defaultModel": "opus",
   "defaultPermissionMode": "yolo",
   "defaultEffort": "high",
-  "defaultSubagentModelOverride": "sonnet"
+  "defaultSubagentModelOverride": "sonnet",
+  "defaultHaikuModelOverride": "sonnet"
 }

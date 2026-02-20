@@ -32,6 +32,11 @@ const startLocalTerminalSessionSchema = z.object({
     .transform((value) => value?.trim()),
 });
 
+const renameLocalTerminalSessionSchema = z.object({
+  sessionId: z.string(),
+  title: z.string().trim().min(1),
+});
+
 export const localTerminalRouter = {
   startSession: procedure
     .input(startLocalTerminalSessionSchema)
@@ -104,6 +109,14 @@ export const localTerminalRouter = {
     .handler(async ({ input, context }) => {
       return await context.sessions.localTerminal.deleteSession(
         input.sessionId,
+      );
+    }),
+  renameSession: procedure
+    .input(renameLocalTerminalSessionSchema)
+    .handler(async ({ input, context }) => {
+      context.sessions.localTerminal.renameSession(
+        input.sessionId,
+        input.title,
       );
     }),
   subscribeToSessionTerminal: procedure
@@ -248,10 +261,34 @@ export class LocalTerminalSessionsManager {
     await liveSession.dispose();
   }
 
+  async dispose(): Promise<void> {
+    const sessionIds = [...this.liveSessions.keys()];
+    await Promise.allSettled(
+      sessionIds.map(async (sessionId) => {
+        await this.stopLiveSession(sessionId);
+      }),
+    );
+  }
+
   async deleteSession(sessionId: string) {
     await this.stopLiveSession(sessionId);
     this.sessionsState.updateState((state) => {
       delete state[sessionId];
+    });
+  }
+
+  renameSession(sessionId: string, title: string) {
+    const nextTitle = title.trim();
+    if (!nextTitle) {
+      return;
+    }
+
+    this.sessionsState.updateState((state) => {
+      const session = state[sessionId];
+      if (!session || session.type !== "local-terminal") {
+        return;
+      }
+      session.title = nextTitle;
     });
   }
 

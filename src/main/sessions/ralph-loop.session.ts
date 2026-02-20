@@ -113,6 +113,11 @@ const deleteLoopSchema = z.object({
   sessionId: z.string(),
 });
 
+const renameLoopSessionSchema = z.object({
+  sessionId: z.string(),
+  title: z.string().trim().min(1),
+});
+
 const terminalInputSchema = z.object({
   sessionId: z.string(),
   data: z.string(),
@@ -173,6 +178,11 @@ export const ralphLoopRouter = {
     .input(deleteLoopSchema)
     .handler(async ({ input, context }) => {
       await context.sessions.ralphLoop.deleteSession(input.sessionId);
+    }),
+  renameSession: procedure
+    .input(renameLoopSessionSchema)
+    .handler(async ({ input, context }) => {
+      context.sessions.ralphLoop.renameSession(input.sessionId, input.title);
     }),
   subscribeToSessionTerminal: procedure
     .input(z.object({ sessionId: z.string() }))
@@ -412,6 +422,17 @@ export class RalphLoopSessionsManager {
 
     this.options.state.updateState((state) => {
       delete state[sessionId];
+    });
+  }
+
+  renameSession(sessionId: string, title: string) {
+    const nextTitle = title.trim();
+    if (!nextTitle) {
+      return;
+    }
+
+    this.updateSession(sessionId, (session) => {
+      session.title = nextTitle;
     });
   }
 

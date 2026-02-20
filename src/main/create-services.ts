@@ -1,5 +1,6 @@
 import { createDisposable } from "@shared/utils";
 import { ensureManagedClaudeStatePlugin } from "./claude-state-plugin";
+import { generateCodexSessionTitle } from "./generate-codex-session-title";
 import log from "./logger";
 import { PersistenceOrchestrator } from "./persistence-orchestrator";
 import {
@@ -10,6 +11,7 @@ import { readProjectSettingsForAll } from "./project-settings-file";
 import { SessionsServiceNew } from "./session-service";
 import { SessionStateFileManager } from "./session-state-file-manager";
 import { SessionTitleManager } from "./session-title-manager";
+import { CodexSessionsManager } from "./sessions/codex.session";
 import { LocalTerminalSessionsManager } from "./sessions/local-terminal.session";
 import { RalphLoopSessionsManager } from "./sessions/ralph-loop.session";
 import {
@@ -59,6 +61,9 @@ export async function createServices(options: CreateServicesOptions) {
     await initializeManagedPlugin(userDataPath);
 
   const titleManager = new SessionTitleManager();
+  const codexTitleManager = new SessionTitleManager({
+    generateTitle: generateCodexSessionTitle,
+  });
 
   const stateFileManager = new SessionStateFileManager(userDataPath);
 
@@ -102,6 +107,10 @@ export async function createServices(options: CreateServicesOptions) {
   const localTerminalSessionsManager = new LocalTerminalSessionsManager(
     sessionsState,
   );
+  const codexSessionsManager = new CodexSessionsManager({
+    state: sessionsState,
+    titleManager: codexTitleManager,
+  });
   const ralphLoopSessionsManager = new RalphLoopSessionsManager({
     pluginDir: managedPluginDir,
     state: sessionsState,
@@ -123,6 +132,12 @@ export async function createServices(options: CreateServicesOptions) {
 
   shutdownDisposable.addDisposable(async () => await sessionsService.dispose());
   shutdownDisposable.addDisposable(
+    async () => await localTerminalSessionsManager.dispose(),
+  );
+  shutdownDisposable.addDisposable(
+    async () => await codexSessionsManager.dispose(),
+  );
+  shutdownDisposable.addDisposable(
     async () => await ralphLoopSessionsManager.dispose(),
   );
   shutdownDisposable.addDisposable(() => stateService.dispose());
@@ -139,6 +154,7 @@ export async function createServices(options: CreateServicesOptions) {
     sessions: {
       state: sessionsState,
       localTerminal: localTerminalSessionsManager,
+      codex: codexSessionsManager,
       ralphLoop: ralphLoopSessionsManager,
     },
   };
