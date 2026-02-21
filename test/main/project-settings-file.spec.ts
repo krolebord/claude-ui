@@ -13,11 +13,17 @@ describe("project-settings-file", () => {
   let tempDir: string;
 
   beforeEach(async () => {
-    tempDir = await mkdir(path.join(tmpdir(), `project-settings-test-${Date.now()}`), {
-      recursive: true,
-    }).then(() => path.join(tmpdir(), `project-settings-test-${Date.now()}`));
+    tempDir = await mkdir(
+      path.join(tmpdir(), `project-settings-test-${Date.now()}`),
+      {
+        recursive: true,
+      },
+    ).then(() => path.join(tmpdir(), `project-settings-test-${Date.now()}`));
     // Use a fresh unique dir
-    tempDir = path.join(tmpdir(), `project-settings-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    tempDir = path.join(
+      tmpdir(),
+      `project-settings-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
     await mkdir(tempDir, { recursive: true });
   });
 
@@ -257,7 +263,11 @@ describe("project-settings-file", () => {
         "utf-8",
       );
 
-      const map = await readProjectSettingsForAll([projectA, projectB, projectC]);
+      const map = await readProjectSettingsForAll([
+        projectA,
+        projectB,
+        projectC,
+      ]);
 
       expect(map.size).toBe(2);
       expect(map.get(projectA)).toEqual({

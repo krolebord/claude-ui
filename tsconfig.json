@@ -26,7 +26,8 @@
     "src/preload",
     "src/shared",
     "src/renderer",
-    "src/electron-env.d.ts"
+    "src/electron-env.d.ts",
+    "test"
   ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

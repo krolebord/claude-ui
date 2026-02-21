@@ -1,4 +1,4 @@
-import { enablePatches, type Patch } from "immer";
+import { type Patch, enablePatches } from "immer";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 enablePatches();
@@ -88,7 +88,13 @@ describe("createSyncStateStore", () => {
       patch: [{ op: "add", path: ["items", 1], value: "draft" }],
     });
 
-    resolveSnapshot?.({
+    if (!resolveSnapshot) {
+      throw new Error("Expected snapshot resolver to be set");
+    }
+    const snapshotResolver = resolveSnapshot as (
+      value: FullSnapshot<{ items: string[] }>,
+    ) => void;
+    snapshotResolver({
       version: 1,
       state: { items: ["draft"] },
     });

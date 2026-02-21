@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ClaudeHookEvent } from "../../src/shared/claude-types";
+import type { SessionStateFileManager } from "../../src/main/session-state-file-manager";
 import {
   type RalphLoopSessionData,
   RalphLoopSessionsManager,
@@ -11,15 +11,19 @@ import {
   canResumeAutonomousLoop,
   evaluateStopHookOutcome,
   extractTranscriptPathFromStopHook,
-  hasReachedConsecutiveFailureLimit,
   hasCompleteMarkerInAssistantText,
+  hasReachedConsecutiveFailureLimit,
   readLastAssistantTextFromTranscript,
 } from "../../src/main/sessions/ralph-loop.session";
+import type { SessionServiceState } from "../../src/main/sessions/state";
+import type { ClaudeHookEvent } from "../../src/shared/claude-types";
 
 const tempDirs: string[] = [];
 
 afterEach(async () => {
-  await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  await Promise.all(
+    tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })),
+  );
 });
 
 async function writeTranscript(lines: string[]): Promise<string> {
@@ -95,12 +99,12 @@ describe("RalphLoopSessionsManager", () => {
       pluginDir: null,
       state: {
         state,
-        updateState: (updater) => updater(state),
-      },
+        updateState: (updater: (draft: typeof state) => void) => updater(state),
+      } as unknown as SessionServiceState,
       stateFileManager: {
         create: vi.fn(),
         cleanup: vi.fn(),
-      },
+      } as unknown as SessionStateFileManager,
     });
 
     manager.renameSession("session-1", "  New Loop Name  ");
@@ -115,12 +119,13 @@ describe("assistant transcript parsing", () => {
       JSON.stringify({
         type: "assistant",
         message: {
-          content: [
-            { type: "text", text: "older assistant output" },
-          ],
+          content: [{ type: "text", text: "older assistant output" }],
         },
       }),
-      JSON.stringify({ type: "user", message: { content: [{ type: "text", text: "next task" }] } }),
+      JSON.stringify({
+        type: "user",
+        message: { content: [{ type: "text", text: "next task" }] },
+      }),
       JSON.stringify({
         type: "assistant",
         message: {
@@ -185,8 +190,12 @@ describe("assistant transcript parsing", () => {
 describe("completion marker detection", () => {
   it("matches <COMPLETE/> at any position", () => {
     expect(hasCompleteMarkerInAssistantText("done\n<COMPLETE/>")).toBe(true);
-    expect(hasCompleteMarkerInAssistantText("prefix <complete/> suffix")).toBe(true);
-    expect(hasCompleteMarkerInAssistantText("prefix < COMPLETE /> suffix")).toBe(true);
+    expect(hasCompleteMarkerInAssistantText("prefix <complete/> suffix")).toBe(
+      true,
+    );
+    expect(
+      hasCompleteMarkerInAssistantText("prefix < COMPLETE /> suffix"),
+    ).toBe(true);
   });
 
   it("ignores non-matching text", () => {

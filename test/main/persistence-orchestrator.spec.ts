@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import z from "zod";
-import { defineServiceState } from "../../src/shared/service-state";
 import {
-  defineStatePersistence,
   PersistenceOrchestrator,
+  defineStatePersistence,
 } from "../../src/main/persistence-orchestrator";
+import { defineServiceState } from "../../src/shared/service-state";
 
 const storeMock = vi.hoisted(() => {
   const data = new Map<string, unknown>();

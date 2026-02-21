@@ -74,7 +74,7 @@ function buildUsageResponseJson(balance: number | string = 5.39) {
 describe("getCodexUsage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    delete process.env.CODEX_HOME;
+    process.env.CODEX_HOME = undefined;
     homedirMock.mockReturnValue("/home/tester");
     vi.stubGlobal("fetch", fetchMock);
   });

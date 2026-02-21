@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
-import { CodexSessionsManager } from "../../src/main/sessions/codex.session";
-import type { SessionServiceState } from "../../src/main/sessions/state";
 import type { SessionTitleManager } from "../../src/main/session-title-manager";
+import {
+  type CodexLocalTerminalSessionData,
+  CodexSessionsManager,
+} from "../../src/main/sessions/codex.session";
+import type { SessionServiceState } from "../../src/main/sessions/state";
 
 function createSessionsState() {
-  const state: Record<string, unknown> = {};
+  const state: Record<string, CodexLocalTerminalSessionData> = {};
   return {
     state,
     updateState: (updater: (draft: typeof state) => void) => {
@@ -37,6 +40,7 @@ describe("CodexSessionsManager title generation", () => {
 
     const sessionId = manager.createSession({
       cwd: "/tmp",
+      sessionName: undefined,
       permissionMode: "default",
       modelReasoningEffort: "high",
       initialPrompt: "  write release notes  ",
@@ -52,7 +56,9 @@ describe("CodexSessionsManager title generation", () => {
 
     const created = sessionsState.state[sessionId];
     expect(created?.title).toBe("Generated title");
-    expect(created?.startupConfig.initialPrompt).toBe("write release notes");
+    if (created?.type === "codex-local-terminal") {
+      expect(created.startupConfig.initialPrompt).toBe("write release notes");
+    }
   });
 
   it("does not trigger title generation for named sessions", () => {
@@ -74,6 +80,7 @@ describe("CodexSessionsManager title generation", () => {
 
     const sessionId = manager.createSession({
       cwd: "/tmp",
+      sessionName: undefined,
       permissionMode: "default",
       modelReasoningEffort: "high",
       initialPrompt: " /plan   draft implementation plan ",
@@ -92,6 +99,7 @@ describe("CodexSessionsManager title generation", () => {
 
     manager.createSession({
       cwd: "/tmp",
+      sessionName: undefined,
       permissionMode: "default",
       modelReasoningEffort: "high",
       initialPrompt: "/plan   ",
@@ -105,6 +113,7 @@ describe("CodexSessionsManager title generation", () => {
 
     const sessionId = manager.createSession({
       cwd: "/tmp",
+      sessionName: undefined,
       permissionMode: "default",
       modelReasoningEffort: "high",
       initialPrompt: "Summarize open tasks",
@@ -125,6 +134,7 @@ describe("CodexSessionsManager title generation", () => {
 
     const sessionId = manager.createSession({
       cwd: "/tmp",
+      sessionName: undefined,
       permissionMode: "default",
       modelReasoningEffort: "high",
       initialPrompt: "Summarize open tasks",

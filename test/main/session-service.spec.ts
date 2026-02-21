@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { PersistenceOrchestrator } from "../../src/main/persistence-orchestrator";
-import { SessionsServiceNew } from "../../src/main/session-service";
+import {
+  type ClaudeLocalTerminalSessionData,
+  SessionsServiceNew,
+} from "../../src/main/session-service";
 import type { SessionStateFileManager } from "../../src/main/session-state-file-manager";
 import type { SessionTitleManager } from "../../src/main/session-title-manager";
+import type { SessionServiceState } from "../../src/main/sessions/state";
 
 const terminalSessionSpies = vi.hoisted(() => {
   return {
@@ -11,9 +14,16 @@ const terminalSessionSpies = vi.hoisted(() => {
     write: vi.fn(),
     resize: vi.fn(),
     clear: vi.fn(),
+    status: "stopped" as
+      | "starting"
+      | "stopping"
+      | "running"
+      | "stopped"
+      | "error",
+    bufferedOutput: "",
     callbacks: [] as Array<{
       onStatusChange: (status: string) => void;
-      onData: (chunk: string) => void;
+      onData: (payload: { chunk: string; bufferedOutput: string }) => void;
       onExit: (payload: {
         exitCode: number | null;
         signal?: number;
@@ -27,35 +37,67 @@ const activityMonitorSpies = vi.hoisted(() => {
   return {
     startMonitoring: vi.fn(),
     stopMonitoring: vi.fn(),
+    state: "idle" as
+      | "idle"
+      | "awaiting_approval"
+      | "awaiting_user_response"
+      | "working",
     callbacks: [] as Array<{
       onStatusChange: (status: string) => void;
-      onHookEvent: (event: { hook_event_name: string; prompt?: string }) => void;
+      onHookEvent: (event: {
+        hook_event_name: string;
+        prompt?: string;
+      }) => void;
     }>,
   };
 });
 
 vi.mock("../../src/main/terminal-session", () => ({
   createTerminalSession: vi.fn().mockImplementation((callbacks) => {
-    terminalSessionSpies.callbacks.push(callbacks);
+    terminalSessionSpies.callbacks.push({
+      ...callbacks,
+      onStatusChange: (status: string) => {
+        terminalSessionSpies.status =
+          status as typeof terminalSessionSpies.status;
+        callbacks.onStatusChange(status);
+      },
+      onData: (payload: { chunk: string; bufferedOutput: string }) => {
+        terminalSessionSpies.bufferedOutput = payload.bufferedOutput;
+        callbacks.onData(payload);
+      },
+    });
     return terminalSessionSpies;
   }),
 }));
 
 vi.mock("../../src/main/claude-activity-monitor", () => ({
   ClaudeActivityMonitor: vi.fn().mockImplementation((callbacks) => {
-    activityMonitorSpies.callbacks.push(callbacks);
+    activityMonitorSpies.callbacks.push({
+      ...callbacks,
+      onStatusChange: (status: string) => {
+        activityMonitorSpies.state =
+          status as typeof activityMonitorSpies.state;
+        callbacks.onStatusChange(status);
+      },
+    });
 
     return {
       startMonitoring: activityMonitorSpies.startMonitoring,
       stopMonitoring: activityMonitorSpies.stopMonitoring,
+      getState: () => activityMonitorSpies.state,
     };
   }),
 }));
 
 function createService() {
-  const persistence = {
-    registerAndHydrate: vi.fn(),
-  };
+  const state: Record<string, ClaudeLocalTerminalSessionData> = {};
+  const sessionsState = {
+    state,
+    updateState: (updater: (draft: typeof state) => void) => {
+      updater(state);
+    },
+  } as unknown as SessionServiceState;
+
   const titleManager = {
     forget: vi.fn(),
     maybeGenerate: vi.fn(),
@@ -66,35 +108,54 @@ function createService() {
   };
 
   const service = new SessionsServiceNew({
-    persistence: persistence as unknown as PersistenceOrchestrator,
     pluginDir: null,
     pluginWarning: null,
     titleManager: titleManager as unknown as SessionTitleManager,
     stateFileManager: stateFileManager as unknown as SessionStateFileManager,
+    state: sessionsState,
   });
 
-  return { service, persistence, titleManager, stateFileManager };
+  return { service, state, titleManager, stateFileManager };
+}
+
+type StartNewSessionInput = Parameters<
+  SessionsServiceNew["startNewSession"]
+>[0];
+
+function makeStartInput(
+  overrides: Partial<StartNewSessionInput> = {},
+): StartNewSessionInput {
+  return {
+    cwd: "/tmp",
+    cols: 120,
+    rows: 30,
+    sessionName: undefined,
+    initialPrompt: undefined,
+    ...overrides,
+  };
 }
 
 describe("SessionsServiceNew", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    terminalSessionSpies.status = "stopped";
+    terminalSessionSpies.bufferedOutput = "";
+    activityMonitorSpies.state = "idle";
     activityMonitorSpies.callbacks = [];
     terminalSessionSpies.callbacks = [];
   });
 
   describe("startNewSession", () => {
     it("uses sessionName as title when provided", async () => {
-      const { service, stateFileManager } = createService();
+      const { service, state, stateFileManager } = createService();
 
-      const sessionId = await service.startNewSession({
-        cwd: "/tmp",
-        cols: 120,
-        rows: 30,
-        sessionName: "  Planning Session  ",
-      });
+      const sessionId = await service.startNewSession(
+        makeStartInput({
+          sessionName: "  Planning Session  ",
+        }),
+      );
 
-      const session = service.getSessionById(sessionId);
+      const session = state[sessionId];
 
       expect(session?.title).toBe("Planning Session");
       expect(stateFileManager.create).toHaveBeenCalledWith(sessionId);
@@ -102,16 +163,15 @@ describe("SessionsServiceNew", () => {
     });
 
     it("falls back to generated title when sessionName is blank", async () => {
-      const { service } = createService();
+      const { service, state } = createService();
 
-      const sessionId = await service.startNewSession({
-        cwd: "/tmp",
-        cols: 120,
-        rows: 30,
-        sessionName: "   ",
-      });
+      const sessionId = await service.startNewSession(
+        makeStartInput({
+          sessionName: "   ",
+        }),
+      );
 
-      const session = service.getSessionById(sessionId);
+      const session = state[sessionId];
 
       expect(session?.title).toMatch(/^Session [0-9a-f]{8}$/i);
     });
@@ -119,11 +179,7 @@ describe("SessionsServiceNew", () => {
     it("creates state file before spawn and passes it via environment", async () => {
       const { service, stateFileManager } = createService();
 
-      await service.startNewSession({
-        cwd: "/tmp",
-        cols: 120,
-        rows: 30,
-      });
+      await service.startNewSession(makeStartInput());
 
       expect(stateFileManager.create).toHaveBeenCalledTimes(1);
       expect(activityMonitorSpies.startMonitoring).toHaveBeenCalledWith(
@@ -145,34 +201,24 @@ describe("SessionsServiceNew", () => {
     });
 
     it("updates persisted status when terminal reports stopping", async () => {
-      const { service } = createService();
+      const { service, state } = createService();
 
-      const sessionId = await service.startNewSession({
-        cwd: "/tmp",
-        cols: 120,
-        rows: 30,
-      });
+      const sessionId = await service.startNewSession(makeStartInput());
 
       const callbacks = terminalSessionSpies.callbacks[0];
       callbacks?.onStatusChange("stopping");
 
-      expect(service.getSessionById(sessionId)?.terminal.status).toBe(
-        "stopping",
-      );
+      expect(state[sessionId]?.status).toBe("stopping");
     });
 
     it("triggers title generation from first prompt submit for unnamed sessions", async () => {
-      const { service, titleManager } = createService();
+      const { service, state, titleManager } = createService();
 
       vi.mocked(titleManager.maybeGenerate).mockImplementation((params) => {
         params.onTitleReady("Generated from prompt");
       });
 
-      const sessionId = await service.startNewSession({
-        cwd: "/tmp",
-        cols: 120,
-        rows: 30,
-      });
+      const sessionId = await service.startNewSession(makeStartInput());
 
       const callbacks = activityMonitorSpies.callbacks[0];
       callbacks?.onHookEvent({
@@ -187,20 +233,17 @@ describe("SessionsServiceNew", () => {
           prompt: "Draft release notes",
         }),
       );
-      expect(service.getSessionById(sessionId)?.title).toBe(
-        "Generated from prompt",
-      );
+      expect(state[sessionId]?.title).toBe("Generated from prompt");
     });
 
     it("does not trigger title generation for named sessions", async () => {
       const { service, titleManager } = createService();
 
-      await service.startNewSession({
-        cwd: "/tmp",
-        cols: 120,
-        rows: 30,
-        sessionName: "Planned Name",
-      });
+      await service.startNewSession(
+        makeStartInput({
+          sessionName: "Planned Name",
+        }),
+      );
 
       const callbacks = activityMonitorSpies.callbacks[0];
       callbacks?.onHookEvent({
@@ -212,7 +255,8 @@ describe("SessionsServiceNew", () => {
     });
 
     it("does not retain a live session when terminal exits during start", async () => {
-      const { service, stateFileManager, titleManager } = createService();
+      const { service, state, stateFileManager, titleManager } =
+        createService();
 
       terminalSessionSpies.start.mockImplementationOnce(() => {
         const callbacks = terminalSessionSpies.callbacks.at(-1);
@@ -222,11 +266,7 @@ describe("SessionsServiceNew", () => {
         });
       });
 
-      const sessionId = await service.startNewSession({
-        cwd: "/tmp",
-        cols: 120,
-        rows: 30,
-      });
+      const sessionId = await service.startNewSession(makeStartInput());
 
       await vi.waitFor(() => {
         expect(service.getLiveSession(sessionId)).toBeNull();
@@ -235,7 +275,7 @@ describe("SessionsServiceNew", () => {
         "/tmp/test-state.ndjson",
       );
       expect(titleManager.forget).toHaveBeenCalledWith(sessionId);
-      expect(service.getSessionById(sessionId)?.terminal.status).toBe("error");
+      expect(state[sessionId]?.status).toBe("error");
     });
   });
 
@@ -243,11 +283,7 @@ describe("SessionsServiceNew", () => {
     it("cleans up the created state file path", async () => {
       const { service, stateFileManager, titleManager } = createService();
 
-      const sessionId = await service.startNewSession({
-        cwd: "/tmp",
-        cols: 120,
-        rows: 30,
-      });
+      const sessionId = await service.startNewSession(makeStartInput());
 
       await service.stopLiveSession(sessionId);
 
@@ -265,16 +301,8 @@ describe("SessionsServiceNew", () => {
     it("stops and cleans up all live sessions", async () => {
       const { service, stateFileManager, titleManager } = createService();
 
-      const firstSessionId = await service.startNewSession({
-        cwd: "/tmp",
-        cols: 120,
-        rows: 30,
-      });
-      const secondSessionId = await service.startNewSession({
-        cwd: "/tmp",
-        cols: 120,
-        rows: 30,
-      });
+      const firstSessionId = await service.startNewSession(makeStartInput());
+      const secondSessionId = await service.startNewSession(makeStartInput());
 
       await service.dispose();
 
@@ -290,14 +318,13 @@ describe("SessionsServiceNew", () => {
 
   describe("forkSession", () => {
     it("creates and starts a forked session under the new session ID", async () => {
-      const { service, stateFileManager } = createService();
+      const { service, state, stateFileManager } = createService();
 
-      const sourceSessionId = await service.startNewSession({
-        cwd: "/tmp",
-        cols: 120,
-        rows: 30,
-        sessionName: "Source Session",
-      });
+      const sourceSessionId = await service.startNewSession(
+        makeStartInput({
+          sessionName: "Source Session",
+        }),
+      );
 
       const forkedSessionId = await service.forkSession({
         sessionId: sourceSessionId,
@@ -306,7 +333,7 @@ describe("SessionsServiceNew", () => {
       });
 
       expect(forkedSessionId).not.toBe(sourceSessionId);
-      expect(service.getSessionById(forkedSessionId)).toMatchObject({
+      expect(state[forkedSessionId]).toMatchObject({
         sessionId: forkedSessionId,
         title: "Source Session (fork)",
       });
