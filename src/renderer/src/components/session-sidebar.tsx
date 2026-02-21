@@ -34,7 +34,6 @@ import {
 } from "@renderer/services/terminal-session-selectors";
 import { useMutation } from "@tanstack/react-query";
 import {
-  Bot,
   ChevronDown,
   ChevronRight,
   CircleDot,
@@ -53,7 +52,6 @@ import {
   Repeat,
   Settings,
   ShieldAlert,
-  Sparkles,
   Square,
   SquareIcon,
   TerminalSquare,
@@ -67,6 +65,11 @@ import type { SessionStatus } from "src/main/sessions/common";
 import type { Session } from "src/main/sessions/state";
 import { useNewSessionDialogStore } from "./new-session-dialog";
 import { useProjectDefaultsDialogStore } from "./project-defaults-dialog";
+import {
+  ClaudeCodeIcon,
+  CodexIcon,
+  type SessionTypeIcon,
+} from "./session-type-icons";
 import { useSettingsStore } from "./settings-dialog";
 import { useAppState } from "./sync-state-provider";
 
@@ -124,11 +127,14 @@ const statusIndicatorMeta: Record<
   },
 };
 
-const sessionTypeIcon: Record<string, { icon: LucideIcon; label: string }> = {
-  "claude-local-terminal": { icon: Sparkles, label: "Claude" },
+const sessionTypeIcon: Record<
+  string,
+  { icon: SessionTypeIcon; label: string }
+> = {
+  "claude-local-terminal": { icon: ClaudeCodeIcon, label: "Claude Code" },
   "local-terminal": { icon: TerminalSquare, label: "Terminal" },
   "ralph-loop": { icon: Repeat, label: "Ralph Loop" },
-  "codex-local-terminal": { icon: Bot, label: "Codex" },
+  "codex-local-terminal": { icon: CodexIcon, label: "Codex" },
 };
 
 type RenamableSessionType = Session["type"];
