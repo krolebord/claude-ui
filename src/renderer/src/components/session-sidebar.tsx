@@ -657,7 +657,6 @@ function CodexLocalTerminalSessionSidebarItem({
   const setActiveSessionId = useActiveSessionStore((x) => x.setActiveSessionId);
 
   const session = useAppState((x) => x.sessions[sessionId]);
-  const sessions = useAppState((x) => x.sessions);
 
   const resumeSessionMutation = useMutation({
     mutationFn: async (sessionId: string) => {
@@ -685,20 +684,7 @@ function CodexLocalTerminalSessionSidebarItem({
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
-        <SessionSidebarItemTrigger
-          sessionId={sessionId}
-          onSessionSelect={(prevSessionId) => {
-            if (
-              prevSessionId &&
-              sessions[prevSessionId]?.type === "codex-local-terminal"
-            ) {
-              orpc.sessions.codex.markSeen.call({
-                sessionId: prevSessionId,
-              });
-            }
-            orpc.sessions.codex.markSeen.call({ sessionId });
-          }}
-        >
+        <SessionSidebarItemTrigger sessionId={sessionId}>
           {session.status === "stopped" ? (
             <SidebarIconButton
               icon={PlayIcon}

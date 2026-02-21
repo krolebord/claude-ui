@@ -8,6 +8,7 @@ import type { TerminalEvent } from "@shared/terminal-types";
 import { createDisposable } from "@shared/utils";
 import { z } from "zod";
 import { buildCodexArgs } from "../codex-cli";
+import { getCodexUsage } from "../codex-usage";
 import { withDebouncedRunner } from "../debounce-runner";
 import log from "../logger";
 import { procedure } from "../orpc";
@@ -24,7 +25,6 @@ import {
 import type { SessionServiceState } from "./state";
 
 const DEFAULT_CODEX_SESSION_TITLE = "Codex Session";
-const CODEX_OUTPUT_IDLE_MS = 100;
 
 export const codexLocalTerminalSessionSchema = commonSessionSchema.extend({
   type: z.literal("codex-local-terminal"),
@@ -125,11 +125,7 @@ export const codexSessionsRouter = {
     .handler(async ({ input, context }) => {
       context.sessions.codex.renameSession(input.sessionId, input.title);
     }),
-  markSeen: procedure
-    .input(z.object({ sessionId: z.string() }))
-    .handler(async ({ input, context }) => {
-      context.sessions.codex.markSeen(input.sessionId);
-    }),
+  getUsage: procedure.handler(getCodexUsage),
   subscribeToSessionTerminal: procedure
     .input(z.object({ sessionId: z.string() }))
     .handler(async function* ({ input, context, signal }) {
@@ -309,15 +305,6 @@ export class CodexSessionsManager {
       });
     }, 500);
     disposable.addDisposable(() => syncBufferedOutput.dispose());
-    let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const clearInactivityTimer = () => {
-      if (inactivityTimer) {
-        clearTimeout(inactivityTimer);
-        inactivityTimer = null;
-      }
-    };
-    disposable.addDisposable(clearInactivityTimer);
 
     const setSessionStatus = (nextStatus: SessionStatus) => {
       state.updateState((state) => {
@@ -327,19 +314,6 @@ export class CodexSessionsManager {
         }
         target.status = nextStatus;
       });
-    };
-
-    const scheduleAwaitingUserResponse = () => {
-      clearInactivityTimer();
-      inactivityTimer = setTimeout(() => {
-        state.updateState((state) => {
-          const target = state[sessionId];
-          if (!target || target.status !== "running") {
-            return;
-          }
-          target.status = "awaiting_user_response";
-        });
-      }, CODEX_OUTPUT_IDLE_MS);
     };
 
     // Determine if we need plan mode (deferred prompt)
@@ -366,35 +340,10 @@ export class CodexSessionsManager {
         });
 
         syncBufferedOutput.schedule();
-        state.updateState((state) => {
-          const target = state[sessionId];
-          if (
-            !target ||
-            (target.status !== "idle" &&
-              target.status !== "awaiting_user_response")
-          ) {
-            return;
-          }
-          target.status = "running";
-        });
-        scheduleAwaitingUserResponse();
-
-        if (!deferredPrompt) {
-          return;
-        }
       },
       onStatusChange: (status) => {
-        if (
-          status === "starting" ||
-          status === "stopping" ||
-          status === "error"
-        ) {
-          setSessionStatus(status);
-          clearInactivityTimer();
-        }
+        setSessionStatus(status === "running" ? "idle" : status);
         if (status === "stopped") {
-          setSessionStatus(status);
-          clearInactivityTimer();
           syncBufferedOutput.flush();
         }
 
@@ -415,7 +364,6 @@ export class CodexSessionsManager {
       },
       onExit: (payload) => {
         void this.stopLiveSession(sessionId);
-        clearInactivityTimer();
         state.updateState((state) => {
           state[sessionId].status = payload.errorMessage ? "error" : "stopped";
           state[sessionId].errorMessage = payload.errorMessage;
@@ -482,18 +430,6 @@ export class CodexSessionsManager {
     });
 
     this.titleManager.forget(sessionId);
-  }
-
-  markSeen(sessionId: string) {
-    this.sessionsState.updateState((state) => {
-      const session = state[sessionId];
-      if (!session || session.type !== "codex-local-terminal") {
-        return;
-      }
-      if (session.status === "awaiting_user_response") {
-        session.status = "idle";
-      }
-    });
   }
 
   subscribeToTerminalEvents(sessionId: string, signal?: AbortSignal) {

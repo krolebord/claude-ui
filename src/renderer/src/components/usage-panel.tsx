@@ -1,8 +1,10 @@
+import { useActiveSessionId } from "@renderer/hooks/use-active-session-id";
 import { cn } from "@renderer/lib/utils";
 import { orpc } from "@renderer/orpc-client";
 import { useQuery } from "@tanstack/react-query";
 import { BarChart3, LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
+import { useAppState } from "./sync-state-provider";
 
 type UsageBucketKey = "five_hour" | "seven_day" | "seven_day_sonnet";
 
@@ -11,6 +13,39 @@ const BUCKET_LABELS: { key: UsageBucketKey; label: string }[] = [
   { key: "seven_day", label: "Weekly" },
   { key: "seven_day_sonnet", label: "Sonnet" },
 ];
+
+type UsageSource = "claude" | "ralphLoop" | "codex";
+
+type ClaudeUsageData = {
+  five_hour: { utilization: number; resets_at: string | null } | null;
+  seven_day: { utilization: number; resets_at: string | null } | null;
+  seven_day_sonnet: { utilization: number; resets_at: string | null } | null;
+  extra_usage: {
+    is_enabled: boolean;
+    monthly_limit: number;
+    used_credits: number;
+    utilization: number;
+  } | null;
+};
+
+type CodexUsageData = {
+  planType?: string;
+  primaryWindow: {
+    utilization: number;
+    resetsAt: string | null;
+    windowSeconds: number;
+  };
+  secondaryWindow: {
+    utilization: number;
+    resetsAt: string | null;
+    windowSeconds: number;
+  };
+  credits?: {
+    hasCredits: boolean;
+    unlimited: boolean;
+    balance: number;
+  };
+};
 
 function getBarColor(pct: number): string {
   return pct >= 100 ? "bg-[#DE7356]" : "bg-zinc-500";
@@ -39,22 +74,173 @@ function formatResetsAt(resetsAt: string | null): string | null {
 }
 
 export function UsagePanel() {
-  const query = useQuery(
-    orpc.getUsage.queryOptions({
+  const activeSessionId = useActiveSessionId();
+  const activeSession = useAppState((x) =>
+    activeSessionId ? (x.sessions[activeSessionId] ?? null) : null,
+  );
+
+  const usageSource: UsageSource | null =
+    activeSession?.type === "claude-local-terminal"
+      ? "claude"
+      : activeSession?.type === "ralph-loop"
+        ? "ralphLoop"
+        : activeSession?.type === "codex-local-terminal"
+          ? "codex"
+          : null;
+
+  const claudeQuery = useQuery(
+    orpc.sessions.localClaude.getUsage.queryOptions({
       retry: false,
       refetchInterval: 60_000,
+      enabled: usageSource === "claude",
     }),
   );
 
+  const ralphLoopQuery = useQuery(
+    orpc.sessions.ralphLoop.getUsage.queryOptions({
+      retry: false,
+      refetchInterval: 60_000,
+      enabled: usageSource === "ralphLoop",
+    }),
+  );
+
+  const codexQuery = useQuery(
+    orpc.sessions.codex.getUsage.queryOptions({
+      retry: false,
+      refetchInterval: 60_000,
+      enabled: usageSource === "codex",
+    }),
+  );
+
+  if (!usageSource) {
+    return (
+      <div className="border-t border-border/70 p-2">
+        <div className="rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-2 text-center text-xs text-zinc-500">
+          Usage is available for Claude, Ralph Loop, and Codex sessions.
+        </div>
+      </div>
+    );
+  }
+
+  if (usageSource === "codex") {
+    const handleRefetch = async () => {
+      const result = await codexQuery.refetch();
+      if (result.error) {
+        toast.error(result.error.message);
+      }
+    };
+
+    if (codexQuery.data?.ok && codexQuery.data.usage) {
+      const usage = codexQuery.data.usage as CodexUsageData;
+      const primaryPct = Math.round(usage.primaryWindow.utilization);
+      const secondaryPct = Math.round(usage.secondaryWindow.utilization);
+      const primaryResetsAt = formatResetsAt(usage.primaryWindow.resetsAt);
+      const secondaryResetsAt = formatResetsAt(usage.secondaryWindow.resetsAt);
+      return (
+        <div className="border-t border-border/70 p-2">
+          <div className="space-y-1.5">
+            <div className="space-y-0.5">
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="text-zinc-400">
+                  5 hour
+                  {primaryResetsAt ? (
+                    <span className="text-zinc-500">{` (${primaryResetsAt})`}</span>
+                  ) : null}
+                </span>
+                <span className={cn("tabular-nums", getTextColor(primaryPct))}>
+                  {primaryPct}%
+                </span>
+              </div>
+              <div className="h-1 rounded-full bg-white/10">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all",
+                    getBarColor(primaryPct),
+                  )}
+                  style={{ width: `${Math.min(primaryPct, 100)}%` }}
+                />
+              </div>
+            </div>
+            <div className="space-y-0.5">
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="text-zinc-400">
+                  Weekly
+                  {secondaryResetsAt ? (
+                    <span className="text-zinc-500">{` (${secondaryResetsAt})`}</span>
+                  ) : null}
+                </span>
+                <span
+                  className={cn("tabular-nums", getTextColor(secondaryPct))}
+                >
+                  {secondaryPct}%
+                </span>
+              </div>
+              <div className="h-1 rounded-full bg-white/10">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all",
+                    getBarColor(secondaryPct),
+                  )}
+                  style={{ width: `${Math.min(secondaryPct, 100)}%` }}
+                />
+              </div>
+            </div>
+            {usage.credits?.hasCredits ? (
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="text-zinc-400">Credits</span>
+                <span className="tabular-nums text-zinc-400">
+                  {usage.credits.unlimited
+                    ? "Unlimited"
+                    : `$${usage.credits.balance.toFixed(2)}`}
+                </span>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      );
+    }
+
+    if (codexQuery.isPending) {
+      return null;
+    }
+
+    if (codexQuery.isFetching) {
+      return (
+        <div className="border-t border-border/70 p-2">
+          <div className="flex items-center justify-center gap-1.5 py-1.5 text-xs text-zinc-400">
+            <LoaderCircle className="size-3.5 animate-spin" />
+            Loading usage...
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="border-t border-border/70 p-2">
+        <button
+          type="button"
+          onClick={() => void handleRefetch()}
+          className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-2.5 py-1.5 text-xs font-medium text-zinc-100 transition hover:bg-white/10"
+        >
+          <BarChart3 className="size-3.5" />
+          Show Usage
+        </button>
+      </div>
+    );
+  }
+
+  const activeClaudeQuery =
+    usageSource === "claude" ? claudeQuery : ralphLoopQuery;
+
   const handleRefetch = async () => {
-    const result = await query.refetch();
+    const result = await activeClaudeQuery.refetch();
     if (result.error) {
       toast.error(result.error.message);
     }
   };
 
-  if (query.data?.ok && query.data.usage) {
-    const usage = query.data.usage;
+  if (activeClaudeQuery.data?.ok && activeClaudeQuery.data.usage) {
+    const usage = activeClaudeQuery.data.usage as ClaudeUsageData;
     return (
       <div className="border-t border-border/70 p-2">
         <div className="space-y-1.5">
@@ -119,11 +305,11 @@ export function UsagePanel() {
     );
   }
 
-  if (query.isPending) {
+  if (activeClaudeQuery.isPending) {
     return null;
   }
 
-  if (query.isFetching) {
+  if (activeClaudeQuery.isFetching) {
     return (
       <div className="border-t border-border/70 p-2">
         <div className="flex items-center justify-center gap-1.5 py-1.5 text-xs text-zinc-400">

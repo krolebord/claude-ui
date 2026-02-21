@@ -15,6 +15,7 @@ import {
   type ClaudeStartOptions,
   buildClaudeArgs,
 } from "./claude-cli";
+import { getUsage as getClaudeUsage } from "./claude-usage";
 import log from "./logger";
 import { procedure } from "./orpc";
 
@@ -143,6 +144,7 @@ export const claudeSessionsRouter = {
     .handler(async ({ input, context }) => {
       context.sessionsService.renameSession(input.sessionId, input.title);
     }),
+  getUsage: procedure.handler(getClaudeUsage),
   markSeen: procedure
     .input(z.object({ sessionId: z.string() }))
     .handler(async ({ input, context }) => {

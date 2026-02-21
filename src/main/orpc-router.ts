@@ -1,6 +1,4 @@
-import { getUsage } from "./claude-usage";
 import { fsRouter } from "./fs.router";
-import { procedure } from "./orpc";
 import { projectsRouter } from "./project-service";
 import { claudeSessionsRouter } from "./session-service";
 import { codexSessionsRouter } from "./sessions/codex.session";
@@ -9,7 +7,6 @@ import { ralphLoopRouter } from "./sessions/ralph-loop.session";
 import { stateSyncRouter } from "./state-orchestrator";
 
 export const orpcRouter = {
-  getUsage: procedure.handler(getUsage),
   projects: projectsRouter,
   fs: fsRouter,
   stateSync: stateSyncRouter,

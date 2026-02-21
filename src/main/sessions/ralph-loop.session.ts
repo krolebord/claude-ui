@@ -10,6 +10,7 @@ import {
 } from "../../shared/claude-types";
 import type { ClaudeActivityMonitor } from "../claude-activity-monitor";
 import { type ClaudeStartOptions, buildClaudeArgs } from "../claude-cli";
+import { getUsage as getClaudeUsage } from "../claude-usage";
 import log from "../logger";
 import { procedure } from "../orpc";
 import type { SessionStateFileManager } from "../session-state-file-manager";
@@ -184,6 +185,7 @@ export const ralphLoopRouter = {
     .handler(async ({ input, context }) => {
       context.sessions.ralphLoop.renameSession(input.sessionId, input.title);
     }),
+  getUsage: procedure.handler(getClaudeUsage),
   subscribeToSessionTerminal: procedure
     .input(z.object({ sessionId: z.string() }))
     .handler(async function* ({ input, context, signal }) {

@@ -179,7 +179,7 @@ describe("CodexSessionsManager", () => {
     await manager.stopLiveSession(sessionId);
   });
 
-  it("transitions idle -> running on output and then to awaiting_user_response after silence", async () => {
+  it("reflects terminal status transitions directly", async () => {
     const { manager, sessionId, state } = createManager({
       initialPrompt: undefined,
     });
@@ -192,112 +192,47 @@ describe("CodexSessionsManager", () => {
       initialPrompt: undefined,
     });
     const callbacks = terminalSessionSpies.callbacks[0];
-
     const session = state[sessionId];
-    session.status = "idle";
 
+    callbacks?.onStatusChange("starting");
+    expect(session.status).toBe("starting");
+
+    callbacks?.onStatusChange("running");
+    expect(session.status).toBe("running");
+
+    callbacks?.onStatusChange("stopping");
+    expect(session.status).toBe("stopping");
+
+    callbacks?.onStatusChange("error");
+    expect(session.status).toBe("error");
+
+    callbacks?.onStatusChange("stopped");
+    expect(session.status).toBe("stopped");
+  });
+
+  it("does not change status on output events", async () => {
+    const { manager, sessionId, state } = createManager({
+      initialPrompt: undefined,
+    });
+
+    manager.startLiveSession({
+      sessionId,
+      cwd: "/tmp",
+      modelReasoningEffort: "high",
+      permissionMode: "default",
+      initialPrompt: undefined,
+    });
+    const callbacks = terminalSessionSpies.callbacks[0];
+    const session = state[sessionId];
+
+    session.status = "idle";
     callbacks?.onData({ chunk: "working...", bufferedOutput: "working..." });
-    expect(session.status).toBe("running");
-
-    await vi.advanceTimersByTimeAsync(99);
-    expect(session.status).toBe("running");
-
-    await vi.advanceTimersByTimeAsync(1);
-    expect(session.status).toBe("awaiting_user_response");
-  });
-
-  it("transitions awaiting_user_response -> running on new output", async () => {
-    const { manager, sessionId, state } = createManager({
-      initialPrompt: undefined,
-    });
-
-    manager.startLiveSession({
-      sessionId,
-      cwd: "/tmp",
-      modelReasoningEffort: "high",
-      permissionMode: "default",
-      initialPrompt: undefined,
-    });
-    const callbacks = terminalSessionSpies.callbacks[0];
-    const session = state[sessionId];
-    session.status = "awaiting_user_response";
-
-    callbacks?.onData({ chunk: "more output", bufferedOutput: "more output" });
-    expect(session.status).toBe("running");
-  });
-
-  it("resets inactivity timer on each output chunk", async () => {
-    const { manager, sessionId, state } = createManager({
-      initialPrompt: undefined,
-    });
-
-    manager.startLiveSession({
-      sessionId,
-      cwd: "/tmp",
-      modelReasoningEffort: "high",
-      permissionMode: "default",
-      initialPrompt: undefined,
-    });
-    const callbacks = terminalSessionSpies.callbacks[0];
-    const session = state[sessionId];
-    session.status = "idle";
-
-    callbacks?.onData({ chunk: "a", bufferedOutput: "a" });
-    await vi.advanceTimersByTimeAsync(80);
-    callbacks?.onData({ chunk: "b", bufferedOutput: "ab" });
-    await vi.advanceTimersByTimeAsync(80);
-
-    expect(session.status).toBe("running");
-
-    await vi.advanceTimersByTimeAsync(20);
-    expect(session.status).toBe("awaiting_user_response");
-  });
-
-  it("clears pending inactivity transition when live session stops", async () => {
-    const { manager, sessionId, state } = createManager({
-      initialPrompt: undefined,
-    });
-
-    manager.startLiveSession({
-      sessionId,
-      cwd: "/tmp",
-      modelReasoningEffort: "high",
-      permissionMode: "default",
-      initialPrompt: undefined,
-    });
-    const callbacks = terminalSessionSpies.callbacks[0];
-    const session = state[sessionId];
-    session.status = "idle";
-    callbacks?.onData({ chunk: "running", bufferedOutput: "running" });
-    expect(session.status).toBe("running");
-
-    await manager.stopLiveSession(sessionId);
-    await vi.advanceTimersByTimeAsync(100);
-
-    expect(session.status).toBe("running");
-  });
-
-  it("markSeen sets awaiting_user_response back to idle", () => {
-    const { manager, sessionId, state } = createManager({
-      initialPrompt: undefined,
-    });
-    const session = state[sessionId];
-    session.status = "awaiting_user_response";
-
-    manager.markSeen(sessionId);
-
     expect(session.status).toBe("idle");
-  });
 
-  it("markSeen does not change non-awaiting statuses", () => {
-    const { manager, sessionId, state } = createManager({
-      initialPrompt: undefined,
-    });
-    const session = state[sessionId];
-    session.status = "running";
+    callbacks?.onStatusChange("running");
+    expect(session.status).toBe("running");
 
-    manager.markSeen(sessionId);
-
+    callbacks?.onData({ chunk: "still working...", bufferedOutput: "..." });
     expect(session.status).toBe("running");
   });
 
