@@ -38,17 +38,29 @@ describe("project-settings-file", () => {
       await writeFile(
         settingsPath(),
         `{
-  // Default model for this project
-  "defaultModel": "sonnet",
-  "defaultEffort": "high"
+  // Default settings for this project
+  "localClaude": {
+    "defaultModel": "sonnet",
+    "defaultEffort": "high"
+  },
+  "localCodex": {
+    "permissionMode": "full-auto",
+    "modelReasoningEffort": "xhigh"
+  }
 }`,
         "utf-8",
       );
 
       const result = await readProjectSettingsFile(tempDir);
       expect(result).toEqual({
-        defaultModel: "sonnet",
-        defaultEffort: "high",
+        localClaude: {
+          defaultModel: "sonnet",
+          defaultEffort: "high",
+        },
+        localCodex: {
+          permissionMode: "full-auto",
+          modelReasoningEffort: "xhigh",
+        },
       });
     });
 
@@ -65,16 +77,28 @@ describe("project-settings-file", () => {
       await writeFile(
         settingsPath(),
         `{
-  "defaultModel": "unknown-model-xyz",
-  "defaultEffort": "high"
+  "localClaude": {
+    "defaultModel": "unknown-model-xyz",
+    "defaultEffort": "high"
+  },
+  "localCodex": {
+    "permissionMode": "not-a-mode",
+    "modelReasoningEffort": "low"
+  }
 }`,
         "utf-8",
       );
 
       const result = await readProjectSettingsFile(tempDir);
       expect(result).toEqual({
-        defaultModel: undefined,
-        defaultEffort: "high",
+        localClaude: {
+          defaultModel: undefined,
+          defaultEffort: "high",
+        },
+        localCodex: {
+          permissionMode: undefined,
+          modelReasoningEffort: "low",
+        },
       });
     });
 
@@ -82,41 +106,72 @@ describe("project-settings-file", () => {
       await mkdir(path.join(tempDir, ".claude-ui"), { recursive: true });
       await writeFile(
         settingsPath(),
-        `{ "defaultModel": "opus", "unknownKey": true }`,
+        `{
+  "localClaude": { "defaultModel": "opus", "unknownKey": true },
+  "unknownTopLevel": true
+}`,
         "utf-8",
       );
 
       const result = await readProjectSettingsFile(tempDir);
-      expect(result).toEqual({ defaultModel: "opus" });
-      expect(result).not.toHaveProperty("unknownKey");
+      expect(result).toEqual({
+        localClaude: { defaultModel: "opus" },
+      });
+      expect(result).not.toHaveProperty("unknownTopLevel");
+    });
+
+    it("ignores legacy flat settings schema", async () => {
+      await mkdir(path.join(tempDir, ".claude-ui"), { recursive: true });
+      await writeFile(
+        settingsPath(),
+        `{ "defaultModel": "opus", "defaultEffort": "high" }`,
+        "utf-8",
+      );
+
+      const result = await readProjectSettingsFile(tempDir);
+      expect(result).toEqual({});
     });
   });
 
   describe("writeProjectSettingsFile", () => {
     it("creates .claude-ui directory and file", async () => {
       await writeProjectSettingsFile(tempDir, {
-        defaultModel: "sonnet",
-        defaultEffort: "high",
+        localClaude: {
+          defaultModel: "sonnet",
+          defaultEffort: "high",
+        },
+        localCodex: {
+          permissionMode: "yolo",
+          modelReasoningEffort: "high",
+        },
       });
 
       expect(existsSync(settingsPath())).toBe(true);
       const content = readFileSync(settingsPath(), "utf-8");
+      expect(content).toContain('"localClaude"');
       expect(content).toContain('"defaultModel": "sonnet"');
       expect(content).toContain('"defaultEffort": "high"');
+      expect(content).toContain('"localCodex"');
+      expect(content).toContain('"permissionMode": "yolo"');
+      expect(content).toContain('"modelReasoningEffort": "high"');
     });
 
     it("preserves existing comments on re-write", async () => {
       await mkdir(path.join(tempDir, ".claude-ui"), { recursive: true });
       const original = `{
   // This is a project comment
-  "defaultModel": "sonnet",
-  "defaultEffort": "low"
+  "localClaude": {
+    "defaultModel": "sonnet",
+    "defaultEffort": "low"
+  }
 }`;
       await writeFile(settingsPath(), original, "utf-8");
 
       await writeProjectSettingsFile(tempDir, {
-        defaultModel: "opus",
-        defaultEffort: "high",
+        localClaude: {
+          defaultModel: "opus",
+          defaultEffort: "high",
+        },
       });
 
       const content = readFileSync(settingsPath(), "utf-8");
@@ -125,20 +180,57 @@ describe("project-settings-file", () => {
       expect(content).toContain('"defaultEffort": "high"');
     });
 
-    it("removes keys set to undefined", async () => {
+    it("removes keys set to undefined and prunes empty groups", async () => {
       await writeProjectSettingsFile(tempDir, {
-        defaultModel: "sonnet",
-        defaultEffort: "high",
+        localClaude: {
+          defaultModel: "sonnet",
+          defaultEffort: "high",
+        },
+        localCodex: {
+          permissionMode: "default",
+          modelReasoningEffort: "high",
+        },
       });
 
       await writeProjectSettingsFile(tempDir, {
-        defaultModel: undefined,
-        defaultEffort: "high",
+        localClaude: undefined,
+        localCodex: {
+          permissionMode: "default",
+          modelReasoningEffort: "high",
+        },
       });
 
       const content = readFileSync(settingsPath(), "utf-8");
       expect(content).not.toContain("defaultModel");
-      expect(content).toContain('"defaultEffort": "high"');
+      expect(content).not.toContain("localClaude");
+      expect(content).toContain('"localCodex"');
+    });
+
+    it("removes legacy flat keys on write", async () => {
+      await mkdir(path.join(tempDir, ".claude-ui"), { recursive: true });
+      await writeFile(
+        settingsPath(),
+        `{
+  "defaultModel": "opus",
+  "defaultEffort": "high",
+  "localCodex": {
+    "permissionMode": "default"
+  }
+}`,
+        "utf-8",
+      );
+
+      await writeProjectSettingsFile(tempDir, {
+        localClaude: {
+          defaultModel: "sonnet",
+        },
+      });
+
+      const content = readFileSync(settingsPath(), "utf-8");
+      expect(content).not.toContain('"defaultModel": "opus"');
+      expect(content).not.toContain('"defaultEffort": "high"');
+      expect(content).toContain('"localClaude"');
+      expect(content).toContain('"defaultModel": "sonnet"');
     });
   });
 
@@ -151,7 +243,7 @@ describe("project-settings-file", () => {
       await mkdir(path.join(projectA, ".claude-ui"), { recursive: true });
       await writeFile(
         path.join(projectA, ".claude-ui", "settings.jsonc"),
-        '{ "defaultModel": "opus" }',
+        '{ "localClaude": { "defaultModel": "opus" } }',
         "utf-8",
       );
 
@@ -161,15 +253,19 @@ describe("project-settings-file", () => {
       await mkdir(path.join(projectC, ".claude-ui"), { recursive: true });
       await writeFile(
         path.join(projectC, ".claude-ui", "settings.jsonc"),
-        '{ "defaultEffort": "low" }',
+        '{ "localCodex": { "permissionMode": "yolo" } }',
         "utf-8",
       );
 
       const map = await readProjectSettingsForAll([projectA, projectB, projectC]);
 
       expect(map.size).toBe(2);
-      expect(map.get(projectA)).toEqual({ defaultModel: "opus" });
-      expect(map.get(projectC)).toEqual({ defaultEffort: "low" });
+      expect(map.get(projectA)).toEqual({
+        localClaude: { defaultModel: "opus" },
+      });
+      expect(map.get(projectC)).toEqual({
+        localCodex: { permissionMode: "yolo" },
+      });
       expect(map.has(projectB)).toBe(false);
     });
   });

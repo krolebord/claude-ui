@@ -238,22 +238,22 @@ function LocalClaudeSessionForm() {
   const [initialPrompt, setInitialPrompt] = useState("");
   const [sessionName, setSessionName] = useState("");
   const [model, setModel] = useState<ClaudeModel>(
-    project?.defaultModel ?? "opus",
+    project?.localClaude?.defaultModel ?? "opus",
   );
   const [effort, setEffort] = useState<ClaudeEffort | undefined>(
-    project?.defaultEffort,
+    project?.localClaude?.defaultEffort,
   );
   const [permissionMode, setPermissionMode] = useState<ClaudePermissionMode>(
-    project?.defaultPermissionMode ?? "default",
+    project?.localClaude?.defaultPermissionMode ?? "default",
   );
   const [haikuModelOverride, setHaikuModelOverride] = useState<
     ClaudeModel | undefined
-  >(project?.defaultHaikuModelOverride);
+  >(project?.localClaude?.defaultHaikuModelOverride);
   const [subagentModelOverride, setSubagentModelOverride] = useState<
     ClaudeModel | undefined
-  >(project?.defaultSubagentModelOverride);
+  >(project?.localClaude?.defaultSubagentModelOverride);
   const [systemPrompt, setSystemPrompt] = useState(
-    project?.defaultSystemPrompt ?? "",
+    project?.localClaude?.defaultSystemPrompt ?? "",
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -348,6 +348,57 @@ function LocalClaudeSessionForm() {
         }}
       />
 
+      <div className="flex items-end gap-3">
+        <div className="min-w-0 flex-1 space-y-2">
+          <Label>Model</Label>
+          <Select
+            value={model}
+            onValueChange={(value) => {
+              setModel(value as ClaudeModel);
+            }}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {MODEL_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="w-fit shrink-0 space-y-2">
+          <Label className="whitespace-nowrap">Effort</Label>
+          <Select
+            value={effort ?? "no"}
+            onValueChange={(value) => {
+              setEffort(value === "no" ? undefined : (value as ClaudeEffort));
+            }}
+          >
+            <SelectTrigger className="w-auto min-w-24 whitespace-nowrap">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="no" className="whitespace-nowrap">
+                Default
+              </SelectItem>
+              {CLAUDE_EFFORT_OPTIONS.map((option) => (
+                <SelectItem
+                  key={option.value}
+                  value={option.value}
+                  className="whitespace-nowrap"
+                >
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
       <Collapsible>
         <CollapsibleTrigger asChild>
           <Button
@@ -371,59 +422,6 @@ function LocalClaudeSessionForm() {
                 setSessionName(event.target.value);
               }}
             />
-          </div>
-
-          <div className="flex items-end gap-3">
-            <div className="min-w-0 flex-1 space-y-2">
-              <Label>Model</Label>
-              <Select
-                value={model}
-                onValueChange={(value) => {
-                  setModel(value as ClaudeModel);
-                }}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {MODEL_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="w-fit shrink-0 space-y-2">
-              <Label className="whitespace-nowrap">Effort</Label>
-              <Select
-                value={effort ?? "no"}
-                onValueChange={(value) => {
-                  setEffort(
-                    value === "no" ? undefined : (value as ClaudeEffort),
-                  );
-                }}
-              >
-                <SelectTrigger className="w-auto min-w-24 whitespace-nowrap">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="no" className="whitespace-nowrap">
-                    Default
-                  </SelectItem>
-                  {CLAUDE_EFFORT_OPTIONS.map((option) => (
-                    <SelectItem
-                      key={option.value}
-                      value={option.value}
-                      className="whitespace-nowrap"
-                    >
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
           </div>
 
           <div className="space-y-2">
@@ -534,15 +532,15 @@ function RalphLoopSessionForm() {
   );
   const [sessionName, setSessionName] = useState("");
   const [model, setModel] = useState<ClaudeModel>(
-    project?.defaultModel ?? "opus",
+    project?.localClaude?.defaultModel ?? "opus",
   );
   const [effort, setEffort] = useState<ClaudeEffort | undefined>(
-    project?.defaultEffort,
+    project?.localClaude?.defaultEffort,
   );
   const [permissionMode, setPermissionMode] =
     useState<ClaudePermissionMode>("yolo");
   const [systemPrompt, setSystemPrompt] = useState(
-    project?.defaultSystemPrompt ?? "",
+    project?.localClaude?.defaultSystemPrompt ?? "",
   );
   const [maxIterations, setMaxIterations] = useState("20");
   const [maxConsecutiveFailures, setMaxConsecutiveFailures] = useState("3");
@@ -818,12 +816,17 @@ function CodexSessionForm() {
 
   const [initialPrompt, setInitialPrompt] = useState("");
   const [sessionName, setSessionName] = useState("");
-  const [model, setModel] = useState("");
+  const [model, setModel] = useState(project?.localCodex?.model ?? "");
   const [modelReasoningEffort, setModelReasoningEffort] =
-    useState<CodexModelReasoningEffort>("high");
-  const [permissionMode, setPermissionMode] =
-    useState<CodexPermissionMode>("default");
-  const [configOverrides, setConfigOverrides] = useState("");
+    useState<CodexModelReasoningEffort>(
+      project?.localCodex?.modelReasoningEffort ?? "high",
+    );
+  const [permissionMode, setPermissionMode] = useState<CodexPermissionMode>(
+    project?.localCodex?.permissionMode ?? "default",
+  );
+  const [configOverrides, setConfigOverrides] = useState(
+    project?.localCodex?.configOverrides ?? "",
+  );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleError = (error: unknown) => {
@@ -913,6 +916,45 @@ function CodexSessionForm() {
         onPermissionModeChange={setPermissionMode}
       />
 
+      <div className="flex items-end gap-3">
+        <div className="min-w-0 flex-1 space-y-2">
+          <Label htmlFor="new-codex-model">Model (optional)</Label>
+          <Input
+            id="new-codex-model"
+            placeholder="gpt-5.3-codex"
+            value={model}
+            onChange={(event) => {
+              setModel(event.target.value);
+            }}
+          />
+        </div>
+
+        <div className="w-fit shrink-0 space-y-2">
+          <Label className="whitespace-nowrap">Model reasoning effort</Label>
+          <Select
+            value={modelReasoningEffort}
+            onValueChange={(value) => {
+              setModelReasoningEffort(value as CodexModelReasoningEffort);
+            }}
+          >
+            <SelectTrigger className="w-full whitespace-nowrap">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CODEX_MODEL_REASONING_EFFORT_OPTIONS.map((option) => (
+                <SelectItem
+                  key={option.value}
+                  value={option.value}
+                  className="whitespace-nowrap"
+                >
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
       <Collapsible>
         <CollapsibleTrigger asChild>
           <Button
@@ -938,47 +980,6 @@ function CodexSessionForm() {
                 setSessionName(event.target.value);
               }}
             />
-          </div>
-
-          <div className="flex items-end gap-3">
-            <div className="min-w-0 flex-1 space-y-2">
-              <Label htmlFor="new-codex-model">Model (optional)</Label>
-              <Input
-                id="new-codex-model"
-                placeholder="gpt-5.3-codex"
-                value={model}
-                onChange={(event) => {
-                  setModel(event.target.value);
-                }}
-              />
-            </div>
-
-            <div className="w-fit shrink-0 space-y-2">
-              <Label className="whitespace-nowrap">
-                Model reasoning effort
-              </Label>
-              <Select
-                value={modelReasoningEffort}
-                onValueChange={(value) => {
-                  setModelReasoningEffort(value as CodexModelReasoningEffort);
-                }}
-              >
-                <SelectTrigger className="w-auto min-w-28 whitespace-nowrap">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CODEX_MODEL_REASONING_EFFORT_OPTIONS.map((option) => (
-                    <SelectItem
-                      key={option.value}
-                      value={option.value}
-                      className="whitespace-nowrap"
-                    >
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
           </div>
 
           <div className="space-y-2">

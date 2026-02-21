@@ -7,18 +7,47 @@ import {
   claudeModelSchema,
   claudePermissionModeSchema,
 } from "../shared/claude-types";
+import {
+  codexModelReasoningEffortSchema,
+  codexPermissionModeSchema,
+} from "../shared/codex-types";
 import log from "./logger";
 
 const SETTINGS_DIR = ".claude-ui";
 const SETTINGS_FILE = "settings.jsonc";
 
-export const projectSettingsFileSchema = z.object({
+const localClaudeProjectSettingsSchema = z.object({
   defaultModel: claudeModelSchema.optional().catch(undefined),
   defaultPermissionMode: claudePermissionModeSchema.optional().catch(undefined),
   defaultEffort: claudeEffortSchema.optional().catch(undefined),
   defaultHaikuModelOverride: claudeModelSchema.optional().catch(undefined),
   defaultSubagentModelOverride: claudeModelSchema.optional().catch(undefined),
   defaultSystemPrompt: z.string().optional().catch(undefined),
+});
+
+const localCodexProjectSettingsSchema = z.object({
+  model: z.string().optional().catch(undefined),
+  permissionMode: codexPermissionModeSchema.optional().catch(undefined),
+  modelReasoningEffort: codexModelReasoningEffortSchema
+    .optional()
+    .catch(undefined),
+  configOverrides: z.string().optional().catch(undefined),
+});
+
+function toOptionalSettings<T extends Record<string, unknown>>(
+  value: T | undefined,
+): T | undefined {
+  if (!value) {
+    return undefined;
+  }
+  return Object.values(value).some((item) => item !== undefined)
+    ? value
+    : undefined;
+}
+
+export const projectSettingsFileSchema = z.object({
+  localClaude: localClaudeProjectSettingsSchema.optional().catch(undefined),
+  localCodex: localCodexProjectSettingsSchema.optional().catch(undefined),
 });
 
 export type ProjectSettingsFile = z.infer<typeof projectSettingsFileSchema>;
@@ -82,14 +111,14 @@ export async function readProjectSettingsForAll(
   return map;
 }
 
-const SETTINGS_KEYS = [
+const LEGACY_SETTINGS_KEYS = [
   "defaultModel",
   "defaultPermissionMode",
   "defaultEffort",
   "defaultHaikuModelOverride",
   "defaultSubagentModelOverride",
   "defaultSystemPrompt",
-] as const satisfies readonly (keyof ProjectSettingsFile)[];
+] as const;
 
 export async function writeProjectSettingsFile(
   projectPath: string,
@@ -105,9 +134,43 @@ export async function writeProjectSettingsFile(
     content = "{}";
   }
 
-  for (const key of SETTINGS_KEYS) {
-    const value = settings[key];
-    const edits = modify(content, [key], value ?? undefined, {
+  const localClaude = toOptionalSettings(settings.localClaude);
+  const localCodex = toOptionalSettings(settings.localCodex);
+
+  if (localClaude) {
+    const edits = modify(content, ["localClaude"], localClaude, {
+      isArrayInsertion: false,
+      formattingOptions: { tabSize: 2, insertSpaces: true },
+    });
+    content = applyEdits(content, edits);
+  }
+
+  if (localCodex) {
+    const edits = modify(content, ["localCodex"], localCodex, {
+      isArrayInsertion: false,
+      formattingOptions: { tabSize: 2, insertSpaces: true },
+    });
+    content = applyEdits(content, edits);
+  }
+
+  if (!localClaude) {
+    const edits = modify(content, ["localClaude"], undefined, {
+      isArrayInsertion: false,
+      formattingOptions: { tabSize: 2, insertSpaces: true },
+    });
+    content = applyEdits(content, edits);
+  }
+
+  if (!localCodex) {
+    const edits = modify(content, ["localCodex"], undefined, {
+      isArrayInsertion: false,
+      formattingOptions: { tabSize: 2, insertSpaces: true },
+    });
+    content = applyEdits(content, edits);
+  }
+
+  for (const key of LEGACY_SETTINGS_KEYS) {
+    const edits = modify(content, [key], undefined, {
       isArrayInsertion: false,
       formattingOptions: { tabSize: 2, insertSpaces: true },
     });

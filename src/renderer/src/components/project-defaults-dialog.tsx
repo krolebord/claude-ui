@@ -1,5 +1,8 @@
 import { EffortToggleGroup } from "@renderer/components/effort-toggle-group";
-import { PermissionModeToggleGroup } from "@renderer/components/permission-mode-toggle-group";
+import {
+  CodexPermissionModeToggleGroup,
+  PermissionModeToggleGroup,
+} from "@renderer/components/permission-mode-toggle-group";
 import { useAppState } from "@renderer/components/sync-state-provider";
 import { Button } from "@renderer/components/ui/button";
 import {
@@ -10,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@renderer/components/ui/dialog";
+import { Input } from "@renderer/components/ui/input";
 import { Label } from "@renderer/components/ui/label";
 import {
   Select,
@@ -19,6 +23,10 @@ import {
   SelectValue,
 } from "@renderer/components/ui/select";
 import { Textarea } from "@renderer/components/ui/textarea";
+import {
+  ToggleGroup,
+  ToggleGroupItem,
+} from "@renderer/components/ui/toggle-group";
 import { orpc } from "@renderer/orpc-client";
 import {
   MODEL_OPTIONS,
@@ -29,6 +37,10 @@ import type {
   ClaudeModel,
   ClaudePermissionMode,
 } from "@shared/claude-types";
+import type {
+  CodexModelReasoningEffort,
+  CodexPermissionMode,
+} from "@shared/codex-types";
 import { useMutation } from "@tanstack/react-query";
 import { AlertCircle } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -48,6 +60,19 @@ export const useProjectDefaultsDialogStore = create(
   ),
 );
 
+const CODEX_MODEL_REASONING_EFFORT_OPTIONS: {
+  value: CodexModelReasoningEffort;
+  label: string;
+}[] = [
+  { value: "minimal", label: "Minimal" },
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+  { value: "xhigh", label: "XHigh" },
+];
+
+type ProjectDefaultsTab = "claude" | "codex";
+
 export function ProjectDefaultsDialog() {
   const openProjectCwd = useProjectDefaultsDialogStore((s) => s.openProjectCwd);
   const setOpenProjectCwd = useProjectDefaultsDialogStore(
@@ -61,18 +86,28 @@ export function ProjectDefaultsDialog() {
     return state.projects.find((item) => item.path === openProjectCwd) ?? null;
   });
 
-  const [defaultModel, setDefaultModel] = useState<ClaudeModel>("opus");
-  const [defaultEffort, setDefaultEffort] = useState<ClaudeEffort | undefined>(
-    undefined,
-  );
-  const [defaultPermissionMode, setDefaultPermissionMode] =
-    useState<ClaudePermissionMode>("default");
-  const [defaultHaikuModelOverride, setDefaultHaikuModelOverride] = useState<
-    ClaudeModel | undefined
+  const [claudeDefaultModel, setClaudeDefaultModel] =
+    useState<ClaudeModel>("opus");
+  const [claudeDefaultEffort, setClaudeDefaultEffort] = useState<
+    ClaudeEffort | undefined
   >(undefined);
-  const [defaultSubagentModelOverride, setDefaultSubagentModelOverride] =
+  const [claudeDefaultPermissionMode, setClaudeDefaultPermissionMode] =
+    useState<ClaudePermissionMode>("default");
+  const [claudeDefaultHaikuModelOverride, setClaudeDefaultHaikuModelOverride] =
     useState<ClaudeModel | undefined>(undefined);
-  const [defaultSystemPrompt, setDefaultSystemPrompt] = useState<string>("");
+  const [
+    claudeDefaultSubagentModelOverride,
+    setClaudeDefaultSubagentModelOverride,
+  ] = useState<ClaudeModel | undefined>(undefined);
+  const [claudeDefaultSystemPrompt, setClaudeDefaultSystemPrompt] =
+    useState<string>("");
+  const [codexModel, setCodexModel] = useState("");
+  const [codexPermissionMode, setCodexPermissionMode] =
+    useState<CodexPermissionMode>("default");
+  const [codexModelReasoningEffort, setCodexModelReasoningEffort] =
+    useState<CodexModelReasoningEffort>("high");
+  const [codexConfigOverrides, setCodexConfigOverrides] = useState("");
+  const [activeTab, setActiveTab] = useState<ProjectDefaultsTab>("claude");
 
   const saveMutation = useMutation(
     orpc.projects.setProjectDefaults.mutationOptions({
@@ -86,12 +121,26 @@ export function ProjectDefaultsDialog() {
     if (!project) {
       return;
     }
-    setDefaultModel(project.defaultModel ?? "opus");
-    setDefaultEffort(project.defaultEffort);
-    setDefaultPermissionMode(project.defaultPermissionMode ?? "default");
-    setDefaultHaikuModelOverride(project.defaultHaikuModelOverride);
-    setDefaultSubagentModelOverride(project.defaultSubagentModelOverride);
-    setDefaultSystemPrompt(project.defaultSystemPrompt ?? "");
+    setClaudeDefaultModel(project.localClaude?.defaultModel ?? "opus");
+    setClaudeDefaultEffort(project.localClaude?.defaultEffort);
+    setClaudeDefaultPermissionMode(
+      project.localClaude?.defaultPermissionMode ?? "default",
+    );
+    setClaudeDefaultHaikuModelOverride(
+      project.localClaude?.defaultHaikuModelOverride,
+    );
+    setClaudeDefaultSubagentModelOverride(
+      project.localClaude?.defaultSubagentModelOverride,
+    );
+    setClaudeDefaultSystemPrompt(
+      project.localClaude?.defaultSystemPrompt ?? "",
+    );
+    setCodexModel(project.localCodex?.model ?? "");
+    setCodexPermissionMode(project.localCodex?.permissionMode ?? "default");
+    setCodexModelReasoningEffort(
+      project.localCodex?.modelReasoningEffort ?? "high",
+    );
+    setCodexConfigOverrides(project.localCodex?.configOverrides ?? "");
   }, [project]);
 
   if (!openProjectCwd || !project) {
@@ -100,12 +149,14 @@ export function ProjectDefaultsDialog() {
 
   const projectPath = project.path;
   const projectName = getProjectNameFromPath(projectPath);
-  const effectivePermissionMode = defaultPermissionMode ?? "default";
+  const effectiveClaudePermissionMode =
+    claudeDefaultPermissionMode ?? "default";
 
   const closeDialog = () => {
     if (saveMutation.isPending) {
       return;
     }
+    setActiveTab("claude");
     setOpenProjectCwd(null);
   };
 
@@ -135,112 +186,218 @@ export function ProjectDefaultsDialog() {
             event.preventDefault();
             saveMutation.mutate({
               path: projectPath,
-              defaultModel,
-              defaultEffort,
-              defaultPermissionMode,
-              defaultHaikuModelOverride,
-              defaultSubagentModelOverride,
-              defaultSystemPrompt: defaultSystemPrompt || undefined,
+              localClaude: {
+                defaultModel: claudeDefaultModel,
+                defaultEffort: claudeDefaultEffort,
+                defaultPermissionMode: claudeDefaultPermissionMode,
+                defaultHaikuModelOverride: claudeDefaultHaikuModelOverride,
+                defaultSubagentModelOverride:
+                  claudeDefaultSubagentModelOverride,
+                defaultSystemPrompt: claudeDefaultSystemPrompt || undefined,
+              },
+              localCodex: {
+                model: codexModel || undefined,
+                permissionMode: codexPermissionMode,
+                modelReasoningEffort: codexModelReasoningEffort,
+                configOverrides: codexConfigOverrides || undefined,
+              },
             });
           }}
         >
-          <div className="space-y-2">
-            <Label>Default model</Label>
-            <Select
-              value={defaultModel}
-              onValueChange={(value) => {
-                setDefaultModel(value as ClaudeModel);
-              }}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {MODEL_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <PermissionModeToggleGroup
-            label="Default permission mode"
-            permissionMode={effectivePermissionMode}
-            onPermissionModeChange={(value) => {
-              setDefaultPermissionMode(value);
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            value={activeTab}
+            onValueChange={(value) => {
+              if (value) {
+                setActiveTab(value as ProjectDefaultsTab);
+              }
             }}
-          />
+            className="w-full"
+          >
+            <ToggleGroupItem value="claude" className="flex-1">
+              Claude
+            </ToggleGroupItem>
+            <ToggleGroupItem value="codex" className="flex-1">
+              Codex
+            </ToggleGroupItem>
+          </ToggleGroup>
 
-          <EffortToggleGroup
-            label="Default effort"
-            effort={defaultEffort}
-            onEffortChange={setDefaultEffort}
-          />
+          {activeTab === "claude" ? (
+            <>
+              <div className="text-sm font-medium">Claude defaults</div>
 
-          <div className="space-y-2">
-            <Label>Override haiku model</Label>
-            <Select
-              value={defaultHaikuModelOverride ?? "no"}
-              onValueChange={(value) => {
-                setDefaultHaikuModelOverride(
-                  value === "no" ? undefined : (value as ClaudeModel),
-                );
-              }}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="no">Default</SelectItem>
-                {MODEL_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+              <div className="space-y-2">
+                <Label>Default model</Label>
+                <Select
+                  value={claudeDefaultModel}
+                  onValueChange={(value) => {
+                    setClaudeDefaultModel(value as ClaudeModel);
+                  }}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MODEL_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-          <div className="space-y-2">
-            <Label>Override subagent model</Label>
-            <Select
-              value={defaultSubagentModelOverride ?? "no"}
-              onValueChange={(value) => {
-                setDefaultSubagentModelOverride(
-                  value === "no" ? undefined : (value as ClaudeModel),
-                );
-              }}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="no">Default</SelectItem>
-                {MODEL_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+              <PermissionModeToggleGroup
+                label="Default permission mode"
+                permissionMode={effectiveClaudePermissionMode}
+                onPermissionModeChange={(value) => {
+                  setClaudeDefaultPermissionMode(value);
+                }}
+              />
 
-          <div className="space-y-2">
-            <Label htmlFor="project-default-system-prompt">
-              System prompt (optional)
-            </Label>
-            <Textarea
-              id="project-default-system-prompt"
-              placeholder="Custom system prompt passed via --system-prompt"
-              value={defaultSystemPrompt}
-              onChange={(event) => {
-                setDefaultSystemPrompt(event.target.value);
-              }}
-              rows={3}
-            />
-          </div>
+              <EffortToggleGroup
+                label="Default effort"
+                effort={claudeDefaultEffort}
+                onEffortChange={setClaudeDefaultEffort}
+              />
+
+              <div className="space-y-2">
+                <Label>Override haiku model</Label>
+                <Select
+                  value={claudeDefaultHaikuModelOverride ?? "no"}
+                  onValueChange={(value) => {
+                    setClaudeDefaultHaikuModelOverride(
+                      value === "no" ? undefined : (value as ClaudeModel),
+                    );
+                  }}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="no">Default</SelectItem>
+                    {MODEL_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Override subagent model</Label>
+                <Select
+                  value={claudeDefaultSubagentModelOverride ?? "no"}
+                  onValueChange={(value) => {
+                    setClaudeDefaultSubagentModelOverride(
+                      value === "no" ? undefined : (value as ClaudeModel),
+                    );
+                  }}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="no">Default</SelectItem>
+                    {MODEL_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="project-default-system-prompt">
+                  System prompt (optional)
+                </Label>
+                <Textarea
+                  id="project-default-system-prompt"
+                  placeholder="Custom system prompt passed via --system-prompt"
+                  value={claudeDefaultSystemPrompt}
+                  onChange={(event) => {
+                    setClaudeDefaultSystemPrompt(event.target.value);
+                  }}
+                  rows={3}
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="text-sm font-medium">Codex defaults</div>
+
+              <div className="flex items-end gap-3">
+                <div className="min-w-0 flex-1">
+                  <CodexPermissionModeToggleGroup
+                    label="Default permission mode"
+                    permissionMode={codexPermissionMode}
+                    onPermissionModeChange={setCodexPermissionMode}
+                  />
+                </div>
+
+                <div className="w-fit shrink-0 space-y-2">
+                  <Label className="whitespace-nowrap">
+                    Default model reasoning effort
+                  </Label>
+                  <Select
+                    value={codexModelReasoningEffort}
+                    onValueChange={(value) => {
+                      setCodexModelReasoningEffort(
+                        value as CodexModelReasoningEffort,
+                      );
+                    }}
+                  >
+                    <SelectTrigger className="w-full whitespace-nowrap">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CODEX_MODEL_REASONING_EFFORT_OPTIONS.map((option) => (
+                        <SelectItem
+                          key={option.value}
+                          value={option.value}
+                          className="whitespace-nowrap"
+                        >
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="project-default-codex-model">
+                  Model (optional)
+                </Label>
+                <Input
+                  id="project-default-codex-model"
+                  placeholder="gpt-5.3-codex"
+                  value={codexModel}
+                  onChange={(event) => {
+                    setCodexModel(event.target.value);
+                  }}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="project-default-codex-config-overrides">
+                  Config overrides (optional)
+                </Label>
+                <Textarea
+                  id="project-default-codex-config-overrides"
+                  placeholder="Each line becomes a separate --config argument"
+                  value={codexConfigOverrides}
+                  onChange={(event) => {
+                    setCodexConfigOverrides(event.target.value);
+                  }}
+                  rows={3}
+                />
+              </div>
+            </>
+          )}
 
           {saveMutation.error ? (
             <div className="flex items-center gap-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">

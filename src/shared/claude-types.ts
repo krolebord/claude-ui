@@ -1,4 +1,8 @@
 import { z } from "zod";
+import type {
+  CodexModelReasoningEffort,
+  CodexPermissionMode,
+} from "./codex-types";
 
 export const claudeActivityStateSchema = z.enum([
   "idle",
@@ -32,15 +36,27 @@ export const claudeEffortSchema = z.enum(["low", "medium", "high"]);
 
 export type ClaudeEffort = z.infer<typeof claudeEffortSchema>;
 
-export interface ClaudeProject {
-  path: string;
-  collapsed: boolean;
+export interface LocalClaudeProjectSettings {
   defaultModel?: ClaudeModel;
   defaultPermissionMode?: ClaudePermissionMode;
   defaultEffort?: ClaudeEffort;
   defaultHaikuModelOverride?: ClaudeModel;
   defaultSubagentModelOverride?: ClaudeModel;
   defaultSystemPrompt?: string;
+}
+
+export interface LocalCodexProjectSettings {
+  model?: string;
+  permissionMode?: CodexPermissionMode;
+  modelReasoningEffort?: CodexModelReasoningEffort;
+  configOverrides?: string;
+}
+
+export interface ClaudeProject {
+  path: string;
+  collapsed: boolean;
+  localClaude?: LocalClaudeProjectSettings;
+  localCodex?: LocalCodexProjectSettings;
 }
 
 export interface ClaudeHookEvent {

@@ -5,20 +5,49 @@ import {
   claudeModelSchema,
   claudePermissionModeSchema,
 } from "../shared/claude-types";
+import {
+  codexModelReasoningEffortSchema,
+  codexPermissionModeSchema,
+} from "../shared/codex-types";
 import { defineServiceState } from "../shared/service-state";
 import { procedure } from "./orpc";
 import { defineStatePersistence } from "./persistence-orchestrator";
 import { writeProjectSettingsFile } from "./project-settings-file";
 
-export const claudeProjectSchema = z.object({
-  path: z.string().trim().min(1),
-  collapsed: z.boolean().catch(false),
+const localClaudeProjectSettingsSchema = z.object({
   defaultModel: claudeModelSchema.optional().catch(undefined),
   defaultPermissionMode: claudePermissionModeSchema.optional().catch(undefined),
   defaultEffort: claudeEffortSchema.optional().catch(undefined),
   defaultHaikuModelOverride: claudeModelSchema.optional().catch(undefined),
   defaultSubagentModelOverride: claudeModelSchema.optional().catch(undefined),
   defaultSystemPrompt: z.string().optional().catch(undefined),
+});
+
+const localCodexProjectSettingsSchema = z.object({
+  model: z.string().optional().catch(undefined),
+  permissionMode: codexPermissionModeSchema.optional().catch(undefined),
+  modelReasoningEffort: codexModelReasoningEffortSchema
+    .optional()
+    .catch(undefined),
+  configOverrides: z.string().optional().catch(undefined),
+});
+
+function toOptionalSettings<T extends Record<string, unknown>>(
+  value: T | undefined,
+): T | undefined {
+  if (!value) {
+    return undefined;
+  }
+  return Object.values(value).some((item) => item !== undefined)
+    ? value
+    : undefined;
+}
+
+export const claudeProjectSchema = z.object({
+  path: z.string().trim().min(1),
+  collapsed: z.boolean().catch(false),
+  localClaude: localClaudeProjectSettingsSchema.optional().catch(undefined),
+  localCodex: localCodexProjectSettingsSchema.optional().catch(undefined),
 });
 
 function normalizeProjectPath(pathValue: string): string {
@@ -96,12 +125,8 @@ export const projectsRouter = {
     .input(
       z.object({
         path: projectPathSchema,
-        defaultModel: claudeModelSchema.optional(),
-        defaultPermissionMode: claudePermissionModeSchema.optional(),
-        defaultEffort: claudeEffortSchema.optional(),
-        defaultHaikuModelOverride: claudeModelSchema.optional(),
-        defaultSubagentModelOverride: claudeModelSchema.optional(),
-        defaultSystemPrompt: z.string().optional(),
+        localClaude: localClaudeProjectSettingsSchema.optional(),
+        localCodex: localCodexProjectSettingsSchema.optional(),
       }),
     )
     .handler(async ({ input, context }) => {
@@ -109,18 +134,15 @@ export const projectsRouter = {
       if (!path) return;
 
       const settings = {
-        defaultModel: input.defaultModel,
-        defaultPermissionMode: input.defaultPermissionMode,
-        defaultEffort: input.defaultEffort,
-        defaultHaikuModelOverride: input.defaultHaikuModelOverride,
-        defaultSubagentModelOverride: input.defaultSubagentModelOverride,
-        defaultSystemPrompt: input.defaultSystemPrompt,
+        localClaude: toOptionalSettings(input.localClaude),
+        localCodex: toOptionalSettings(input.localCodex),
       };
 
       context.projectsState.updateState((projects) => {
         const project = projects.find((p) => p.path === path);
         if (!project) return;
-        Object.assign(project, settings);
+        project.localClaude = settings.localClaude;
+        project.localCodex = settings.localCodex;
       });
 
       await writeProjectSettingsFile(path, settings);

@@ -1,7 +1,13 @@
 {
-  "defaultModel": "opus",
-  "defaultPermissionMode": "yolo",
-  "defaultEffort": "high",
-  "defaultSubagentModelOverride": "sonnet",
-  "defaultHaikuModelOverride": "sonnet"
+  "localClaude": {
+    "defaultModel": "opus",
+    "defaultPermissionMode": "yolo",
+    "defaultEffort": "high",
+    "defaultHaikuModelOverride": "sonnet",
+    "defaultSubagentModelOverride": "sonnet"
+  },
+  "localCodex": {
+    "permissionMode": "yolo",
+    "modelReasoningEffort": "high"
+  }
 }
