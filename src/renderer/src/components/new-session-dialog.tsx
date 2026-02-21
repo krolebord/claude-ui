@@ -54,10 +54,17 @@ import {
   useHotkey,
 } from "@tanstack/react-hotkeys";
 import { useMutation } from "@tanstack/react-query";
-import { AlertCircle, ChevronsUpDown } from "lucide-react";
+import {
+  AlertCircle,
+  ChevronsUpDown,
+  Repeat,
+  TerminalSquare,
+} from "lucide-react";
+import type { ComponentType, SVGProps } from "react";
 import { useState } from "react";
 import { create } from "zustand";
 import { combine } from "zustand/middleware";
+import { ClaudeCodeIcon, CodexIcon } from "./session-type-icons";
 
 export const useNewSessionDialogStore = create(
   combine(
@@ -74,11 +81,15 @@ export const useNewSessionDialogStore = create(
 
 type SessionType = "claude" | "codex" | "ralphLoop" | "terminal";
 
-const SESSION_TYPE_OPTIONS: { value: SessionType; label: string }[] = [
-  { value: "claude", label: "Claude" },
-  { value: "codex", label: "Codex" },
-  { value: "ralphLoop", label: "Ralph Loop" },
-  { value: "terminal", label: "Terminal" },
+const SESSION_TYPE_OPTIONS: {
+  value: SessionType;
+  label: string;
+  icon: ComponentType<SVGProps<SVGSVGElement>>;
+}[] = [
+  { value: "claude", label: "Claude", icon: ClaudeCodeIcon },
+  { value: "codex", label: "Codex", icon: CodexIcon },
+  { value: "ralphLoop", label: "Ralph Loop", icon: Repeat },
+  { value: "terminal", label: "Terminal", icon: TerminalSquare },
 ];
 
 const CODEX_MODEL_REASONING_EFFORT_OPTIONS: {
@@ -200,8 +211,9 @@ export function NewSessionDialog() {
             <ToggleGroupItem
               key={option.value}
               value={option.value}
-              className="flex-1"
+              className="flex-1 gap-1.5"
             >
+              <option.icon className="size-4 shrink-0" />
               {option.label}
             </ToggleGroupItem>
           ))}
@@ -916,7 +928,7 @@ function CodexSessionForm() {
         onPermissionModeChange={setPermissionMode}
       />
 
-      <div className="flex items-end gap-3">
+      <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1 space-y-2">
           <Label htmlFor="new-codex-model">Model (optional)</Label>
           <Input
@@ -930,14 +942,14 @@ function CodexSessionForm() {
         </div>
 
         <div className="w-fit shrink-0 space-y-2">
-          <Label className="whitespace-nowrap">Model reasoning effort</Label>
+          <Label className="whitespace-nowrap">Effort</Label>
           <Select
             value={modelReasoningEffort}
             onValueChange={(value) => {
               setModelReasoningEffort(value as CodexModelReasoningEffort);
             }}
           >
-            <SelectTrigger className="w-full whitespace-nowrap">
+            <SelectTrigger className="w-auto min-w-24 whitespace-nowrap">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

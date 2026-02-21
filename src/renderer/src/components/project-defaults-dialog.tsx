@@ -1,4 +1,3 @@
-import { EffortToggleGroup } from "@renderer/components/effort-toggle-group";
 import {
   CodexPermissionModeToggleGroup,
   PermissionModeToggleGroup,
@@ -69,6 +68,12 @@ const CODEX_MODEL_REASONING_EFFORT_OPTIONS: {
   { value: "medium", label: "Medium" },
   { value: "high", label: "High" },
   { value: "xhigh", label: "XHigh" },
+];
+
+const CLAUDE_EFFORT_OPTIONS: { value: ClaudeEffort; label: string }[] = [
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
 ];
 
 type ProjectDefaultsTab = "claude" | "codex";
@@ -227,27 +232,6 @@ export function ProjectDefaultsDialog() {
             <>
               <div className="text-sm font-medium">Claude defaults</div>
 
-              <div className="space-y-2">
-                <Label>Default model</Label>
-                <Select
-                  value={claudeDefaultModel}
-                  onValueChange={(value) => {
-                    setClaudeDefaultModel(value as ClaudeModel);
-                  }}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {MODEL_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
               <PermissionModeToggleGroup
                 label="Default permission mode"
                 permissionMode={effectiveClaudePermissionMode}
@@ -256,11 +240,58 @@ export function ProjectDefaultsDialog() {
                 }}
               />
 
-              <EffortToggleGroup
-                label="Default effort"
-                effort={claudeDefaultEffort}
-                onEffortChange={setClaudeDefaultEffort}
-              />
+              <div className="flex items-end gap-3">
+                <div className="min-w-0 flex-1 space-y-2">
+                  <Label>Default model</Label>
+                  <Select
+                    value={claudeDefaultModel}
+                    onValueChange={(value) => {
+                      setClaudeDefaultModel(value as ClaudeModel);
+                    }}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MODEL_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="w-fit shrink-0 space-y-2">
+                  <Label className="whitespace-nowrap">Default effort</Label>
+                  <Select
+                    value={claudeDefaultEffort ?? "no"}
+                    onValueChange={(value) => {
+                      setClaudeDefaultEffort(
+                        value === "no" ? undefined : (value as ClaudeEffort),
+                      );
+                    }}
+                  >
+                    <SelectTrigger className="w-auto min-w-24 whitespace-nowrap">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="no" className="whitespace-nowrap">
+                        Default
+                      </SelectItem>
+                      {CLAUDE_EFFORT_OPTIONS.map((option) => (
+                        <SelectItem
+                          key={option.value}
+                          value={option.value}
+                          className="whitespace-nowrap"
+                        >
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
 
               <div className="space-y-2">
                 <Label>Override haiku model</Label>
@@ -329,19 +360,29 @@ export function ProjectDefaultsDialog() {
             <>
               <div className="text-sm font-medium">Codex defaults</div>
 
-              <div className="flex items-end gap-3">
-                <div className="min-w-0 flex-1">
-                  <CodexPermissionModeToggleGroup
-                    label="Default permission mode"
-                    permissionMode={codexPermissionMode}
-                    onPermissionModeChange={setCodexPermissionMode}
+              <CodexPermissionModeToggleGroup
+                label="Default permission mode"
+                permissionMode={codexPermissionMode}
+                onPermissionModeChange={setCodexPermissionMode}
+              />
+
+              <div className="flex items-start gap-3">
+                <div className="min-w-0 flex-1 space-y-2">
+                  <Label htmlFor="project-default-codex-model">
+                    Model (optional)
+                  </Label>
+                  <Input
+                    id="project-default-codex-model"
+                    placeholder="gpt-5.3-codex"
+                    value={codexModel}
+                    onChange={(event) => {
+                      setCodexModel(event.target.value);
+                    }}
                   />
                 </div>
 
                 <div className="w-fit shrink-0 space-y-2">
-                  <Label className="whitespace-nowrap">
-                    Default model reasoning effort
-                  </Label>
+                  <Label className="whitespace-nowrap">Effort</Label>
                   <Select
                     value={codexModelReasoningEffort}
                     onValueChange={(value) => {
@@ -350,7 +391,7 @@ export function ProjectDefaultsDialog() {
                       );
                     }}
                   >
-                    <SelectTrigger className="w-full whitespace-nowrap">
+                    <SelectTrigger className="w-auto min-w-24 whitespace-nowrap">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -366,20 +407,6 @@ export function ProjectDefaultsDialog() {
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="project-default-codex-model">
-                  Model (optional)
-                </Label>
-                <Input
-                  id="project-default-codex-model"
-                  placeholder="gpt-5.3-codex"
-                  value={codexModel}
-                  onChange={(event) => {
-                    setCodexModel(event.target.value);
-                  }}
-                />
               </div>
 
               <div className="space-y-2">
