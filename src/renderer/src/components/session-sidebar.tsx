@@ -1032,6 +1032,7 @@ function RenameSessionDialog({
   onRenameTargetChange: (target: RenameSessionTarget | null) => void;
 }) {
   const [title, setTitle] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const renameSessionMutation = useMutation({
     mutationFn: async (target: RenameSessionTarget) => {
@@ -1069,13 +1070,16 @@ function RenameSessionDialog({
       }
     },
     onSuccess: () => {
-      toast.success("Session renamed");
       onRenameTargetChange(null);
+    },
+    onError: () => {
+      toast.error("Failed to rename session");
     },
   });
 
   useEffect(() => {
     setTitle(renameTarget?.title ?? "");
+    setError(null);
   }, [renameTarget]);
 
   const closeDialog = () => {
@@ -1111,7 +1115,7 @@ function RenameSessionDialog({
 
             const nextTitle = title.trim();
             if (!nextTitle) {
-              toast.error("Session name cannot be empty");
+              setError("Session name cannot be empty");
               return;
             }
 
@@ -1128,11 +1132,13 @@ function RenameSessionDialog({
               value={title}
               onChange={(event) => {
                 setTitle(event.target.value);
+                setError(null);
               }}
               autoFocus
               maxLength={120}
               disabled={renameSessionMutation.isPending}
             />
+            {error && <p className="text-sm text-destructive">{error}</p>}
           </div>
           <DialogFooter>
             <Button
