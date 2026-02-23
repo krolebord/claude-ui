@@ -24,7 +24,10 @@ import {
 import { Input } from "@renderer/components/ui/input";
 import { Label } from "@renderer/components/ui/label";
 import { UsagePanel } from "@renderer/components/usage-panel";
-import { useActiveSessionStore } from "@renderer/hooks/use-active-session-id";
+import {
+  switchSession,
+  useActiveSessionStore,
+} from "@renderer/hooks/use-active-session-id";
 import { getTerminalSize } from "@renderer/hooks/use-terminal-size";
 import { cn } from "@renderer/lib/utils";
 import { orpc } from "@renderer/orpc-client";
@@ -1162,8 +1165,6 @@ const SessionSidebarItemTrigger = forwardRef<
     (x) => x.activeSessionId === sessionId,
   );
 
-  const setActiveSessionId = useActiveSessionStore((x) => x.setActiveSessionId);
-
   const statusMeta = statusIndicatorMeta[session.status];
 
   return (
@@ -1174,15 +1175,7 @@ const SessionSidebarItemTrigger = forwardRef<
     >
       <button
         type="button"
-        onClick={() => {
-          const prevSessionId =
-            useActiveSessionStore.getState().activeSessionId;
-          setActiveSessionId(sessionId);
-          if (prevSessionId && prevSessionId !== sessionId) {
-            void orpc.sessions.markSeen.call({ sessionId: prevSessionId });
-          }
-          void orpc.sessions.markSeen.call({ sessionId });
-        }}
+        onClick={() => switchSession(sessionId)}
         className={cn(
           "flex w-full items-center justify-start gap-1.5 rounded-md px-1.5 py-1 pr-[3rem] text-sm transition",
           isActive

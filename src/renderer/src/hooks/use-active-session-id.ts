@@ -1,3 +1,4 @@
+import { orpc } from "@renderer/orpc-client";
 import { create } from "zustand";
 import { combine, persist } from "zustand/middleware";
 
@@ -6,6 +7,17 @@ export function useActiveSessionId() {
 }
 
 const STORAGE_KEY = "claude-ui:activeSessionId";
+
+export function switchSession(nextSessionId: string | null): void {
+  const prevSessionId = useActiveSessionStore.getState().activeSessionId;
+  useActiveSessionStore.getState().setActiveSessionId(nextSessionId);
+  if (nextSessionId) {
+    if (prevSessionId && prevSessionId !== nextSessionId) {
+      void orpc.sessions.markSeen.call({ sessionId: prevSessionId });
+    }
+    void orpc.sessions.markSeen.call({ sessionId: nextSessionId });
+  }
+}
 
 export const useActiveSessionStore = create(
   persist(

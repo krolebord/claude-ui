@@ -9,10 +9,7 @@ import {
 } from "@renderer/services/terminal-session-selectors";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import type { Session } from "src/main/sessions/state";
-import {
-  useActiveSessionId,
-  useActiveSessionStore,
-} from "./use-active-session-id";
+import { switchSession, useActiveSessionId } from "./use-active-session-id";
 
 export const SHORTCUT_DEFINITIONS = [
   { id: "new-session", label: "New session", key: "N", cmdOrCtrl: true },
@@ -92,9 +89,6 @@ export function useAppShortcuts(): void {
   const sessions = useAppState((state) => state.sessions);
   const projects = useAppState((state) => state.projects);
   const activeSessionId = useActiveSessionId();
-  const setActiveSessionId = useActiveSessionStore(
-    (state) => state.setActiveSessionId,
-  );
 
   const openSettingsDialog = useSettingsStore((state) => state.isOpen);
   const openNewSessionDialogCwd = useNewSessionDialogStore(
@@ -129,7 +123,7 @@ export function useAppShortcuts(): void {
     () => {
       const nextSessionId = getNextSession(sessions, activeSessionId);
       if (!nextSessionId) return;
-      setActiveSessionId(nextSessionId);
+      switchSession(nextSessionId);
     },
     { enabled: !dialogsAreOpen },
   );
@@ -145,7 +139,7 @@ export function useAppShortcuts(): void {
       const ordered = getVisibleSessionIds(groups);
       const idx = ordered.indexOf(activeSessionId);
       if (idx > 0) {
-        setActiveSessionId(ordered[idx - 1]);
+        switchSession(ordered[idx - 1]);
       }
     },
     { enabled: !dialogsAreOpen },
@@ -162,7 +156,7 @@ export function useAppShortcuts(): void {
       const ordered = getVisibleSessionIds(groups);
       const idx = ordered.indexOf(activeSessionId);
       if (idx !== -1 && idx < ordered.length - 1) {
-        setActiveSessionId(ordered[idx + 1]);
+        switchSession(ordered[idx + 1]);
       }
     },
     { enabled: !dialogsAreOpen },
@@ -202,7 +196,7 @@ export function useAppShortcuts(): void {
           });
           break;
       }
-      setActiveSessionId(nextSessionId);
+      switchSession(nextSessionId);
     },
     { enabled: !dialogsAreOpen },
   );
