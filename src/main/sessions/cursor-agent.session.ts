@@ -1,7 +1,7 @@
-import { execFile } from "node:child_process";
 import { call, EventPublisher } from "@orpc/server";
 import type { TerminalEvent } from "@shared/terminal-types";
 import { createDisposable } from "@shared/utils";
+import spawn from "nano-spawn";
 import { z } from "zod";
 import type { ClaudeActivityState } from "../../shared/claude-types";
 import { CursorActivityMonitor } from "../cursor-activity-monitor";
@@ -211,25 +211,13 @@ interface CursorAgentSessionsManagerOptions {
 /**
  * Runs `cursor agent create-chat` and returns the chatId from stdout.
  */
-function createCursorChat(): Promise<string> {
-  return new Promise((resolve, reject) => {
-    execFile("cursor", ["agent", "create-chat"], (error, stdout, stderr) => {
-      if (error) {
-        reject(
-          new Error(
-            `cursor agent create-chat failed: ${stderr || error.message}`,
-          ),
-        );
-        return;
-      }
-      const chatId = stdout.trim();
-      if (!chatId) {
-        reject(new Error("cursor agent create-chat returned empty output"));
-        return;
-      }
-      resolve(chatId);
-    });
-  });
+async function createCursorChat(): Promise<string> {
+  const { stdout } = await spawn("cursor", ["agent", "create-chat"]);
+  const chatId = stdout.trim();
+  if (!chatId) {
+    throw new Error("cursor agent create-chat returned empty output");
+  }
+  return chatId;
 }
 
 function getCursorSessionStatus(
