@@ -259,6 +259,7 @@ function TerminalPage({
   useEffect(() => {
     terminalRef.current?.clear();
     terminalRef.current?.write(session.bufferedOutput ?? "");
+    terminalRef.current?.autofit();
 
     const cancel = consumeEventIterator(
       subscribe(session.sessionId).then((stream) => {

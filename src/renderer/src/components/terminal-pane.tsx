@@ -2,19 +2,14 @@ import { cn } from "@renderer/lib/utils";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Terminal } from "@xterm/xterm";
-import {
-  type ForwardedRef,
-  forwardRef,
-  useEffect,
-  useImperativeHandle,
-  useRef,
-} from "react";
+import { useEffect, useImperativeHandle, useRef } from "react";
 import "@xterm/xterm/css/xterm.css";
 
 export interface TerminalPaneHandle {
   write: (chunk: string) => void;
   clear: () => void;
   focus: () => void;
+  autofit: () => void;
   getSize: () => { cols: number; rows: number };
 }
 
@@ -23,14 +18,19 @@ interface TerminalPaneProps {
   onInput: (data: string) => void;
   onResize: (cols: number, rows: number) => void;
   readOnly?: boolean;
+  ref: React.RefObject<TerminalPaneHandle | null>;
 }
 
-function TerminalPaneComponent(
-  { className, onInput, onResize, readOnly = false }: TerminalPaneProps,
-  ref: ForwardedRef<TerminalPaneHandle>,
-) {
+export function TerminalPane({
+  className,
+  onInput,
+  onResize,
+  readOnly = false,
+  ref,
+}: TerminalPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
+  const fitRef = useRef<() => void>(() => {});
   const onInputRef = useRef(onInput);
   const onResizeRef = useRef(onResize);
 
@@ -57,6 +57,9 @@ function TerminalPaneComponent(
       cols: terminalRef.current?.cols ?? 80,
       rows: terminalRef.current?.rows ?? 24,
     }),
+    autofit: () => {
+      fitRef.current();
+    },
   }));
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: readOnly is handled by the dedicated effect below; this effect initializes the terminal once
@@ -108,6 +111,7 @@ function TerminalPaneComponent(
       fitAddon.fit();
       onResizeRef.current(terminal.cols, terminal.rows);
     };
+    fitRef.current = fitAndNotify;
 
     const onDataDisposable = terminal.onData((data) => {
       onInputRef.current(data);
@@ -128,7 +132,6 @@ function TerminalPaneComponent(
 
     window.addEventListener("resize", onWindowResize);
     fitAndNotify();
-    document.fonts.ready.then(fitAndNotify);
 
     return () => {
       onDataDisposable.dispose();
@@ -137,6 +140,7 @@ function TerminalPaneComponent(
       window.removeEventListener("resize", onWindowResize);
       terminal.dispose();
       terminalRef.current = null;
+      fitRef.current = () => {};
     };
   }, []);
 
@@ -149,5 +153,3 @@ function TerminalPaneComponent(
 
   return <div ref={containerRef} className={cn("h-full w-full", className)} />;
 }
-
-export const TerminalPane = forwardRef(TerminalPaneComponent);
