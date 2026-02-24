@@ -138,9 +138,9 @@ export function useAppShortcuts(): void {
       });
       const ordered = getVisibleSessionIds(groups);
       const idx = ordered.indexOf(activeSessionId);
-      if (idx > 0) {
-        switchSession(ordered[idx - 1]);
-      }
+      if (idx === -1 || ordered.length === 0) return;
+      const prev = (idx - 1 + ordered.length) % ordered.length;
+      switchSession(ordered[prev]);
     },
     { enabled: !dialogsAreOpen },
   );
@@ -155,9 +155,9 @@ export function useAppShortcuts(): void {
       });
       const ordered = getVisibleSessionIds(groups);
       const idx = ordered.indexOf(activeSessionId);
-      if (idx !== -1 && idx < ordered.length - 1) {
-        switchSession(ordered[idx + 1]);
-      }
+      if (idx === -1 || ordered.length === 0) return;
+      const next = (idx + 1) % ordered.length;
+      switchSession(ordered[next]);
     },
     { enabled: !dialogsAreOpen },
   );
