@@ -76,7 +76,11 @@ export function SettingsDialog() {
           </div>
         </div>
 
-        <DialogFooter showCloseButton />
+        <DialogFooter className="sm:justify-between" showCloseButton>
+          <span className="text-xs text-muted-foreground self-center">
+            v{__APP_VERSION__}
+          </span>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
