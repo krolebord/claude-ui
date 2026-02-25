@@ -406,7 +406,7 @@ export class SessionsServiceNew {
     disposables.push(() => this.stateFileManager.cleanup(stateFilePath));
 
     let deferredPrompt: string | null = null;
-    let deferredPromptChecksLeft = 10;
+    let deferredPromptChecksLeft = 50;
     let effectiveInitialPrompt = opts.initialPrompt;
     if (opts.initialPrompt?.startsWith("/plan ")) {
       const textAfterPlan = opts.initialPrompt.slice("/plan ".length).trim();
