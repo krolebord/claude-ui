@@ -1,3 +1,4 @@
+import { ConfirmDialog } from "@renderer/components/confirm-dialog";
 import { NewSessionDialog } from "@renderer/components/new-session-dialog";
 import { ProjectDefaultsDialog } from "@renderer/components/project-defaults-dialog";
 import { SessionPage } from "@renderer/components/session-page";
@@ -41,6 +42,8 @@ function App() {
       <main className="flex min-w-0 flex-1 flex-col bg-black/15">
         {useMainPage()}
       </main>
+
+      <ConfirmDialog />
 
       <NewSessionDialog />
 

@@ -1,3 +1,4 @@
+import { useConfirmDialogStore } from "@renderer/components/confirm-dialog";
 import { useNewSessionDialogStore } from "@renderer/components/new-session-dialog";
 import { useProjectDefaultsDialogStore } from "@renderer/components/project-defaults-dialog";
 import { useSettingsStore } from "@renderer/components/settings-dialog";
@@ -90,6 +91,9 @@ export function useAppShortcuts(): void {
   const projects = useAppState((state) => state.projects);
   const activeSessionId = useActiveSessionId();
 
+  const confirmDialogOpen = useConfirmDialogStore(
+    (state) => state.options !== null,
+  );
   const openSettingsDialog = useSettingsStore((state) => state.isOpen);
   const openNewSessionDialogCwd = useNewSessionDialogStore(
     (state) => state.openProjectCwd,
@@ -102,6 +106,7 @@ export function useAppShortcuts(): void {
   );
 
   const dialogsAreOpen =
+    confirmDialogOpen ||
     Boolean(openNewSessionDialogCwd) ||
     openSettingsDialog ||
     Boolean(openProjectDefaultsDialogCwd);
@@ -167,36 +172,45 @@ export function useAppShortcuts(): void {
     () => {
       if (!activeSessionId) return;
 
-      const nextSessionId = getNextSession(
-        sessions,
-        activeSessionId,
-        activeSessionId,
-      );
-      const deletingSessionId = activeSessionId;
+      const session = sessions[activeSessionId];
+      if (!session) return;
 
-      switch (sessions[deletingSessionId].type) {
-        case "claude-local-terminal":
-          void orpc.sessions.localClaude.deleteSession.call({
-            sessionId: deletingSessionId,
-          });
-          break;
-        case "local-terminal":
-          void orpc.sessions.localTerminal.deleteSession.call({
-            sessionId: deletingSessionId,
-          });
-          break;
-        case "ralph-loop":
-          void orpc.sessions.ralphLoop.deleteSession.call({
-            sessionId: deletingSessionId,
-          });
-          break;
-        case "codex-local-terminal":
-          void orpc.sessions.codex.deleteSession.call({
-            sessionId: deletingSessionId,
-          });
-          break;
-      }
-      switchSession(nextSessionId);
+      useConfirmDialogStore.getState().confirm({
+        title: "Delete session",
+        description: `Delete "${session.title || "Untitled"}"? This cannot be undone.`,
+        confirmLabel: "Delete",
+        onConfirm: async () => {
+          const nextSessionId = getNextSession(
+            sessions,
+            activeSessionId,
+            activeSessionId,
+          );
+
+          switch (session.type) {
+            case "claude-local-terminal":
+              await orpc.sessions.localClaude.deleteSession.call({
+                sessionId: activeSessionId,
+              });
+              break;
+            case "local-terminal":
+              await orpc.sessions.localTerminal.deleteSession.call({
+                sessionId: activeSessionId,
+              });
+              break;
+            case "ralph-loop":
+              await orpc.sessions.ralphLoop.deleteSession.call({
+                sessionId: activeSessionId,
+              });
+              break;
+            case "codex-local-terminal":
+              await orpc.sessions.codex.deleteSession.call({
+                sessionId: activeSessionId,
+              });
+              break;
+          }
+          switchSession(nextSessionId);
+        },
+      });
     },
     { enabled: !dialogsAreOpen },
   );
