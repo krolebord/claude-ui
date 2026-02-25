@@ -1,6 +1,6 @@
 {
   "name": "claude-ui",
-  "version": "0.9.12",
+  "version": "0.9.14",
   "private": true,
   "author": "krolebord",
   "description": "Simple orchestrator for CLI agents",
@@ -45,6 +45,7 @@
     "radix-ui": "^1.4.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-scan": "^0.5.3",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
     "zod": "^4.3.6",
