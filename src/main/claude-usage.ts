@@ -24,7 +24,7 @@ const ExtraUsageSchema = z
     is_enabled: z.boolean(),
     monthly_limit: z.number(),
     used_credits: z.number(),
-    utilization: z.number(),
+    utilization: z.number().nullable(),
   })
   .nullable();
 

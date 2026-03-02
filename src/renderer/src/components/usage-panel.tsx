@@ -24,7 +24,7 @@ type ClaudeUsageData = {
     is_enabled: boolean;
     monthly_limit: number;
     used_credits: number;
-    utilization: number;
+    utilization: number | null;
   } | null;
 };
 
@@ -405,7 +405,7 @@ export function UsagePanel() {
             ? (() => {
                 const used = usage.extra_usage.used_credits / 100;
                 const limit = usage.extra_usage.monthly_limit / 100;
-                const pct = Math.round(usage.extra_usage.utilization);
+                const pct = Math.round(usage.extra_usage.utilization ?? 0);
                 return (
                   <div className="space-y-0.5">
                     <div className="flex items-center justify-between text-[10px]">
