@@ -34,13 +34,15 @@ export async function generateCodexSessionTitle(
     "model_reasoning_summary=none",
     "-c",
     "suppress_unstable_features_warning=true",
+    "-c",
+    "mcp_servers={}",
     buildTitlePrompt(userPrompt),
   ];
 
   try {
     const { stdout } = await spawn("codex", args, {
       preferLocal: true,
-      timeout: 10_000,
+      timeout: 30_000,
       stdin: "ignore",
     });
     const title =
