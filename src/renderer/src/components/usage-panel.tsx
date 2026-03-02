@@ -29,7 +29,7 @@ type ClaudeUsageData = {
 };
 
 type CodexUsageData = {
-  planType?: string;
+  planType?: string | null;
   primaryWindow: {
     utilization: number;
     resetsAt: string | null;
@@ -259,6 +259,7 @@ export function UsagePanel() {
 
     if (codexQuery.data?.ok && codexQuery.data.usage) {
       const usage = codexQuery.data.usage as CodexUsageData;
+      const planType = usage.planType?.trim();
       const primaryPct = Math.round(usage.primaryWindow.utilization);
       const secondaryPct = Math.round(usage.secondaryWindow.utilization);
       const primaryResetsAt = formatResetsAt(usage.primaryWindow.resetsAt);
@@ -266,6 +267,12 @@ export function UsagePanel() {
       return (
         <div className="border-t border-border/70 p-2">
           <div className="space-y-1.5">
+            {planType ? (
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="text-zinc-400">Plan</span>
+                <span className="tabular-nums text-zinc-300">{planType}</span>
+              </div>
+            ) : null}
             <div className="space-y-0.5">
               <div className="flex items-center justify-between text-[10px]">
                 <span className="text-zinc-400">

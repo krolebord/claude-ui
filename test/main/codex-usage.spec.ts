@@ -71,6 +71,32 @@ function buildUsageResponseJson(balance: number | string = 5.39) {
   });
 }
 
+function buildUsageResponseWithPlanTypeJson(
+  planType: string | null,
+  balance: number | string = 5.39,
+) {
+  return JSON.stringify({
+    plan_type: planType,
+    rate_limit: {
+      primary_window: {
+        used_percent: 6,
+        reset_at: 1_738_300_000,
+        limit_window_seconds: 18_000,
+      },
+      secondary_window: {
+        used_percent: 24,
+        reset_at: 1_738_900_000,
+        limit_window_seconds: 604_800,
+      },
+    },
+    credits: {
+      has_credits: true,
+      unlimited: false,
+      balance,
+    },
+  });
+}
+
 describe("getCodexUsage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -109,6 +135,7 @@ describe("getCodexUsage", () => {
     expect(result).toMatchObject({
       ok: true,
       usage: {
+        planType: "plus",
         primaryWindow: { utilization: 6, windowSeconds: 18_000 },
         secondaryWindow: { utilization: 24, windowSeconds: 604_800 },
       },
@@ -258,6 +285,25 @@ describe("getCodexUsage", () => {
         credits: {
           balance: 0,
         },
+      },
+    });
+  });
+
+  it("accepts null plan_type values", async () => {
+    readFileMock.mockResolvedValue(buildAuthJson());
+    fetchMock.mockResolvedValue(
+      new Response(buildUsageResponseWithPlanTypeJson(null), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const result = await getCodexUsage();
+
+    expect(result).toMatchObject({
+      ok: true,
+      usage: {
+        planType: null,
       },
     });
   });
