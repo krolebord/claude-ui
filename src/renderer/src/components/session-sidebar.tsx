@@ -1,7 +1,7 @@
 import { PointerActivationConstraints } from "@dnd-kit/dom";
 import type { DragEndEvent } from "@dnd-kit/react";
 import { DragDropProvider, PointerSensor } from "@dnd-kit/react";
-import { useSortable } from "@dnd-kit/react/sortable";
+import { isSortable, useSortable } from "@dnd-kit/react/sortable";
 import { Button } from "@renderer/components/ui/button";
 import {
   ContextMenu,
@@ -256,14 +256,22 @@ export function SessionSidebar() {
 
   const handleDragEnd = useCallback(
     (event: Parameters<DragEndEvent>[0]) => {
-      if (event.canceled || !event.operation.source || !event.operation.target)
-        return;
-      const fromPath = String(event.operation.source.id);
-      const toPath = String(event.operation.target.id);
-      if (fromPath === toPath) return;
-      reorderProjectsMutation.mutate({ fromPath, toPath });
+      if (event.canceled || !event.operation.source) return;
+      const { source } = event.operation;
+      if (!isSortable(source)) return;
+      const fromIndex = source.sortable.initialIndex;
+      const toIndex = source.sortable.index;
+      if (fromIndex === toIndex) return;
+      const projectGroups = groups.filter((g) => g.fromProjectList);
+      const fromGroup = projectGroups[fromIndex];
+      const toGroup = projectGroups[toIndex];
+      if (!fromGroup || !toGroup) return;
+      reorderProjectsMutation.mutate({
+        fromPath: fromGroup.path,
+        toPath: toGroup.path,
+      });
     },
-    [reorderProjectsMutation],
+    [reorderProjectsMutation, groups],
   );
 
   const setOpenNewSessionDialogCwd = useNewSessionDialogStore(
