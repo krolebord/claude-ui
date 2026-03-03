@@ -455,7 +455,7 @@ export class SessionsServiceNew {
 
           if (deferredPrompt && deferredPromptChecksLeft > 0) {
             deferredPromptChecksLeft--;
-            if (chunk.includes("plan mode on")) {
+            if (chunk.includes("Enabled")) {
               const prompt = deferredPrompt;
               deferredPrompt = null;
               setTimeout(() => {
