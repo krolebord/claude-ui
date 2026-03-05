@@ -89,7 +89,7 @@ function resolveLaunchCommand(launch: TerminalStartOpts): LaunchCommand {
 
 const GRACEFUL_STOP_TIMEOUT_MS = 1000;
 const FORCE_KILL_TIMEOUT_MS = 5000;
-const OUTPUT_BUFFER_MAX_TOTAL_SIZE = 1024 * 1024;
+const OUTPUT_BUFFER_MAX_TOTAL_SIZE = 512 * 1024;
 
 export function createTerminalSession(events: TerminalSessionOpts) {
   const disposable = createDisposable({
