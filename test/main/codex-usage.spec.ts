@@ -129,6 +129,51 @@ function buildUsageResponseWithNullableFieldsJson() {
   });
 }
 
+function buildUsageResponseWithNoCreditsJson() {
+  return JSON.stringify({
+    user_id: "user-8KW415WSieP6TwBbTjpkDpwO",
+    account_id: "d68a3185-a399-468a-b8fc-1fe7292f239d",
+    email: "tester@example.com",
+    plan_type: "team",
+    rate_limit: {
+      allowed: true,
+      limit_reached: false,
+      primary_window: {
+        used_percent: 0,
+        limit_window_seconds: 18_000,
+        reset_after_seconds: 18_000,
+        reset_at: 1_772_725_907,
+      },
+      secondary_window: {
+        used_percent: 0,
+        limit_window_seconds: 604_800,
+        reset_after_seconds: 604_800,
+        reset_at: 1_773_312_707,
+      },
+    },
+    code_review_rate_limit: {
+      allowed: true,
+      limit_reached: false,
+      primary_window: {
+        used_percent: 0,
+        limit_window_seconds: 604_800,
+        reset_after_seconds: 604_800,
+        reset_at: 1_773_312_707,
+      },
+      secondary_window: null,
+    },
+    additional_rate_limits: null,
+    credits: {
+      has_credits: false,
+      unlimited: false,
+      balance: null,
+      approx_local_messages: null,
+      approx_cloud_messages: null,
+    },
+    promo: null,
+  });
+}
+
 describe("getCodexUsage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -368,6 +413,37 @@ describe("getCodexUsage", () => {
       if (!result.usage) {
         throw new Error("Expected usage payload");
       }
+      expect(result.usage.credits).toBeUndefined();
+    }
+  });
+
+  it("accepts no-credits payloads where credits.balance is null", async () => {
+    readFileMock.mockResolvedValue(buildAuthJson());
+    fetchMock.mockResolvedValue(
+      new Response(buildUsageResponseWithNoCreditsJson(), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const result = await getCodexUsage();
+
+    expect(result).toMatchObject({
+      ok: true,
+      usage: {
+        planType: "team",
+        primaryWindow: {
+          utilization: 0,
+          windowSeconds: 18_000,
+        },
+        secondaryWindow: {
+          utilization: 0,
+          windowSeconds: 604_800,
+        },
+      },
+    });
+
+    if (result.ok && result.usage) {
       expect(result.usage.credits).toBeUndefined();
     }
   });

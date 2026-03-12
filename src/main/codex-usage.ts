@@ -33,6 +33,9 @@ const usageRateLimitSchema = z.object({
 });
 
 const creditsBalanceSchema = z.preprocess((value) => {
+  if (value === null) {
+    return null;
+  }
   if (typeof value !== "string") {
     return value;
   }
@@ -41,7 +44,7 @@ const creditsBalanceSchema = z.preprocess((value) => {
     return Number.NaN;
   }
   return Number(trimmed);
-}, z.number().finite());
+}, z.number().finite().nullable());
 
 const codexUsageResponseSchema = z.object({
   plan_type: z.string().nullable().optional(),
@@ -183,17 +186,21 @@ function normalizeCodexUsage(
     usage.rate_limit.secondary_window ??
     usage.code_review_rate_limit?.secondary_window;
 
+  const normalizedCredits =
+    usage.credits?.has_credits &&
+    (usage.credits.unlimited || typeof usage.credits.balance === "number")
+      ? {
+          hasCredits: true,
+          unlimited: usage.credits.unlimited,
+          balance: usage.credits.balance ?? 0,
+        }
+      : undefined;
+
   return {
     planType: usage.plan_type,
     primaryWindow: normalizeUsageWindow(primaryWindow),
     secondaryWindow: normalizeUsageWindow(secondaryWindow),
-    credits: usage.credits
-      ? {
-          hasCredits: usage.credits.has_credits,
-          unlimited: usage.credits.unlimited,
-          balance: usage.credits.balance,
-        }
-      : undefined,
+    credits: normalizedCredits,
   };
 }
 

@@ -93,7 +93,8 @@ export function UsagePanel() {
   const claudeQuery = useQuery(
     orpc.sessions.localClaude.getUsage.queryOptions({
       retry: false,
-      refetchInterval: 60_000,
+      refetchInterval: 5 * 60_000,
+      staleTime: 5 * 60_000,
       enabled: usageSource === "claude",
     }),
   );
@@ -101,7 +102,8 @@ export function UsagePanel() {
   const ralphLoopQuery = useQuery(
     orpc.sessions.ralphLoop.getUsage.queryOptions({
       retry: false,
-      refetchInterval: 60_000,
+      refetchInterval: 5 * 60_000,
+      staleTime: 5 * 60_000,
       enabled: usageSource === "ralphLoop",
     }),
   );
@@ -109,7 +111,8 @@ export function UsagePanel() {
   const codexQuery = useQuery(
     orpc.sessions.codex.getUsage.queryOptions({
       retry: false,
-      refetchInterval: 60_000,
+      refetchInterval: 5 * 60_000,
+      staleTime: 5 * 60_000,
       enabled: usageSource === "codex",
     }),
   );
@@ -117,7 +120,8 @@ export function UsagePanel() {
   const cursorAgentQuery = useQuery(
     orpc.sessions.cursorAgent.getUsage.queryOptions({
       retry: false,
-      refetchInterval: 60_000,
+      refetchInterval: 5 * 60_000,
+      staleTime: 5 * 60_000,
       enabled: usageSource === "cursorAgent",
     }),
   );
