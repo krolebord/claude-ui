@@ -4,6 +4,11 @@ import { ProjectDefaultsDialog } from "@renderer/components/project-defaults-dia
 import { SessionPage } from "@renderer/components/session-page";
 import { SessionSidebar } from "@renderer/components/session-sidebar";
 import { SettingsDialog } from "@renderer/components/settings-dialog";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@renderer/components/ui/resizable";
 import { Toaster } from "@renderer/components/ui/sonner";
 import { WelcomePage } from "@renderer/components/welcome-page";
 import { useAppShortcuts } from "@renderer/hooks/use-app-shortcuts";
@@ -36,23 +41,27 @@ function App() {
   useValidateActiveSession();
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <SessionSidebar />
-
-      <main className="flex min-w-0 flex-1 flex-col bg-black/15">
-        {useMainPage()}
-      </main>
+    <>
+      <div className="h-screen overflow-hidden">
+        <ResizablePanelGroup orientation="horizontal">
+          <ResizablePanel defaultSize="18" minSize="12" maxSize="35">
+            <SessionSidebar />
+          </ResizablePanel>
+          <ResizableHandle />
+          <ResizablePanel>
+            <main className="flex h-full min-w-0 flex-col bg-black/15">
+              {useMainPage()}
+            </main>
+          </ResizablePanel>
+        </ResizablePanelGroup>
+      </div>
 
       <ConfirmDialog />
-
       <NewSessionDialog />
-
       <ProjectDefaultsDialog />
-
       <SettingsDialog />
-
       <Toaster closeButton />
-    </div>
+    </>
   );
 }
 

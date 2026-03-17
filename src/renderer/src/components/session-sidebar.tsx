@@ -314,7 +314,7 @@ export function SessionSidebar() {
   );
 
   return (
-    <aside className="flex h-full w-[272px] shrink-0 flex-col border-r border-border/70 bg-black/35 backdrop-blur-xl">
+    <aside className="flex h-full w-full flex-col border-r border-border/70 bg-black/35 backdrop-blur-xl">
       <div className="flex h-9 border-b border-border/70">
         <Button
           variant="flat"

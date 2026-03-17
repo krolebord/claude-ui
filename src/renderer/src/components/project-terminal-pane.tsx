@@ -4,6 +4,11 @@ import {
   type TerminalPaneHandle,
 } from "@renderer/components/terminal-pane";
 import { Button } from "@renderer/components/ui/button";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@renderer/components/ui/resizable";
 import { cn } from "@renderer/lib/utils";
 import { orpc } from "@renderer/orpc-client";
 import {
@@ -228,125 +233,129 @@ export function ProjectTerminalPane({ cwd }: { cwd: string }) {
   );
 
   return (
-    <div className="flex h-full min-h-0">
-      <div className="min-w-0 flex-1 bg-black/10">
-        {activeTerminal ? (
-          <TerminalPane
-            ref={terminalRef}
-            onInput={handleTerminalInput}
-            onResize={handleTerminalResize}
-            trackGlobalSize={false}
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center p-6">
-            <div className="max-w-xs space-y-3 text-center">
-              <p className="text-sm text-zinc-300">
-                No terminal selected for this project.
-              </p>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  void handleCreateTerminal();
-                }}
-                disabled={isCreating}
-              >
-                Create terminal
-              </Button>
+    <ResizablePanelGroup orientation="horizontal" className="h-full min-h-0">
+      <ResizablePanel defaultSize="80" minSize="40">
+        <div className="h-full min-w-0 bg-black/10">
+          {activeTerminal ? (
+            <TerminalPane
+              ref={terminalRef}
+              onInput={handleTerminalInput}
+              onResize={handleTerminalResize}
+              trackGlobalSize={false}
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center p-6">
+              <div className="max-w-xs space-y-3 text-center">
+                <p className="text-sm text-zinc-300">
+                  No terminal selected for this project.
+                </p>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    void handleCreateTerminal();
+                  }}
+                  disabled={isCreating}
+                >
+                  Create terminal
+                </Button>
+              </div>
             </div>
-          </div>
-        )}
-      </div>
-
-      <aside className="flex w-52 shrink-0 flex-col border-l border-border/70 bg-black/15">
-        <div className="flex h-7 border-b border-border/70">
-          <div className="flex flex-1 items-center gap-1.5 px-2">
-            <TerminalSquare className="size-3.5 text-muted-foreground" />
-            <span className="truncate text-xs font-medium">
-              Project Terminals
-            </span>
-          </div>
-          <Button
-            variant="flat"
-            className="h-full w-9 shrink-0 px-0"
-            onClick={() => {
-              void handleCreateTerminal();
-            }}
-            disabled={isCreating}
-          >
-            <Plus className="size-3.5" />
-          </Button>
+          )}
         </div>
-
-        {workspace?.order.length ? (
-          <ul className="min-h-0 flex-1 overflow-y-auto">
-            {workspace.order.map((terminalId) => {
-              const terminal = workspace.terminals[terminalId];
-              if (!terminal) {
-                return null;
-              }
-
-              const statusMeta = getTerminalStatusMeta(terminal.status);
-              const StatusIcon = statusMeta.icon;
-              const isActive = terminalId === activeTerminalId;
-              const isClosing = closingTerminalId === terminalId;
-              const isSelecting = selectingTerminalId === terminalId;
-
-              return (
-                <li key={terminalId} className="group/terminal relative">
-                  <button
-                    type="button"
-                    className={cn(
-                      "flex w-full items-center gap-1.5 px-1.5 py-1 pr-7 text-left text-sm transition",
-                      isActive
-                        ? "bg-white/12 text-white"
-                        : "text-zinc-400 hover:bg-white/8 hover:text-zinc-200",
-                    )}
-                    onClick={() => {
-                      void handleSelectTerminal(terminalId);
-                    }}
-                    disabled={isClosing || isSelecting}
-                  >
-                    <StatusIcon
-                      className={cn(
-                        "size-3 shrink-0",
-                        statusMeta.className,
-                        statusMeta.animate && "animate-spin",
-                      )}
-                    />
-                    <span className="truncate text-xs">{terminal.title}</span>
-                  </button>
-                  <Button
-                    variant="flat"
-                    className="absolute inset-y-0 right-0 h-full w-7 px-0 opacity-0 group-hover/terminal:opacity-100"
-                    disabled={isClosing}
-                    onClick={() => {
-                      void handleCloseTerminal(terminalId);
-                    }}
-                  >
-                    <X className="size-3" />
-                  </Button>
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <div className="flex min-h-0 flex-1 items-center justify-center px-4 text-center">
-            <div className="space-y-2 text-xs text-zinc-500">
-              <p>No project terminals</p>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  void handleCreateTerminal();
-                }}
-                disabled={isCreating}
-              >
-                Create terminal
-              </Button>
+      </ResizablePanel>
+      <ResizableHandle />
+      <ResizablePanel defaultSize="20" minSize="12" maxSize="40">
+        <aside className="flex h-full flex-col border-l border-border/70 bg-black/15">
+          <div className="flex h-7 border-b border-border/70">
+            <div className="flex flex-1 items-center gap-1.5 px-2">
+              <TerminalSquare className="size-3.5 text-muted-foreground" />
+              <span className="truncate text-xs font-medium">
+                Project Terminals
+              </span>
             </div>
+            <Button
+              variant="flat"
+              className="h-full w-9 shrink-0 px-0"
+              onClick={() => {
+                void handleCreateTerminal();
+              }}
+              disabled={isCreating}
+            >
+              <Plus className="size-3.5" />
+            </Button>
           </div>
-        )}
-      </aside>
-    </div>
+
+          {workspace?.order.length ? (
+            <ul className="min-h-0 flex-1 overflow-y-auto">
+              {workspace.order.map((terminalId) => {
+                const terminal = workspace.terminals[terminalId];
+                if (!terminal) {
+                  return null;
+                }
+
+                const statusMeta = getTerminalStatusMeta(terminal.status);
+                const StatusIcon = statusMeta.icon;
+                const isActive = terminalId === activeTerminalId;
+                const isClosing = closingTerminalId === terminalId;
+                const isSelecting = selectingTerminalId === terminalId;
+
+                return (
+                  <li key={terminalId} className="group/terminal relative">
+                    <button
+                      type="button"
+                      className={cn(
+                        "flex w-full items-center gap-1.5 px-1.5 py-1 pr-7 text-left text-sm transition",
+                        isActive
+                          ? "bg-white/12 text-white"
+                          : "text-zinc-400 hover:bg-white/8 hover:text-zinc-200",
+                      )}
+                      onClick={() => {
+                        void handleSelectTerminal(terminalId);
+                      }}
+                      disabled={isClosing || isSelecting}
+                    >
+                      <StatusIcon
+                        className={cn(
+                          "size-3 shrink-0",
+                          statusMeta.className,
+                          statusMeta.animate && "animate-spin",
+                        )}
+                      />
+                      <span className="truncate text-xs">{terminal.title}</span>
+                    </button>
+                    <Button
+                      variant="flat"
+                      className="absolute inset-y-0 right-0 h-full w-7 px-0 opacity-0 group-hover/terminal:opacity-100"
+                      disabled={isClosing}
+                      onClick={() => {
+                        void handleCloseTerminal(terminalId);
+                      }}
+                    >
+                      <X className="size-3" />
+                    </Button>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <div className="flex min-h-0 flex-1 items-center justify-center px-4 text-center">
+              <div className="space-y-2 text-xs text-zinc-500">
+                <p>No project terminals</p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    void handleCreateTerminal();
+                  }}
+                  disabled={isCreating}
+                >
+                  Create terminal
+                </Button>
+              </div>
+            </div>
+          )}
+        </aside>
+      </ResizablePanel>
+    </ResizablePanelGroup>
   );
 }
