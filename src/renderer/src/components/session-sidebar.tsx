@@ -313,31 +313,31 @@ export function SessionSidebar() {
   );
 
   return (
-    <aside className="flex h-full w-[304px] shrink-0 flex-col border-r border-border/70 bg-black/35 backdrop-blur-xl">
-      <div className="flex h-12 items-center gap-1.5 border-b border-border/70 px-2">
-        <button
-          type="button"
+    <aside className="flex h-full w-[272px] shrink-0 flex-col border-r border-border/70 bg-black/35 backdrop-blur-xl">
+      <div className="flex h-9 border-b border-border/70">
+        <Button
+          variant="flat"
+          className="h-full w-9 shrink-0 px-0"
           onClick={openSettingsDialog}
-          className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-white/5 text-zinc-300 transition hover:bg-white/10 hover:text-white"
           aria-label="Settings"
         >
           <Settings className="size-3.5" />
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="flat"
+          className="h-full flex-1 gap-1.5 px-2 text-xs"
           onClick={() => createProjectMutation.mutate()}
           disabled={createProjectMutation.isPending}
-          className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-2.5 py-1.5 text-xs font-medium text-zinc-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <FolderPlus className="size-3.5" />
           {createProjectMutation.isPending
             ? "Selecting project..."
             : "Add new project"}
-        </button>
+        </Button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
-        <div className="space-y-1.5">
+      <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
+        <div className="space-y-1">
           <DragDropProvider
             sensors={projectDragSensors}
             onDragEnd={handleDragEnd}
@@ -380,7 +380,7 @@ export function SessionSidebar() {
                 <div className="flex items-center gap-1.5 rounded-md px-0.5 py-0.5">
                   <button
                     type="button"
-                    className="flex min-w-0 flex-1 cursor-default items-center gap-1.5 rounded-md px-1.5 py-1.5 text-left text-sm font-medium text-zinc-100 opacity-90 transition"
+                    className="flex min-w-0 flex-1 cursor-default items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-sm font-medium text-zinc-100 opacity-90 transition"
                   >
                     <span className="inline-flex w-4 shrink-0" />
                     <FolderOpen className="size-4 shrink-0 text-zinc-300" />
@@ -452,7 +452,7 @@ function SortableProjectGroup({
           ref={handleRef}
           type="button"
           onClick={onToggleCollapsed}
-          className="flex min-w-0 flex-1 cursor-grab items-center gap-1.5 rounded-md px-1.5 py-1.5 text-left text-sm font-medium text-zinc-100 transition hover:bg-white/5 active:cursor-grabbing"
+          className="flex min-w-0 flex-1 cursor-grab items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-sm font-medium text-zinc-100 transition hover:bg-white/5 active:cursor-grabbing"
         >
           {group.collapsed ? (
             <ChevronRight className="size-4 shrink-0 text-zinc-400" />

@@ -153,7 +153,7 @@ function RalphLoopSessionPage({
       resizeTerminal={orpc.sessions.ralphLoop.resizeSessionTerminal.call}
       readOnly={loopReadOnly}
       controls={
-        <header className="flex h-12 flex-wrap items-center gap-2 border-b border-border/70 px-2">
+        <header className="flex h-9 flex-wrap items-center gap-2 border-b border-border/70 px-2">
           <Badge variant="secondary">
             Iteration {session.loopState.currentIteration}/
             {session.startupConfig.maxIterations}
@@ -336,7 +336,7 @@ function TerminalPage({
     <ResizablePanelGroup orientation="vertical" className="min-h-0 flex-1">
       <ResizablePanel defaultSize={70} minSize={35}>
         <div className="flex h-full min-h-0 flex-col">
-          <header className="flex h-10 shrink-0 items-center gap-2 border-b border-border/70 px-3">
+          <header className="flex h-9 shrink-0 items-center gap-2 border-b border-border/70 px-2">
             {(() => {
               const Icon = sessionTypeConfig[session.type]?.icon;
               return Icon ? (

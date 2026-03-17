@@ -258,26 +258,27 @@ export function ProjectTerminalPane({ cwd }: { cwd: string }) {
       </div>
 
       <aside className="flex w-52 shrink-0 flex-col border-l border-border/70 bg-black/15">
-        <div className="flex h-10 items-center gap-2 border-b border-border/70 px-3">
-          <TerminalSquare className="size-4 text-muted-foreground" />
-          <span className="truncate text-sm font-medium">
-            Project Terminals
-          </span>
+        <div className="flex h-7 border-b border-border/70">
+          <div className="flex flex-1 items-center gap-1.5 px-2">
+            <TerminalSquare className="size-3.5 text-muted-foreground" />
+            <span className="truncate text-xs font-medium">
+              Project Terminals
+            </span>
+          </div>
           <Button
-            size="icon"
-            variant="ghost"
-            className="ml-auto size-7"
+            variant="flat"
+            className="h-full w-9 shrink-0 px-0"
             onClick={() => {
               void handleCreateTerminal();
             }}
             disabled={isCreating}
           >
-            <Plus className="size-4" />
+            <Plus className="size-3.5" />
           </Button>
         </div>
 
         {workspace?.order.length ? (
-          <ul className="min-h-0 flex-1 overflow-y-auto p-2">
+          <ul className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-1">
             {workspace.order.map((terminalId) => {
               const terminal = workspace.terminals[terminalId];
               if (!terminal) {
@@ -291,44 +292,39 @@ export function ProjectTerminalPane({ cwd }: { cwd: string }) {
               const isSelecting = selectingTerminalId === terminalId;
 
               return (
-                <li key={terminalId} className="mb-1 last:mb-0">
-                  <div
+                <li key={terminalId} className="group/terminal relative">
+                  <button
+                    type="button"
                     className={cn(
-                      "flex items-center gap-2 rounded-md border px-2 py-1.5 transition",
+                      "flex w-full items-center gap-1.5 px-1.5 py-1 pr-7 text-left text-sm transition",
                       isActive
-                        ? "border-white/15 bg-white/10"
-                        : "border-transparent hover:border-white/10 hover:bg-white/5",
+                        ? "bg-white/12 text-white"
+                        : "text-zinc-400 hover:bg-white/8 hover:text-zinc-200",
                     )}
+                    onClick={() => {
+                      void handleSelectTerminal(terminalId);
+                    }}
+                    disabled={isClosing || isSelecting}
                   >
-                    <button
-                      type="button"
-                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                      onClick={() => {
-                        void handleSelectTerminal(terminalId);
-                      }}
-                      disabled={isClosing || isSelecting}
-                    >
-                      <StatusIcon
-                        className={cn(
-                          "size-3.5 shrink-0",
-                          statusMeta.className,
-                          statusMeta.animate && "animate-spin",
-                        )}
-                      />
-                      <span className="truncate text-sm">{terminal.title}</span>
-                    </button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="size-6 shrink-0"
-                      disabled={isClosing}
-                      onClick={() => {
-                        void handleCloseTerminal(terminalId);
-                      }}
-                    >
-                      <X className="size-3.5" />
-                    </Button>
-                  </div>
+                    <StatusIcon
+                      className={cn(
+                        "size-3 shrink-0",
+                        statusMeta.className,
+                        statusMeta.animate && "animate-spin",
+                      )}
+                    />
+                    <span className="truncate text-xs">{terminal.title}</span>
+                  </button>
+                  <Button
+                    variant="flat"
+                    className="absolute inset-y-0 right-0 h-full w-7 px-0 opacity-0 group-hover/terminal:opacity-100"
+                    disabled={isClosing}
+                    onClick={() => {
+                      void handleCloseTerminal(terminalId);
+                    }}
+                  >
+                    <X className="size-3" />
+                  </Button>
                 </li>
               );
             })}
