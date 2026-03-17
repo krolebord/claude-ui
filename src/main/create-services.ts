@@ -10,6 +10,7 @@ import { generateCodexSessionTitle } from "./generate-codex-session-title";
 import log from "./logger";
 import { PersistenceOrchestrator } from "./persistence-orchestrator";
 import { PowerSaveBlockerManager } from "./power-save-blocker-manager";
+import { ProjectGitService } from "./project-git-service";
 import {
   defineProjectState,
   defineProjectStatePersistence,
@@ -148,6 +149,9 @@ export async function createServices(options: CreateServicesOptions) {
     }
   }
 
+  const projectGitService = new ProjectGitService(projectsState);
+  projectGitService.start();
+
   const sessionsState = defineSessionServiceState();
   persistenceService.registerAndHydrate(
     defineSessionStatePersistence(sessionsState),
@@ -211,6 +215,7 @@ export async function createServices(options: CreateServicesOptions) {
   shutdownDisposable.addDisposable(
     async () => await projectTerminalsManager.dispose(),
   );
+  shutdownDisposable.addDisposable(() => projectGitService.dispose());
   shutdownDisposable.addDisposable(
     async () => await codexSessionsManager.dispose(),
   );
@@ -228,6 +233,7 @@ export async function createServices(options: CreateServicesOptions) {
     appSettingsState,
     projectsState,
     projectTerminalsState,
+    projectGitService,
     getMainWindow,
     sessionsService,
     projectTerminalsManager,

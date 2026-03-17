@@ -4,6 +4,7 @@ import type { Session } from "src/main/sessions/state";
 export interface ProjectSessionGroup {
   path: string;
   name: string;
+  subtitle?: string;
   collapsed: boolean;
   fromProjectList: boolean;
   sessions: Session[];
@@ -117,6 +118,7 @@ export function buildProjectSessionGroups(
     groups.push({
       path: project.path,
       name: getProjectNameFromPath(project.path),
+      subtitle: project.gitBranch,
       collapsed: project.collapsed,
       fromProjectList: true,
       sessions: sessionsByPath.get(project.path) ?? [],

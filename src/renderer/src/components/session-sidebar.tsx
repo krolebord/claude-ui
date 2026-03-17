@@ -52,6 +52,7 @@ import {
   Folder,
   FolderOpen,
   FolderPlus,
+  GitBranch,
   GitFork,
   LoaderCircle,
   type LucideIcon,
@@ -452,7 +453,7 @@ function SortableProjectGroup({
           ref={handleRef}
           type="button"
           onClick={onToggleCollapsed}
-          className="flex min-w-0 flex-1 cursor-grab items-center gap-1.5 px-1.5 py-1 text-left text-sm font-medium text-zinc-100 transition hover:bg-white/8 active:cursor-grabbing"
+          className="flex min-w-0 flex-1 cursor-grab items-center gap-1.5 px-1.5 py-1 text-left transition hover:bg-white/8 active:cursor-grabbing"
         >
           {group.collapsed ? (
             <ChevronRight className="size-4 shrink-0 text-zinc-400" />
@@ -464,7 +465,17 @@ function SortableProjectGroup({
           ) : (
             <FolderOpen className="size-4 shrink-0 text-zinc-300" />
           )}
-          <span className="truncate">{group.name}</span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium text-zinc-100">
+              {group.name}
+            </span>
+            {group.subtitle ? (
+              <span className="mt-0.5 flex items-center gap-1 text-xs text-zinc-400">
+                <GitBranch className="size-3 shrink-0" />
+                <span className="truncate">{group.subtitle}</span>
+              </span>
+            ) : null}
+          </span>
         </button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

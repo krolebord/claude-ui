@@ -117,6 +117,7 @@ export const projectsRouter = {
       context.projectsState.updateState((projects) => {
         projects.push({ path, collapsed: false });
       });
+      await context.projectGitService.refreshProject(path);
       return { path };
     }),
   setProjectCollapsed: procedure
