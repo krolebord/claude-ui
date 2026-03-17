@@ -166,6 +166,8 @@ export const projectsRouter = {
       const path = normalizeProjectPath(input.path);
       if (!path) return;
 
+      await context.projectTerminalsManager.deleteWorkspace(path);
+
       context.projectsState.updateState((projects) => {
         const idx = projects.findIndex((p) => p.path === path);
         if (idx === -1) return;

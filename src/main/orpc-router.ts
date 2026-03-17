@@ -3,6 +3,7 @@ import { appSettingsRouter } from "./app-settings";
 import { fsRouter } from "./fs.router";
 import { procedure } from "./orpc";
 import { projectsRouter } from "./project-service";
+import { projectTerminalsRouter } from "./project-terminals";
 import { claudeSessionsRouter } from "./session-service";
 import { codexSessionsRouter } from "./sessions/codex.session";
 import { cursorAgentSessionsRouter } from "./sessions/cursor-agent.session";
@@ -41,6 +42,7 @@ const sessionsRouter = {
 export const orpcRouter = {
   appSettings: appSettingsRouter,
   projects: projectsRouter,
+  projectTerminals: projectTerminalsRouter,
   fs: fsRouter,
   stateSync: stateSyncRouter,
   sessions: sessionsRouter,

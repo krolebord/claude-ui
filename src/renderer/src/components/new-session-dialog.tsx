@@ -56,12 +56,7 @@ import {
   useHotkey,
 } from "@tanstack/react-hotkeys";
 import { useMutation } from "@tanstack/react-query";
-import {
-  AlertCircle,
-  ChevronsUpDown,
-  Repeat,
-  TerminalSquare,
-} from "lucide-react";
+import { AlertCircle, ChevronsUpDown, Repeat } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 import { useState } from "react";
 import { create } from "zustand";
@@ -85,12 +80,7 @@ export const useNewSessionDialogStore = create(
   ),
 );
 
-type SessionType =
-  | "claude"
-  | "codex"
-  | "cursorAgent"
-  | "ralphLoop"
-  | "terminal";
+type SessionType = "claude" | "codex" | "cursorAgent" | "ralphLoop";
 
 const SESSION_TYPE_OPTIONS: {
   value: SessionType;
@@ -101,7 +91,6 @@ const SESSION_TYPE_OPTIONS: {
   { value: "codex", label: "Codex", icon: CodexIcon },
   { value: "cursorAgent", label: "Cursor", icon: CursorAgentIcon },
   { value: "ralphLoop", label: "Ralph Loop", icon: Repeat },
-  { value: "terminal", label: "Terminal", icon: TerminalSquare },
 ];
 
 const CODEX_MODEL_REASONING_EFFORT_OPTIONS: {
@@ -244,10 +233,8 @@ export function NewSessionDialog() {
           <CodexSessionForm key={`codex-${openProjectCwd}`} />
         ) : sessionType === "cursorAgent" ? (
           <CursorAgentSessionForm key={`cursor-agent-${openProjectCwd}`} />
-        ) : sessionType === "ralphLoop" ? (
-          <RalphLoopSessionForm key={`ralph-loop-${openProjectCwd}`} />
         ) : (
-          <LocalTerminalSessionForm key={`terminal-${openProjectCwd}`} />
+          <RalphLoopSessionForm key={`ralph-loop-${openProjectCwd}`} />
         )}
       </DialogContent>
     </Dialog>
@@ -1302,123 +1289,6 @@ function CursorAgentSessionForm() {
           </div>
         </CollapsibleContent>
       </Collapsible>
-
-      {errorMessage ? (
-        <div className="flex items-center gap-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
-          <AlertCircle className="size-4 shrink-0" />
-          <span>{errorMessage}</span>
-        </div>
-      ) : null}
-
-      <DialogFooter>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => setOpenProjectCwd(null)}
-          disabled={isPending}
-        >
-          Cancel
-        </Button>
-        <Button type="submit" disabled={isPending}>
-          {isPending ? "Starting..." : "Create"}
-        </Button>
-      </DialogFooter>
-    </form>
-  );
-}
-
-function LocalTerminalSessionForm() {
-  const openProjectCwd = useNewSessionDialogStore(
-    (s) => s.openProjectCwd,
-  ) as string;
-  const setOpenProjectCwd = useNewSessionDialogStore(
-    (s) => s.setOpenProjectCwd,
-  );
-  const project = useAppState(
-    (state) =>
-      state.projects.find((item) => item.path === openProjectCwd) ?? null,
-  );
-  const projectPath = project?.path ?? openProjectCwd;
-  const setActiveSessionId = useActiveSessionStore((s) => s.setActiveSessionId);
-
-  const [sessionName, setSessionName] = useState("");
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  const handleError = (error: unknown) => {
-    if (error instanceof Error && error.message.trim()) {
-      setErrorMessage(error.message);
-      return;
-    }
-    setErrorMessage("Failed to start session.");
-  };
-
-  const startSession = useMutation(
-    orpc.sessions.localTerminal.startSession.mutationOptions({
-      onSuccess: (result) => {
-        setActiveSessionId(result.sessionId);
-        setOpenProjectCwd(null);
-      },
-      onError: handleError,
-    }),
-  );
-
-  const ensureProject = useMutation(
-    orpc.projects.addProject.mutationOptions({
-      onSuccess: () => {
-        const { cols, rows } = getTerminalSize();
-        startSession.mutate({
-          cwd: projectPath,
-          cols,
-          rows,
-          sessionName: sessionName || undefined,
-        });
-      },
-      onError: handleError,
-    }),
-  );
-
-  const isPending = ensureProject.isPending || startSession.isPending;
-
-  const handleSubmit = () => {
-    setErrorMessage(null);
-
-    const normalizedPath = projectPath.trim();
-    if (!normalizedPath) {
-      setErrorMessage("Project path is required.");
-      return;
-    }
-
-    ensureProject.mutate({ path: normalizedPath });
-  };
-
-  return (
-    <form
-      className="space-y-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        handleSubmit();
-      }}
-    >
-      <div className="space-y-2">
-        <Label htmlFor="new-terminal-session-name">
-          Session name (optional)
-        </Label>
-        <Input
-          id="new-terminal-session-name"
-          autoFocus
-          placeholder="Leave blank for generated name"
-          value={sessionName}
-          onChange={(event) => {
-            setSessionName(event.target.value);
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              handleSubmit();
-            }
-          }}
-        />
-      </div>
 
       {errorMessage ? (
         <div className="flex items-center gap-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">

@@ -15,6 +15,11 @@ import {
   defineProjectStatePersistence,
 } from "./project-service";
 import { readProjectSettingsForAll } from "./project-settings-file";
+import {
+  defineProjectTerminalsPersistence,
+  defineProjectTerminalsState,
+  ProjectTerminalsManager,
+} from "./project-terminals";
 import { SessionsServiceNew } from "./session-service";
 import { SessionStateFileManager } from "./session-state-file-manager";
 import { SessionTitleManager } from "./session-title-manager";
@@ -25,6 +30,7 @@ import { RalphLoopSessionsManager } from "./sessions/ralph-loop.session";
 import {
   defineSessionServiceState,
   defineSessionStatePersistence,
+  removeLegacyLocalTerminalSessions,
 } from "./sessions/state";
 import { StateOrchestrator } from "./state-orchestrator";
 
@@ -122,6 +128,11 @@ export async function createServices(options: CreateServicesOptions) {
     defineProjectStatePersistence(projectsState),
   );
 
+  const projectTerminalsState = defineProjectTerminalsState();
+  persistenceService.registerAndHydrate(
+    defineProjectTerminalsPersistence(projectTerminalsState),
+  );
+
   // Hydrate project defaults from .agent-ui/settings.jsonc files
   const projectPaths = projectsState.state.map((p) => p.path);
   if (projectPaths.length > 0) {
@@ -141,6 +152,7 @@ export async function createServices(options: CreateServicesOptions) {
   persistenceService.registerAndHydrate(
     defineSessionStatePersistence(sessionsState),
   );
+  removeLegacyLocalTerminalSessions(sessionsState);
 
   const sessionsService = new SessionsServiceNew({
     pluginDir: managedPluginDir,
@@ -152,6 +164,9 @@ export async function createServices(options: CreateServicesOptions) {
 
   const localTerminalSessionsManager = new LocalTerminalSessionsManager(
     sessionsState,
+  );
+  const projectTerminalsManager = new ProjectTerminalsManager(
+    projectTerminalsState,
   );
   const codexSessionsManager = new CodexSessionsManager({
     state: sessionsState,
@@ -178,6 +193,7 @@ export async function createServices(options: CreateServicesOptions) {
     serviceStates: {
       appSettings: appSettingsState,
       projects: projectsState,
+      projectTerminals: projectTerminalsState,
       sessions: sessionsState,
     },
   });
@@ -191,6 +207,9 @@ export async function createServices(options: CreateServicesOptions) {
   shutdownDisposable.addDisposable(async () => await sessionsService.dispose());
   shutdownDisposable.addDisposable(
     async () => await localTerminalSessionsManager.dispose(),
+  );
+  shutdownDisposable.addDisposable(
+    async () => await projectTerminalsManager.dispose(),
   );
   shutdownDisposable.addDisposable(
     async () => await codexSessionsManager.dispose(),
@@ -208,8 +227,10 @@ export async function createServices(options: CreateServicesOptions) {
   return {
     appSettingsState,
     projectsState,
+    projectTerminalsState,
     getMainWindow,
     sessionsService,
+    projectTerminalsManager,
     stateService,
     shutdown: shutdownDisposable.dispose,
     managedPluginDir,

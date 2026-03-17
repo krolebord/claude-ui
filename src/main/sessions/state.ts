@@ -28,3 +28,23 @@ export const defineSessionStatePersistence = (state: SessionServiceState) =>
     schema: z.record(z.string(), sessionSchema),
   });
 export type SessionServiceState = ReturnType<typeof defineSessionServiceState>;
+
+export function removeLegacyLocalTerminalSessions(
+  state: SessionServiceState,
+): number {
+  const localTerminalIds = Object.entries(state.state)
+    .filter(([, session]) => session.type === "local-terminal")
+    .map(([sessionId]) => sessionId);
+
+  if (localTerminalIds.length === 0) {
+    return 0;
+  }
+
+  state.updateState((sessions) => {
+    for (const sessionId of localTerminalIds) {
+      delete sessions[sessionId];
+    }
+  });
+
+  return localTerminalIds.length;
+}

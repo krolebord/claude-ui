@@ -538,14 +538,7 @@ function GroupSessionsList({
                 />
               );
             case "local-terminal":
-              return (
-                <LocalTerminalSessionSidebarItem
-                  key={session.sessionId}
-                  sessionId={session.sessionId}
-                  onRenameSession={onRenameSession}
-                  onViewRawSessionState={onViewRawSessionState}
-                />
-              );
+              return null;
             case "codex-local-terminal":
               return (
                 <CodexLocalTerminalSessionSidebarItem
@@ -747,92 +740,6 @@ function ClaudeLocalTerminalSessionSidebarItem({
           <GitFork className="size-3.5" />
           Fork session
         </ContextMenuItem>
-        <CommonSessionContextMenuItems
-          session={session}
-          onRenameSession={onRenameSession}
-          onViewRawSessionState={onViewRawSessionState}
-        />
-      </ContextMenuContent>
-    </ContextMenu>
-  );
-}
-
-function LocalTerminalSessionSidebarItem({
-  sessionId,
-  onRenameSession,
-  onViewRawSessionState,
-}: {
-  sessionId: string;
-  onRenameSession: (target: RenameSessionTarget) => void;
-  onViewRawSessionState: (sessionId: string) => void;
-}) {
-  const setActiveSessionId = useActiveSessionStore((x) => x.setActiveSessionId);
-
-  const session = useAppState((x) => x.sessions[sessionId]);
-
-  const resumeSessionMutation = useMutation({
-    mutationFn: async (sessionId: string) => {
-      const { cols, rows } = getTerminalSize();
-      await orpc.sessions.localTerminal.resumeSession.call({
-        sessionId,
-        cols,
-        rows,
-      });
-    },
-  });
-
-  const stopSessionMutation = useMutation({
-    mutationFn: async (sessionId: string) => {
-      await orpc.sessions.localTerminal.stopLiveSession.call({ sessionId });
-    },
-  });
-
-  const deleteSessionMutation = useMutation({
-    mutationFn: async (sessionId: string) => {
-      await orpc.sessions.localTerminal.deleteSession.call({ sessionId });
-    },
-    onSuccess: () => {
-      if (useActiveSessionStore.getState().activeSessionId === sessionId) {
-        setActiveSessionId(null);
-      }
-    },
-  });
-
-  return (
-    <ContextMenu>
-      <ContextMenuTrigger asChild>
-        <SessionSidebarItemTrigger sessionId={sessionId}>
-          {session.status === "stopped" ? (
-            <SidebarIconButton
-              icon={PlayIcon}
-              label="Resume session"
-              disabled={resumeSessionMutation.isPending}
-              onClick={() => {
-                resumeSessionMutation.mutate(sessionId);
-              }}
-            />
-          ) : (
-            <SidebarIconButton
-              icon={SquareIcon}
-              label="Stop session"
-              disabled={stopSessionMutation.isPending}
-              onClick={() => {
-                stopSessionMutation.mutate(sessionId);
-              }}
-            />
-          )}
-          <SidebarIconButton
-            icon={TrashIcon}
-            label="Delete session"
-            variant="destructive"
-            disabled={deleteSessionMutation.isPending}
-            onClick={() => {
-              deleteSessionMutation.mutate(sessionId);
-            }}
-          />
-        </SessionSidebarItemTrigger>
-      </ContextMenuTrigger>
-      <ContextMenuContent>
         <CommonSessionContextMenuItems
           session={session}
           onRenameSession={onRenameSession}

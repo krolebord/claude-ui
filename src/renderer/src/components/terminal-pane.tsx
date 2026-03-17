@@ -19,6 +19,7 @@ interface TerminalPaneProps {
   onInput: (data: string) => void;
   onResize: (cols: number, rows: number) => void;
   readOnly?: boolean;
+  trackGlobalSize?: boolean;
   ref: React.RefObject<TerminalPaneHandle | null>;
 }
 
@@ -27,6 +28,7 @@ export function TerminalPane({
   onInput,
   onResize,
   readOnly = false,
+  trackGlobalSize = true,
   ref,
 }: TerminalPaneProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -125,7 +127,9 @@ export function TerminalPane({
       }
 
       fitAddon.fit();
-      setTerminalSize(terminal.cols, terminal.rows);
+      if (trackGlobalSize) {
+        setTerminalSize(terminal.cols, terminal.rows);
+      }
       onResizeRef.current(terminal.cols, terminal.rows);
     };
     fitRef.current = fitAndNotify;
@@ -159,7 +163,7 @@ export function TerminalPane({
       terminalRef.current = null;
       fitRef.current = () => {};
     };
-  }, []);
+  }, [trackGlobalSize]);
 
   useEffect(() => {
     if (!terminalRef.current) {

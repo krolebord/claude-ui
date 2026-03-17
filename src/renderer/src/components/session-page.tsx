@@ -1,23 +1,36 @@
 import { type ClientPromiseResult, consumeEventIterator } from "@orpc/client";
+import { ProjectTerminalPane } from "@renderer/components/project-terminal-pane";
 import {
   TerminalPane,
   type TerminalPaneHandle,
 } from "@renderer/components/terminal-pane";
 import { Badge } from "@renderer/components/ui/badge";
 import { Button } from "@renderer/components/ui/button";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@renderer/components/ui/resizable";
 import { useActiveSessionId } from "@renderer/hooks/use-active-session-id";
 import { orpc } from "@renderer/orpc-client";
 import type { TerminalEvent } from "@shared/terminal-types";
 import { useMutation } from "@tanstack/react-query";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Repeat, TerminalSquare } from "lucide-react";
 import {
+  type ComponentType,
   type ReactNode,
+  type SVGProps,
   useCallback,
   useEffect,
   useRef,
   useState,
 } from "react";
 import { toast } from "sonner";
+import {
+  ClaudeCodeIcon,
+  CodexIcon,
+  CursorAgentIcon,
+} from "./session-type-icons";
 import { useAppState } from "./sync-state-provider";
 
 function useActiveSession() {
@@ -27,6 +40,17 @@ function useActiveSession() {
 }
 
 type Session = Exclude<ReturnType<typeof useActiveSession>, null>;
+
+const sessionTypeConfig: Record<
+  Session["type"],
+  { icon: ComponentType<SVGProps<SVGSVGElement>> }
+> = {
+  "claude-local-terminal": { icon: ClaudeCodeIcon },
+  "local-terminal": { icon: TerminalSquare },
+  "ralph-loop": { icon: Repeat },
+  "codex-local-terminal": { icon: CodexIcon },
+  "cursor-agent": { icon: CursorAgentIcon },
+};
 
 export function SessionPage() {
   const session = useActiveSession();
@@ -40,6 +64,7 @@ export function SessionPage() {
       return (
         <TerminalPage
           session={session}
+          bottomPane={<ProjectTerminalPane cwd={session.startupConfig.cwd} />}
           subscribe={(sessionId) =>
             orpc.sessions.localClaude.subscribeToSessionTerminal.call({
               sessionId,
@@ -52,26 +77,12 @@ export function SessionPage() {
         />
       );
     case "local-terminal":
-      return (
-        <TerminalPage
-          session={session}
-          subscribe={(sessionId) =>
-            orpc.sessions.localTerminal.subscribeToSessionTerminal.call({
-              sessionId,
-            })
-          }
-          writeToTerminal={
-            orpc.sessions.localTerminal.writeToSessionTerminal.call
-          }
-          resizeTerminal={
-            orpc.sessions.localTerminal.resizeSessionTerminal.call
-          }
-        />
-      );
+      return null;
     case "codex-local-terminal":
       return (
         <TerminalPage
           session={session}
+          bottomPane={<ProjectTerminalPane cwd={session.startupConfig.cwd} />}
           subscribe={(sessionId) =>
             orpc.sessions.codex.subscribeToSessionTerminal.call({
               sessionId,
@@ -85,6 +96,7 @@ export function SessionPage() {
       return (
         <TerminalPage
           session={session}
+          bottomPane={<ProjectTerminalPane cwd={session.startupConfig.cwd} />}
           subscribe={(sessionId) =>
             orpc.sessions.cursorAgent.subscribeToSessionTerminal.call({
               sessionId,
@@ -131,6 +143,7 @@ function RalphLoopSessionPage({
   return (
     <TerminalPage
       session={session}
+      bottomPane={<ProjectTerminalPane cwd={session.startupConfig.cwd} />}
       subscribe={(sessionId) =>
         orpc.sessions.ralphLoop.subscribeToSessionTerminal.call({
           sessionId,
@@ -239,6 +252,7 @@ function TerminalPage({
   resizeTerminal,
   readOnly,
   controls,
+  bottomPane,
 }: {
   session: Session;
   subscribe: (
@@ -252,6 +266,7 @@ function TerminalPage({
   }) => void;
   readOnly?: boolean;
   controls?: ReactNode;
+  bottomPane?: ReactNode;
 }) {
   const terminalRef = useRef<TerminalPaneHandle | null>(null);
 
@@ -318,23 +333,42 @@ function TerminalPage({
   const errorMessage = session.errorMessage || session.warningMessage || "";
 
   return (
-    <>
-      {controls}
-      {errorMessage ? (
-        <div className="mx-4 mt-4 flex items-center gap-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
-          <AlertCircle className="size-4" />
-          <span>{errorMessage}</span>
-        </div>
-      ) : null}
+    <ResizablePanelGroup orientation="vertical" className="min-h-0 flex-1">
+      <ResizablePanel defaultSize={70} minSize={35}>
+        <div className="flex h-full min-h-0 flex-col">
+          <header className="flex h-10 shrink-0 items-center gap-2 border-b border-border/70 px-3">
+            {(() => {
+              const Icon = sessionTypeConfig[session.type]?.icon;
+              return Icon ? (
+                <Icon className="size-4 shrink-0 text-muted-foreground" />
+              ) : null;
+            })()}
+            <span className="truncate text-sm font-medium">
+              {session.title}
+            </span>
+          </header>
+          {controls}
+          {errorMessage ? (
+            <div className="mx-4 mt-4 flex items-center gap-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
+              <AlertCircle className="size-4" />
+              <span>{errorMessage}</span>
+            </div>
+          ) : null}
 
-      <div className="min-h-0 flex-1 overflow-hidden">
-        <TerminalPane
-          ref={terminalRef}
-          onInput={handleTerminalInput}
-          onResize={handleTerminalResize}
-          readOnly={readOnly}
-        />
-      </div>
-    </>
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <TerminalPane
+              ref={terminalRef}
+              onInput={handleTerminalInput}
+              onResize={handleTerminalResize}
+              readOnly={readOnly}
+            />
+          </div>
+        </div>
+      </ResizablePanel>
+      <ResizableHandle />
+      <ResizablePanel defaultSize={30} minSize={15}>
+        {bottomPane ?? <div className="h-full bg-black/10" />}
+      </ResizablePanel>
+    </ResizablePanelGroup>
   );
 }
