@@ -40,7 +40,7 @@ async function createWindow(): Promise<void> {
     height: 800,
     minWidth: 900,
     minHeight: 600,
-    title: "Claude Wrapper",
+    title: "Agent UI",
     webPreferences: {
       preload,
       contextIsolation: true,

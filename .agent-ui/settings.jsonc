@@ -7,6 +7,7 @@
     "defaultSubagentModelOverride": "sonnet"
   },
   "localCodex": {
+    "model": "gpt-5.4",
     "permissionMode": "yolo",
     "modelReasoningEffort": "high"
   },
