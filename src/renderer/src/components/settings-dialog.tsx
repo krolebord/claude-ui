@@ -49,19 +49,21 @@ export function SettingsDialog() {
           <DialogDescription>Application settings</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="divide-y divide-border/40">
           <PreventSleepToggle />
 
           <OpenLogFolder />
           <OpenStatePluginFolder />
           <OpenSessionFilesFolder />
 
-          <div className="rounded-lg border border-white/10 px-4 py-3">
-            <div className="mb-3 flex items-center gap-2">
-              <Keyboard className="size-4 text-muted-foreground" />
-              <div className="text-sm font-medium">Keyboard shortcuts</div>
+          <div className="py-2.5">
+            <div className="mb-2 flex items-center gap-2">
+              <Keyboard className="size-3.5 text-muted-foreground" />
+              <div className="text-xs font-medium text-muted-foreground">
+                Keyboard shortcuts
+              </div>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {SHORTCUT_DEFINITIONS.map((shortcut) => (
                 <div
                   key={shortcut.id}
@@ -105,7 +107,7 @@ function OpenFolderItem({
   onOpen: () => void;
 }) {
   return (
-    <div className="flex items-center justify-between rounded-lg border border-white/10 px-4 py-3">
+    <div className="flex items-center justify-between py-2.5">
       <div className="space-y-0.5">
         <div className="text-sm font-medium">{label}</div>
         <div className="text-xs text-muted-foreground">{description}</div>
@@ -193,7 +195,7 @@ function PreventSleepToggle() {
   );
 
   return (
-    <div className="flex items-center justify-between rounded-lg border border-white/10 px-4 py-3">
+    <div className="flex items-center justify-between py-2.5">
       <div className="space-y-0.5">
         <div className="text-sm font-medium">Prevent sleep</div>
         <div className="text-xs text-muted-foreground">

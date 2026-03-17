@@ -278,7 +278,7 @@ export function ProjectTerminalPane({ cwd }: { cwd: string }) {
         </div>
 
         {workspace?.order.length ? (
-          <ul className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-1">
+          <ul className="min-h-0 flex-1 overflow-y-auto">
             {workspace.order.map((terminalId) => {
               const terminal = workspace.terminals[terminalId];
               if (!terminal) {

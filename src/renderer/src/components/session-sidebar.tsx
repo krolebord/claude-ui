@@ -336,8 +336,8 @@ export function SessionSidebar() {
         </Button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
-        <div className="space-y-1">
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div>
           <DragDropProvider
             sensors={projectDragSensors}
             onDragEnd={handleDragEnd}
@@ -375,12 +375,12 @@ export function SessionSidebar() {
             .map((group) => (
               <section
                 key={group.path}
-                className="group/project rounded-lg border border-transparent bg-white/[0.02] p-0.5 transition hover:border-white/10"
+                className="group/project border-b border-border/40"
               >
-                <div className="flex items-center gap-1.5 rounded-md px-0.5 py-0.5">
+                <div className="flex items-center">
                   <button
                     type="button"
-                    className="flex min-w-0 flex-1 cursor-default items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-sm font-medium text-zinc-100 opacity-90 transition"
+                    className="flex min-w-0 flex-1 cursor-default items-center gap-1.5 px-1.5 py-1 text-left text-sm font-medium text-zinc-100 opacity-90 transition"
                   >
                     <span className="inline-flex w-4 shrink-0" />
                     <FolderOpen className="size-4 shrink-0 text-zinc-300" />
@@ -443,16 +443,16 @@ function SortableProjectGroup({
     <section
       ref={ref}
       className={cn(
-        "group/project rounded-lg border border-transparent bg-white/[0.02] p-0.5 transition hover:border-white/10",
+        "group/project border-b border-border/40",
         isDragging && "opacity-50",
       )}
     >
-      <div className="flex items-center gap-1.5 rounded-md px-0.5 py-0.5">
+      <div className="flex">
         <button
           ref={handleRef}
           type="button"
           onClick={onToggleCollapsed}
-          className="flex min-w-0 flex-1 cursor-grab items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-sm font-medium text-zinc-100 transition hover:bg-white/5 active:cursor-grabbing"
+          className="flex min-w-0 flex-1 cursor-grab items-center gap-1.5 px-1.5 py-1 text-left text-sm font-medium text-zinc-100 transition hover:bg-white/8 active:cursor-grabbing"
         >
           {group.collapsed ? (
             <ChevronRight className="size-4 shrink-0 text-zinc-400" />
@@ -472,7 +472,7 @@ function SortableProjectGroup({
               icon={EllipsisVertical}
               label={`Project menu for ${group.name}`}
               size="md"
-              className="opacity-0 focus-visible:opacity-100 group-hover/project:opacity-100"
+              className="h-auto w-7 self-stretch rounded-none opacity-0 focus-visible:opacity-100 group-hover/project:opacity-100"
             />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
@@ -499,7 +499,7 @@ function SortableProjectGroup({
           icon={Plus}
           label={`New session in ${group.name}`}
           size="md"
-          className="opacity-0 focus-visible:opacity-100 group-hover/project:opacity-100"
+          className="h-auto w-7 self-stretch rounded-none opacity-0 focus-visible:opacity-100 group-hover/project:opacity-100"
           onClick={onNewSession}
         />
       </div>
@@ -524,7 +524,7 @@ function GroupSessionsList({
   onViewRawSessionState: (sessionId: string) => void;
 }) {
   return (
-    <ul className="space-y-0.5 px-1 pb-1">
+    <ul className="space-y-0.5">
       {sessions.length > 0 ? (
         sessions.map((session) => {
           switch (session.type) {
@@ -1300,7 +1300,7 @@ const SessionSidebarItemTrigger = forwardRef<
         type="button"
         onClick={() => switchSession(sessionId)}
         className={cn(
-          "flex w-full items-center justify-start gap-1.5 rounded-md px-1.5 py-1 pr-[3rem] text-sm transition",
+          "flex w-full items-center justify-start gap-1.5 py-1 pl-2.5 pr-[3rem] text-sm transition",
           isActive
             ? "bg-white/15 text-white"
             : session.status === "stopped"
