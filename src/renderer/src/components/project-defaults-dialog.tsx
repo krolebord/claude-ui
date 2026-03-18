@@ -22,7 +22,6 @@ import {
   SelectValue,
 } from "@renderer/components/ui/select";
 import { Textarea } from "@renderer/components/ui/textarea";
-import { Toggle } from "@renderer/components/ui/toggle";
 import {
   ToggleGroup,
   ToggleGroupItem,
@@ -40,6 +39,7 @@ import type {
   CursorAgentPermissionMode,
 } from "@shared/claude-types";
 import type {
+  CodexFastMode,
   CodexModelReasoningEffort,
   CodexPermissionMode,
 } from "@shared/codex-types";
@@ -78,6 +78,12 @@ const CODEX_MODEL_REASONING_EFFORT_OPTIONS: {
   { value: "medium", label: "Medium" },
   { value: "high", label: "High" },
   { value: "xhigh", label: "XHigh" },
+];
+
+const CODEX_FAST_MODE_OPTIONS: { value: CodexFastMode; label: string }[] = [
+  { value: "default", label: "Default" },
+  { value: "fast", label: "Fast" },
+  { value: "off", label: "Off" },
 ];
 
 const CLAUDE_EFFORT_OPTIONS: { value: ClaudeEffort; label: string }[] = [
@@ -139,7 +145,7 @@ export function ProjectDefaultsDialog() {
     useState<CodexPermissionMode>("default");
   const [codexModelReasoningEffort, setCodexModelReasoningEffort] =
     useState<CodexModelReasoningEffort>("high");
-  const [codexFastMode, setCodexFastMode] = useState(false);
+  const [codexFastMode, setCodexFastMode] = useState<CodexFastMode>("default");
   const [codexConfigOverrides, setCodexConfigOverrides] = useState("");
   const [cursorModel, setCursorModel] = useState("");
   const [cursorMode, setCursorMode] = useState<CursorAgentMode | undefined>(
@@ -180,7 +186,7 @@ export function ProjectDefaultsDialog() {
     setCodexModelReasoningEffort(
       project.localCodex?.modelReasoningEffort ?? "high",
     );
-    setCodexFastMode(project.localCodex?.fastMode ?? false);
+    setCodexFastMode(project.localCodex?.fastMode ?? "default");
     setCodexConfigOverrides(project.localCodex?.configOverrides ?? "");
     setCursorModel(project.localCursor?.model ?? "");
     setCursorMode(project.localCursor?.mode);
@@ -471,16 +477,27 @@ export function ProjectDefaultsDialog() {
 
                 <div className="w-fit shrink-0 space-y-2">
                   <Label className="whitespace-nowrap">Fast mode</Label>
-                  <Toggle
-                    type="button"
-                    variant="outline"
-                    pressed={codexFastMode}
-                    onPressedChange={setCodexFastMode}
-                    aria-label="Toggle fast mode"
-                    className="min-w-16"
+                  <Select
+                    value={codexFastMode}
+                    onValueChange={(value) => {
+                      setCodexFastMode(value as CodexFastMode);
+                    }}
                   >
-                    {codexFastMode ? "On" : "Off"}
-                  </Toggle>
+                    <SelectTrigger className="w-auto min-w-24 whitespace-nowrap">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CODEX_FAST_MODE_OPTIONS.map((option) => (
+                        <SelectItem
+                          key={option.value}
+                          value={option.value}
+                          className="whitespace-nowrap"
+                        >
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 

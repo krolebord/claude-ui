@@ -1,5 +1,6 @@
 import { call, EventPublisher } from "@orpc/server";
 import {
+  type CodexFastMode,
   type CodexModelReasoningEffort,
   type CodexPermissionMode,
   codexFastModeSchema,
@@ -54,7 +55,7 @@ const startCodexSessionSchema = z.object({
     .transform((value) => value?.trim() || undefined),
   model: z.string().optional(),
   modelReasoningEffort: codexModelReasoningEffortSchema.default("high"),
-  fastMode: codexFastModeSchema.default(false),
+  fastMode: codexFastModeSchema.default("default"),
   permissionMode: z.enum(["default", "full-auto", "yolo"]).default("default"),
   initialPrompt: z
     .string()
@@ -291,7 +292,7 @@ export class CodexSessionsManager {
     cwd: string;
     model?: string;
     modelReasoningEffort: CodexModelReasoningEffort;
-    fastMode?: boolean;
+    fastMode?: CodexFastMode;
     permissionMode: CodexPermissionMode;
     initialPrompt?: string;
     configOverrides?: string;

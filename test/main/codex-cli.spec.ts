@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildCodexArgs } from "../../src/main/codex-cli";
 
 describe("buildCodexArgs", () => {
-  it("defaults model reasoning effort to high", () => {
+  it("defaults model reasoning effort to high without fast-mode flags", () => {
     const { args } = buildCodexArgs({
       permissionMode: "default",
     });
@@ -11,12 +11,8 @@ describe("buildCodexArgs", () => {
       "--no-alt-screen",
       "--model",
       "gpt-5.3-codex",
-      "--enable",
-      "fast_mode",
       "-c",
       "model_reasoning_effort=high",
-      "-c",
-      "service_tier=flex",
     ]);
   });
 
@@ -30,14 +26,25 @@ describe("buildCodexArgs", () => {
     expect(args).toContain("model_reasoning_effort=minimal");
   });
 
-  it("uses fast service tier when fast mode is enabled", () => {
+  it("enables fast mode with the fast service tier", () => {
     const { args } = buildCodexArgs({
       permissionMode: "default",
-      fastMode: true,
+      fastMode: "fast",
     });
 
     expect(args).toContain("--enable");
     expect(args).toContain("fast_mode");
     expect(args).toContain("service_tier=fast");
+  });
+
+  it("disables fast mode when explicitly turned off", () => {
+    const { args } = buildCodexArgs({
+      permissionMode: "default",
+      fastMode: "off",
+    });
+
+    expect(args).toContain("--disable");
+    expect(args).toContain("fast_mode");
+    expect(args).not.toContain("service_tier=fast");
   });
 });

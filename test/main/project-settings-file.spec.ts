@@ -67,7 +67,7 @@ describe("project-settings-file", () => {
         localCodex: {
           permissionMode: "full-auto",
           modelReasoningEffort: "xhigh",
-          fastMode: true,
+          fastMode: "fast",
         },
       });
     });
@@ -151,7 +151,7 @@ describe("project-settings-file", () => {
         localCodex: {
           permissionMode: "yolo",
           modelReasoningEffort: "high",
-          fastMode: true,
+          fastMode: "fast",
         },
       });
 
@@ -163,7 +163,7 @@ describe("project-settings-file", () => {
       expect(content).toContain('"localCodex"');
       expect(content).toContain('"permissionMode": "yolo"');
       expect(content).toContain('"modelReasoningEffort": "high"');
-      expect(content).toContain('"fastMode": true');
+      expect(content).toContain('"fastMode": "fast"');
     });
 
     it("preserves existing comments on re-write", async () => {

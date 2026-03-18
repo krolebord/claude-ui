@@ -29,7 +29,6 @@ import {
   SelectValue,
 } from "@renderer/components/ui/select";
 import { Textarea } from "@renderer/components/ui/textarea";
-import { Toggle } from "@renderer/components/ui/toggle";
 import {
   ToggleGroup,
   ToggleGroupItem,
@@ -47,6 +46,7 @@ import type {
   ClaudePermissionMode,
 } from "@shared/claude-types";
 import type {
+  CodexFastMode,
   CodexModelReasoningEffort,
   CodexPermissionMode,
 } from "@shared/codex-types";
@@ -103,6 +103,12 @@ const CODEX_MODEL_REASONING_EFFORT_OPTIONS: {
   { value: "medium", label: "Medium" },
   { value: "high", label: "High" },
   { value: "xhigh", label: "XHigh" },
+];
+
+const CODEX_FAST_MODE_OPTIONS: { value: CodexFastMode; label: string }[] = [
+  { value: "default", label: "Default" },
+  { value: "fast", label: "Fast" },
+  { value: "off", label: "Off" },
 ];
 
 const CLAUDE_EFFORT_OPTIONS: { value: ClaudeEffort; label: string }[] = [
@@ -844,8 +850,8 @@ function CodexSessionForm() {
     useState<CodexModelReasoningEffort>(
       project?.localCodex?.modelReasoningEffort ?? "high",
     );
-  const [fastMode, setFastMode] = useState(
-    project?.localCodex?.fastMode ?? false,
+  const [fastMode, setFastMode] = useState<CodexFastMode>(
+    project?.localCodex?.fastMode ?? "default",
   );
   const [permissionMode, setPermissionMode] = useState<CodexPermissionMode>(
     project?.localCodex?.permissionMode ?? "default",
@@ -984,16 +990,27 @@ function CodexSessionForm() {
 
         <div className="w-fit shrink-0 space-y-2">
           <Label className="whitespace-nowrap">Fast mode</Label>
-          <Toggle
-            type="button"
-            variant="outline"
-            pressed={fastMode}
-            onPressedChange={setFastMode}
-            aria-label="Toggle fast mode"
-            className="min-w-16"
+          <Select
+            value={fastMode}
+            onValueChange={(value) => {
+              setFastMode(value as CodexFastMode);
+            }}
           >
-            {fastMode ? "On" : "Off"}
-          </Toggle>
+            <SelectTrigger className="w-auto min-w-24 whitespace-nowrap">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CODEX_FAST_MODE_OPTIONS.map((option) => (
+                <SelectItem
+                  key={option.value}
+                  value={option.value}
+                  className="whitespace-nowrap"
+                >
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 

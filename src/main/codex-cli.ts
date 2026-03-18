@@ -1,5 +1,6 @@
 import { shellQuote } from "@shared/utils";
 import type {
+  CodexFastMode,
   CodexModelReasoningEffort,
   CodexPermissionMode,
 } from "../shared/codex-types";
@@ -8,7 +9,7 @@ export interface BuildCodexArgsInput {
   permissionMode: CodexPermissionMode;
   model?: string;
   modelReasoningEffort?: CodexModelReasoningEffort;
-  fastMode?: boolean;
+  fastMode?: CodexFastMode;
   configOverrides?: string;
   initialPrompt?: string;
 }
@@ -25,11 +26,17 @@ export function buildCodexArgs(input: BuildCodexArgsInput): { args: string[] } {
   const model = input.model?.trim() || "gpt-5.3-codex";
   args.push("--model", model);
 
-  args.push("--enable", "fast_mode");
+  if (input.fastMode === "fast") {
+    args.push("--enable", "fast_mode");
+  } else if (input.fastMode === "off") {
+    args.push("--disable", "fast_mode");
+  }
 
   const modelReasoningEffort = input.modelReasoningEffort ?? "high";
   args.push("-c", `model_reasoning_effort=${modelReasoningEffort}`);
-  args.push("-c", `service_tier=${input.fastMode ? "fast" : "flex"}`);
+  if (input.fastMode === "fast") {
+    args.push("-c", "service_tier=fast");
+  }
 
   if (input.configOverrides?.trim()) {
     for (const line of input.configOverrides.split("\n")) {

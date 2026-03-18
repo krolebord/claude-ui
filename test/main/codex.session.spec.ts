@@ -60,7 +60,7 @@ function createManager(opts?: {
   const startupConfig: CodexLocalTerminalSessionData["startupConfig"] = {
     cwd: "/tmp",
     modelReasoningEffort: "high",
-    fastMode: false,
+    fastMode: "off",
     permissionMode: "default",
     initialPrompt: opts?.initialPrompt ?? "/plan summarize recent commits",
     model: undefined,
@@ -100,7 +100,7 @@ describe("CodexSessionsManager", () => {
       sessionId,
       cwd: "/tmp",
       modelReasoningEffort: "high",
-      fastMode: false,
+      fastMode: "off",
       permissionMode: "default",
       initialPrompt: "/plan summarize recent commits",
     });
@@ -131,7 +131,7 @@ describe("CodexSessionsManager", () => {
       sessionId,
       cwd: "/tmp",
       modelReasoningEffort: "high",
-      fastMode: false,
+      fastMode: "off",
       permissionMode: "default",
       initialPrompt: undefined,
     });
@@ -159,7 +159,7 @@ describe("CodexSessionsManager", () => {
       sessionId,
       cwd: "/tmp",
       modelReasoningEffort: "high",
-      fastMode: false,
+      fastMode: "off",
       permissionMode: "default",
       initialPrompt: undefined,
     });
@@ -187,7 +187,7 @@ describe("CodexSessionsManager", () => {
       sessionId,
       cwd: "/tmp",
       modelReasoningEffort: "high",
-      fastMode: false,
+      fastMode: "off",
       permissionMode: "default",
       initialPrompt: "summarize recent commits",
     });
@@ -207,7 +207,7 @@ describe("CodexSessionsManager", () => {
       sessionId,
       cwd: "/tmp",
       modelReasoningEffort: "high",
-      fastMode: false,
+      fastMode: "off",
       permissionMode: "default",
       initialPrompt: "/plan summarize recent commits",
     });
@@ -238,7 +238,7 @@ describe("CodexSessionsManager", () => {
       sessionId,
       cwd: "/tmp",
       modelReasoningEffort: "high",
-      fastMode: false,
+      fastMode: "off",
       permissionMode: "default",
       initialPrompt: undefined,
     });
@@ -270,7 +270,7 @@ describe("CodexSessionsManager", () => {
       sessionId,
       cwd: "/tmp",
       modelReasoningEffort: "high",
-      fastMode: false,
+      fastMode: "off",
       permissionMode: "default",
       initialPrompt: undefined,
     });
@@ -294,7 +294,7 @@ describe("CodexSessionsManager", () => {
     const startupConfig: CodexLocalTerminalSessionData["startupConfig"] = {
       cwd: "/tmp",
       modelReasoningEffort: "high",
-      fastMode: false,
+      fastMode: "off",
       permissionMode: "default",
       model: undefined,
       initialPrompt: undefined,
@@ -316,7 +316,7 @@ describe("CodexSessionsManager", () => {
         sessionId,
         cwd: "/tmp",
         modelReasoningEffort: "high",
-        fastMode: false,
+        fastMode: "off",
         permissionMode: "default",
         initialPrompt: undefined,
       });
@@ -337,7 +337,7 @@ describe("CodexSessionsManager", () => {
       sessionId,
       cwd: "/tmp",
       modelReasoningEffort: "high",
-      fastMode: true,
+      fastMode: "fast",
       permissionMode: "default",
       initialPrompt: undefined,
     });

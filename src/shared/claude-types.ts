@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type {
+  CodexFastMode,
   CodexModelReasoningEffort,
   CodexPermissionMode,
 } from "./codex-types";
@@ -49,7 +50,7 @@ export interface LocalCodexProjectSettings {
   model?: string;
   permissionMode?: CodexPermissionMode;
   modelReasoningEffort?: CodexModelReasoningEffort;
-  fastMode?: boolean;
+  fastMode?: CodexFastMode;
   configOverrides?: string;
 }
 
