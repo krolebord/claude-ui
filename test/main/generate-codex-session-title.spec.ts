@@ -25,7 +25,7 @@ describe("generateCodexSessionTitle", () => {
       [
         "exec",
         "--model",
-        "gpt-5.1-codex-mini",
+        "gpt-5.4-mini",
         "--ephemeral",
         "--color",
         "never",
