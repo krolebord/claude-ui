@@ -514,12 +514,12 @@ function SortableProjectGroup({
         isDragging && "opacity-50",
       )}
     >
-      <div className="flex">
+      <div className="relative flex">
         <button
           ref={handleRef}
           type="button"
           onClick={onToggleCollapsed}
-          className="flex min-w-0 flex-1 cursor-grab items-center gap-1.5 px-1.5 py-1 text-left transition hover:bg-white/8 active:cursor-grabbing"
+          className="flex min-w-0 flex-1 cursor-grab items-center gap-1.5 pl-1.5 pr-[3rem] py-1 text-left transition hover:bg-white/8 active:cursor-grabbing"
         >
           <span className="min-w-0 flex-1">
             <span className="flex items-center gap-1 text-sm font-medium text-zinc-100">
@@ -542,49 +542,47 @@ function SortableProjectGroup({
             ) : null}
           </span>
         </button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <SidebarIconButton
-              icon={EllipsisVertical}
-              label={`Project menu for ${group.displayName}`}
-              size="md"
-              className="h-auto w-7 self-stretch rounded-none opacity-0 focus-visible:opacity-100 group-hover/project:opacity-100"
-            />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            {canCreateWorktree ? (
-              <DropdownMenuItem onClick={onCreateWorktree}>
-                <GitFork className="size-3.5" />
-                Create worktree project
+        <div className="pointer-events-none absolute inset-y-0 right-1 flex items-center gap-0.5 opacity-0 transition group-hover/project:opacity-100 group-focus-within/project:opacity-100">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <SidebarIconButton
+                icon={EllipsisVertical}
+                label={`Project menu for ${group.displayName}`}
+              />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {canCreateWorktree ? (
+                <DropdownMenuItem onClick={onCreateWorktree}>
+                  <GitFork className="size-3.5" />
+                  Create worktree project
+                </DropdownMenuItem>
+              ) : null}
+              {canCreateWorktree ? <DropdownMenuSeparator /> : null}
+              <DropdownMenuItem onClick={onOpenSettings}>
+                <Settings className="size-3.5" />
+                Settings
               </DropdownMenuItem>
-            ) : null}
-            {canCreateWorktree ? <DropdownMenuSeparator /> : null}
-            <DropdownMenuItem onClick={onOpenSettings}>
-              <Settings className="size-3.5" />
-              Settings
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={onOpenFolder}>
-              <FolderOpen className="size-3.5" />
-              Open project folder
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              variant="destructive"
-              disabled={isDeleting}
-              onClick={onDelete}
-            >
-              <Trash2 className="size-3.5" />
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <SidebarIconButton
-          icon={Plus}
-          label={`New session in ${group.displayName}`}
-          size="md"
-          className="h-auto w-7 self-stretch rounded-none opacity-0 focus-visible:opacity-100 group-hover/project:opacity-100"
-          onClick={onNewSession}
-        />
+              <DropdownMenuItem onClick={onOpenFolder}>
+                <FolderOpen className="size-3.5" />
+                Open project folder
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                variant="destructive"
+                disabled={isDeleting}
+                onClick={onDelete}
+              >
+                <Trash2 className="size-3.5" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <SidebarIconButton
+            icon={Plus}
+            label={`New session in ${group.displayName}`}
+            onClick={onNewSession}
+          />
+        </div>
       </div>
       {!group.collapsed ? (
         <GroupSessionsList
@@ -1383,7 +1381,7 @@ const SessionSidebarItemTrigger = forwardRef<
         type="button"
         onClick={() => switchSession(sessionId)}
         className={cn(
-          "flex w-full items-center justify-start gap-1.5 py-1 pl-2.5 pr-[3rem] text-sm transition",
+          "flex w-full items-center justify-start gap-1.5 py-1 pl-5 pr-[3rem] text-sm transition",
           isActive
             ? "bg-white/15 text-white"
             : session.status === "stopped"
