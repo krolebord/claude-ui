@@ -11,17 +11,22 @@ import {
 import { Input } from "@renderer/components/ui/input";
 import { Label } from "@renderer/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@renderer/components/ui/select";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@renderer/components/ui/popover";
+import { cn } from "@renderer/lib/utils";
 import { orpc } from "@renderer/orpc-client";
 import { getProjectDisplayName } from "@renderer/services/terminal-session-selectors";
 import { useMutation } from "@tanstack/react-query";
-import { AlertCircle, FolderSearch, LoaderCircle } from "lucide-react";
-import { useEffect, useState } from "react";
+import {
+  AlertCircle,
+  Check,
+  ChevronDown,
+  FolderSearch,
+  LoaderCircle,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { create } from "zustand";
 import { combine } from "zustand/middleware";
 
@@ -100,11 +105,14 @@ export function ProjectWorktreeDialog() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [fromBranch, setFromBranch] = useState("");
+  const [branchPickerOpen, setBranchPickerOpen] = useState(false);
+  const [branchQuery, setBranchQuery] = useState("");
   const [newBranch, setNewBranch] = useState("");
   const [alias, setAlias] = useState("");
   const [parentPath, setParentPath] = useState("");
   const [destinationPath, setDestinationPath] = useState("");
   const [destinationWasEdited, setDestinationWasEdited] = useState(false);
+  const branchSearchInputRef = useRef<HTMLInputElement | null>(null);
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -138,6 +146,8 @@ export function ProjectWorktreeDialog() {
       setCreationData(null);
       setErrorMessage(null);
       setFromBranch("");
+      setBranchPickerOpen(false);
+      setBranchQuery("");
       setNewBranch("");
       setAlias("");
       setParentPath("");
@@ -160,6 +170,8 @@ export function ProjectWorktreeDialog() {
 
         setCreationData(data);
         setFromBranch(data.currentBranch);
+        setBranchPickerOpen(false);
+        setBranchQuery("");
         setNewBranch("");
         setAlias("");
         setParentPath(data.suggestedDestinationParentPath);
@@ -217,6 +229,13 @@ export function ProjectWorktreeDialog() {
     ? getProjectDisplayName(project)
     : (creationData?.sourceProjectName ?? openProjectPath);
   const isPending = isLoading || createMutation.isPending;
+  const normalizedBranchQuery = branchQuery.trim().toLocaleLowerCase();
+  const visibleBranches =
+    creationData?.localBranches.filter((branch) =>
+      normalizedBranchQuery
+        ? branch.toLocaleLowerCase().includes(normalizedBranchQuery)
+        : true,
+    ) ?? [];
 
   const closeDialog = () => {
     if (createMutation.isPending) {
@@ -303,24 +322,105 @@ export function ProjectWorktreeDialog() {
         >
           <div className="space-y-2">
             <Label htmlFor="worktree-from-branch">From branch</Label>
-            <Select
-              value={fromBranch}
-              onValueChange={(value) => {
-                setFromBranch(value);
+            <Popover
+              open={branchPickerOpen}
+              onOpenChange={(open) => {
+                setBranchPickerOpen(open);
+                if (!open) {
+                  setBranchQuery("");
+                }
               }}
-              disabled={!creationData || isPending}
             >
-              <SelectTrigger id="worktree-from-branch">
-                <SelectValue placeholder="Select a branch" />
-              </SelectTrigger>
-              <SelectContent>
-                {creationData?.localBranches.map((branch) => (
-                  <SelectItem key={branch} value={branch}>
-                    {branch}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              <PopoverTrigger asChild>
+                <Button
+                  id="worktree-from-branch"
+                  type="button"
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={branchPickerOpen}
+                  className="w-full justify-between px-3 font-normal"
+                  disabled={!creationData || isPending}
+                >
+                  <span
+                    className={cn(
+                      "truncate",
+                      !fromBranch && "text-muted-foreground",
+                    )}
+                  >
+                    {fromBranch || "Select a branch"}
+                  </span>
+                  <ChevronDown className="size-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="start"
+                className="w-[var(--radix-popover-trigger-width)] p-0"
+                onOpenAutoFocus={(event) => {
+                  event.preventDefault();
+                  requestAnimationFrame(() => {
+                    branchSearchInputRef.current?.focus();
+                  });
+                }}
+              >
+                <div className="border-b p-2">
+                  <Input
+                    ref={branchSearchInputRef}
+                    value={branchQuery}
+                    onChange={(event) => {
+                      setBranchQuery(event.target.value);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                      }
+                    }}
+                    placeholder="Search branches..."
+                    disabled={!creationData || isPending}
+                  />
+                </div>
+                <div
+                  className="max-h-64 overflow-y-auto p-1"
+                  role="listbox"
+                  aria-label="Branches"
+                >
+                  {visibleBranches.length ? (
+                    visibleBranches.map((branch) => {
+                      const isSelected = branch === fromBranch;
+
+                      return (
+                        <button
+                          key={branch}
+                          type="button"
+                          role="option"
+                          aria-selected={isSelected}
+                          className={cn(
+                            "hover:bg-accent hover:text-accent-foreground flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-hidden",
+                            isSelected && "bg-accent text-accent-foreground",
+                          )}
+                          onClick={() => {
+                            setFromBranch(branch);
+                            setBranchPickerOpen(false);
+                            setBranchQuery("");
+                          }}
+                        >
+                          <Check
+                            className={cn(
+                              "size-4 shrink-0",
+                              isSelected ? "opacity-100" : "opacity-0",
+                            )}
+                          />
+                          <span className="truncate">{branch}</span>
+                        </button>
+                      );
+                    })
+                  ) : (
+                    <div className="px-2 py-3 text-sm text-muted-foreground">
+                      No branches match your search.
+                    </div>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
 
           <div className="space-y-2">
