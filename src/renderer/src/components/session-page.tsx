@@ -26,6 +26,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { useAppState } from "./sync-state-provider";
+import { WelcomePage } from "./welcome-page";
 
 function useActiveSession() {
   const activeSessionId = useActiveSessionId();
@@ -37,9 +38,15 @@ type Session = Exclude<ReturnType<typeof useActiveSession>, null>;
 
 export function SessionPage() {
   const session = useActiveSession();
+  const projectCount = useAppState((state) => state.projects.length);
 
   if (!session) {
-    return null;
+    return (
+      <SessionPageLayout
+        topPane={<WelcomePage hasProjects={projectCount > 0} />}
+        bottomPane={<ProjectTerminalPane cwd={null} />}
+      />
+    );
   }
 
   switch (session.type) {
@@ -316,8 +323,8 @@ function TerminalPage({
   const errorMessage = session.errorMessage || session.warningMessage || "";
 
   return (
-    <ResizablePanelGroup orientation="vertical" className="min-h-0 flex-1">
-      <ResizablePanel defaultSize="70" minSize="35">
+    <SessionPageLayout
+      topPane={
         <div className="flex h-full min-h-0 flex-col">
           <SessionHeader session={session} />
           {controls}
@@ -337,9 +344,26 @@ function TerminalPage({
             />
           </div>
         </div>
+      }
+      bottomPane={bottomPane}
+    />
+  );
+}
+
+function SessionPageLayout({
+  topPane,
+  bottomPane,
+}: {
+  topPane: ReactNode;
+  bottomPane?: ReactNode;
+}) {
+  return (
+    <ResizablePanelGroup orientation="vertical" className="min-h-0 flex-1">
+      <ResizablePanel defaultSize={70} minSize={35}>
+        {topPane}
       </ResizablePanel>
       <ResizableHandle />
-      <ResizablePanel defaultSize="30" minSize="15">
+      <ResizablePanel defaultSize={30} minSize={15}>
         {bottomPane ?? <div className="h-full bg-black/10" />}
       </ResizablePanel>
     </ResizablePanelGroup>

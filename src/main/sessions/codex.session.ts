@@ -72,6 +72,12 @@ const renameCodexSessionSchema = z.object({
   title: z.string().trim().min(1),
 });
 
+const forkCodexSessionSchema = z.object({
+  sessionId: z.string(),
+  cols: z.number().optional(),
+  rows: z.number().optional(),
+});
+
 export const codexSessionsRouter = {
   startSession: procedure
     .input(startCodexSessionSchema)
@@ -121,6 +127,11 @@ export const codexSessionsRouter = {
       });
 
       return { sessionId };
+    }),
+  forkSession: procedure
+    .input(forkCodexSessionSchema)
+    .handler(async ({ input, context }) => {
+      return await context.sessions.codex.forkSession(input);
     }),
   stopLiveSession: procedure
     .input(z.object({ sessionId: z.string() }))
@@ -277,6 +288,19 @@ export class CodexSessionsManager {
     return sessionId;
   }
 
+  private getSessionState(sessionId: string): CodexLocalTerminalSessionData {
+    const session = this.sessionsState.state[sessionId];
+    if (!session) {
+      throw new Error(`Session ${sessionId} not found`);
+    }
+    if (session.type !== "codex-local-terminal") {
+      throw new Error(
+        `Session ${sessionId} is not a Codex local terminal session`,
+      );
+    }
+    return session;
+  }
+
   private maybeGenerateTitleFromInitialPrompt(
     sessionId: string,
     initialPrompt: string,
@@ -316,6 +340,7 @@ export class CodexSessionsManager {
   startLiveSession({
     sessionId,
     codexSessionId,
+    forkSessionId,
     cwd,
     model,
     modelReasoningEffort,
@@ -328,6 +353,7 @@ export class CodexSessionsManager {
   }: {
     sessionId: string;
     codexSessionId?: string;
+    forkSessionId?: string;
     cwd: string;
     model?: string;
     modelReasoningEffort: CodexModelReasoningEffort;
@@ -378,6 +404,7 @@ export class CodexSessionsManager {
 
     const { args } = buildCodexArgs({
       resumeSessionId: codexSessionId,
+      forkSessionId,
       permissionMode,
       model,
       modelReasoningEffort,
@@ -529,6 +556,54 @@ export class CodexSessionsManager {
     };
     this.liveSessions.set(sessionId, session);
     disposable.addDisposable(() => this.liveSessions.delete(sessionId));
+  }
+
+  async forkSession(input: z.infer<typeof forkCodexSessionSchema>) {
+    const sourceSession = this.getSessionState(input.sessionId);
+    const sourceCodexSessionId = sourceSession.codexSessionId?.trim();
+    if (!sourceCodexSessionId) {
+      throw new Error("Codex session is not ready to fork yet.");
+    }
+
+    const sessionId = generateUniqueSessionId();
+    const forkedSession: CodexLocalTerminalSessionData = {
+      sessionId,
+      type: "codex-local-terminal",
+      createdAt: Date.now(),
+      lastActivityAt: Date.now(),
+      status: "stopped",
+      title: `${sourceSession.title} (fork)`,
+      codexSessionId: undefined,
+      startupConfig: {
+        cwd: sourceSession.startupConfig.cwd,
+        model: sourceSession.startupConfig.model,
+        modelReasoningEffort: sourceSession.startupConfig.modelReasoningEffort,
+        fastMode: sourceSession.startupConfig.fastMode,
+        permissionMode: sourceSession.startupConfig.permissionMode,
+        initialPrompt: sourceSession.startupConfig.initialPrompt,
+        configOverrides: sourceSession.startupConfig.configOverrides,
+      },
+      bufferedOutput: "",
+    };
+
+    this.sessionsState.updateState((state) => {
+      state[sessionId] = forkedSession;
+    });
+
+    this.startLiveSession({
+      sessionId,
+      forkSessionId: sourceCodexSessionId,
+      cwd: forkedSession.startupConfig.cwd,
+      model: forkedSession.startupConfig.model,
+      modelReasoningEffort: forkedSession.startupConfig.modelReasoningEffort,
+      fastMode: forkedSession.startupConfig.fastMode,
+      permissionMode: forkedSession.startupConfig.permissionMode,
+      configOverrides: forkedSession.startupConfig.configOverrides,
+      cols: input.cols,
+      rows: input.rows,
+    });
+
+    return { sessionId };
   }
 
   async stopLiveSession(sessionId: string) {

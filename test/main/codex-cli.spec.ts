@@ -65,4 +65,32 @@ describe("buildCodexArgs", () => {
       "model_reasoning_effort=high",
     ]);
   });
+
+  it("builds fork args when a codex session id is provided", () => {
+    const { args } = buildCodexArgs({
+      permissionMode: "default",
+      forkSessionId: "019d0192-767b-7cc1-bdd9-9c8a13484557",
+      initialPrompt: "should not be forwarded",
+    });
+
+    expect(args).toEqual([
+      "fork",
+      "019d0192-767b-7cc1-bdd9-9c8a13484557",
+      "--no-alt-screen",
+      "--model",
+      "gpt-5.3-codex",
+      "-c",
+      "model_reasoning_effort=high",
+    ]);
+  });
+
+  it("rejects building args when resume and fork are both requested", () => {
+    expect(() =>
+      buildCodexArgs({
+        permissionMode: "default",
+        resumeSessionId: "resume-id",
+        forkSessionId: "fork-id",
+      }),
+    ).toThrow("Codex sessions cannot resume and fork at the same time.");
+  });
 });

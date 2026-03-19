@@ -51,8 +51,11 @@ function getTerminalStatusMeta(status: string) {
   }
 }
 
-export function ProjectTerminalPane({ cwd }: { cwd: string }) {
-  const workspace = useAppState((state) => state.projectTerminals[cwd] ?? null);
+export function ProjectTerminalPane({ cwd }: { cwd: string | null }) {
+  const hasCwd = Boolean(cwd);
+  const workspace = useAppState((state) =>
+    cwd ? (state.projectTerminals[cwd] ?? null) : null,
+  );
   const hasWorkspace = workspace !== null;
   const activeTerminalId = workspace?.selectedTerminalId ?? null;
   const activeTerminal =
@@ -79,6 +82,10 @@ export function ProjectTerminalPane({ cwd }: { cwd: string }) {
   }, [activeTerminal]);
 
   useEffect(() => {
+    if (!cwd) {
+      return;
+    }
+
     if (hasWorkspace && !activeTerminalId) {
       return;
     }
@@ -170,6 +177,10 @@ export function ProjectTerminalPane({ cwd }: { cwd: string }) {
   );
 
   const handleCreateTerminal = useCallback(async () => {
+    if (!cwd) {
+      return;
+    }
+
     setIsCreating(true);
     try {
       const { cols, rows } = getCurrentSize();
@@ -188,6 +199,10 @@ export function ProjectTerminalPane({ cwd }: { cwd: string }) {
 
   const handleSelectTerminal = useCallback(
     async (terminalId: string) => {
+      if (!cwd) {
+        return;
+      }
+
       if (terminalId === activeTerminalId) {
         return;
       }
@@ -213,6 +228,10 @@ export function ProjectTerminalPane({ cwd }: { cwd: string }) {
 
   const handleCloseTerminal = useCallback(
     async (terminalId: string) => {
+      if (!cwd) {
+        return;
+      }
+
       setClosingTerminalId(terminalId);
       try {
         await orpc.projectTerminals.closeTerminal.call({
@@ -234,9 +253,21 @@ export function ProjectTerminalPane({ cwd }: { cwd: string }) {
 
   return (
     <ResizablePanelGroup orientation="horizontal" className="h-full min-h-0">
-      <ResizablePanel defaultSize="80" minSize="40">
+      <ResizablePanel defaultSize={80} minSize={40}>
         <div className="h-full min-w-0 bg-black/10">
-          {activeTerminal ? (
+          {!hasCwd ? (
+            <div className="flex h-full items-center justify-center p-6">
+              <div className="max-w-xs space-y-2 text-center">
+                <p className="text-sm text-zinc-300">
+                  Select a session to view project terminals.
+                </p>
+                <p className="text-xs text-zinc-500">
+                  The terminal and project pane layout stays available here,
+                  even when no session is selected.
+                </p>
+              </div>
+            </div>
+          ) : activeTerminal ? (
             <TerminalPane
               ref={terminalRef}
               onInput={handleTerminalInput}
@@ -264,7 +295,7 @@ export function ProjectTerminalPane({ cwd }: { cwd: string }) {
         </div>
       </ResizablePanel>
       <ResizableHandle />
-      <ResizablePanel defaultSize="20" minSize="12" maxSize="40">
+      <ResizablePanel defaultSize={20} minSize={12} maxSize={40}>
         <aside className="flex h-full flex-col border-l border-border/70 bg-black/15">
           <div className="flex h-7 border-b border-border/70">
             <div className="flex flex-1 items-center gap-1.5 px-2">
@@ -273,19 +304,28 @@ export function ProjectTerminalPane({ cwd }: { cwd: string }) {
                 Project Terminals
               </span>
             </div>
-            <Button
-              variant="flat"
-              className="h-full w-9 shrink-0 px-0"
-              onClick={() => {
-                void handleCreateTerminal();
-              }}
-              disabled={isCreating}
-            >
-              <Plus className="size-3.5" />
-            </Button>
+            {hasCwd ? (
+              <Button
+                variant="flat"
+                className="h-full w-9 shrink-0 px-0"
+                onClick={() => {
+                  void handleCreateTerminal();
+                }}
+                disabled={isCreating}
+              >
+                <Plus className="size-3.5" />
+              </Button>
+            ) : null}
           </div>
 
-          {workspace?.order.length ? (
+          {!hasCwd ? (
+            <div className="flex min-h-0 flex-1 items-center justify-center px-4 text-center">
+              <div className="space-y-2 text-xs text-zinc-500">
+                <p>No active session</p>
+                <p>Project terminals appear here for the selected session.</p>
+              </div>
+            </div>
+          ) : workspace?.order.length ? (
             <ul className="min-h-0 flex-1 overflow-y-auto">
               {workspace.order.map((terminalId) => {
                 const terminal = workspace.terminals[terminalId];

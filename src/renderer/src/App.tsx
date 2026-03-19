@@ -11,7 +11,6 @@ import {
   ResizablePanelGroup,
 } from "@renderer/components/ui/resizable";
 import { Toaster } from "@renderer/components/ui/sonner";
-import { WelcomePage } from "@renderer/components/welcome-page";
 import { WorktreeDeleteDialog } from "@renderer/components/worktree-delete-dialog";
 import { useAppShortcuts } from "@renderer/hooks/use-app-shortcuts";
 import { useEffect } from "react";
@@ -32,12 +31,6 @@ function useValidateActiveSession() {
   }, [activeSessionId, sessions]);
 }
 
-function useMainPage() {
-  const activeSessionId = useActiveSessionId();
-
-  return activeSessionId ? <SessionPage /> : <WelcomePage />;
-}
-
 function App() {
   useAppShortcuts();
   useValidateActiveSession();
@@ -52,7 +45,7 @@ function App() {
           <ResizableHandle />
           <ResizablePanel>
             <main className="flex h-full min-w-0 flex-col bg-black/15">
-              {useMainPage()}
+              <SessionPage />
             </main>
           </ResizablePanel>
         </ResizablePanelGroup>

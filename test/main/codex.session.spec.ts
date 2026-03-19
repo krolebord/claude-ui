@@ -629,4 +629,121 @@ describe("CodexSessionsManager", () => {
 
     await manager.stopLiveSession(sessionId);
   });
+
+  it("creates and starts a forked session under a new local session ID", async () => {
+    const { state, sessionsState } = createSessionsState();
+    const manager = new CodexSessionsManager(sessionsState);
+
+    state["source-session"] = {
+      sessionId: "source-session",
+      type: "codex-local-terminal",
+      createdAt: Date.now(),
+      lastActivityAt: Date.now(),
+      status: "stopped",
+      title: "Source Session",
+      codexSessionId: "codex-session-1",
+      startupConfig: {
+        cwd: "/tmp/project",
+        model: "gpt-5.3-codex",
+        modelReasoningEffort: "minimal",
+        fastMode: "fast",
+        permissionMode: "yolo",
+        initialPrompt: "summarize status",
+        configOverrides: 'model_provider = "openai"',
+      },
+      bufferedOutput: "existing output",
+    };
+
+    const result = await manager.forkSession({
+      sessionId: "source-session",
+      cols: 100,
+      rows: 30,
+    });
+
+    expect(result.sessionId).not.toBe("source-session");
+    expect(state[result.sessionId]).toMatchObject({
+      sessionId: result.sessionId,
+      type: "codex-local-terminal",
+      title: "Source Session (fork)",
+      codexSessionId: undefined,
+      startupConfig: {
+        cwd: "/tmp/project",
+        model: "gpt-5.3-codex",
+        modelReasoningEffort: "minimal",
+        fastMode: "fast",
+        permissionMode: "yolo",
+        initialPrompt: "summarize status",
+        configOverrides: 'model_provider = "openai"',
+      },
+      bufferedOutput: "",
+    });
+
+    const startCall = terminalSessionSpies.start.mock.calls.at(-1)?.[0] as
+      | { args?: string[]; cols?: number; rows?: number; cwd?: string }
+      | undefined;
+    expect(startCall).toMatchObject({
+      cwd: "/tmp/project",
+      cols: 100,
+      rows: 30,
+    });
+    expect(startCall?.args).toEqual([
+      "fork",
+      "codex-session-1",
+      "--no-alt-screen",
+      "--dangerously-bypass-approvals-and-sandbox",
+      "--model",
+      "gpt-5.3-codex",
+      "--enable",
+      "fast_mode",
+      "-c",
+      "model_reasoning_effort=minimal",
+      "-c",
+      "service_tier=fast",
+      "--config",
+      'model_provider = "openai"',
+    ]);
+    expect(manager.liveSessions.has(result.sessionId)).toBe(true);
+  });
+
+  it("rejects when the source session does not exist", async () => {
+    const { sessionsState } = createSessionsState();
+    const manager = new CodexSessionsManager(sessionsState);
+
+    await expect(
+      manager.forkSession({
+        sessionId: "missing-session",
+      }),
+    ).rejects.toThrow("Session missing-session not found");
+  });
+
+  it("rejects when the source session has no codex session id yet", async () => {
+    const { state, sessionsState } = createSessionsState();
+    const manager = new CodexSessionsManager(sessionsState);
+
+    state["source-session"] = {
+      sessionId: "source-session",
+      type: "codex-local-terminal",
+      createdAt: Date.now(),
+      lastActivityAt: Date.now(),
+      status: "stopped",
+      title: "Source Session",
+      codexSessionId: undefined,
+      startupConfig: {
+        cwd: "/tmp/project",
+        model: "gpt-5.3-codex",
+        modelReasoningEffort: "high",
+        fastMode: "default",
+        permissionMode: "default",
+        initialPrompt: undefined,
+        configOverrides: undefined,
+      },
+      bufferedOutput: "",
+    };
+
+    await expect(
+      manager.forkSession({
+        sessionId: "source-session",
+      }),
+    ).rejects.toThrow("Codex session is not ready to fork yet.");
+  });
 });

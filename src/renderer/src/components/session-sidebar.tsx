@@ -804,6 +804,25 @@ function CodexLocalTerminalSessionSidebarItem({
 
   const session = useAppState((x) => x.sessions[sessionId]);
 
+  const forkSessionMutation = useMutation({
+    mutationFn: async (sessionId: string) => {
+      const { cols, rows } = getTerminalSize();
+      return await orpc.sessions.codex.forkSession.call({
+        sessionId,
+        cols,
+        rows,
+      });
+    },
+    onSuccess: ({ sessionId }) => {
+      setActiveSessionId(sessionId);
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to fork session",
+      );
+    },
+  });
+
   const resumeSessionMutation = useMutation({
     mutationFn: async (sessionId: string) => {
       const { cols, rows } = getTerminalSize();
@@ -827,6 +846,10 @@ function CodexLocalTerminalSessionSidebarItem({
       }
     },
   });
+
+  if (!session || session.type !== "codex-local-terminal") {
+    return null;
+  }
 
   return (
     <ContextMenu>
@@ -863,6 +886,15 @@ function CodexLocalTerminalSessionSidebarItem({
         </SessionSidebarItemTrigger>
       </ContextMenuTrigger>
       <ContextMenuContent>
+        <ContextMenuItem
+          onClick={() => {
+            forkSessionMutation.mutate(sessionId);
+          }}
+          disabled={forkSessionMutation.isPending || !session.codexSessionId}
+        >
+          <GitFork className="size-3.5" />
+          Fork session
+        </ContextMenuItem>
         <CommonSessionContextMenuItems
           session={session}
           onRenameSession={onRenameSession}
