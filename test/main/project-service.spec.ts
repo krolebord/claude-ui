@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   addTrackedProject,
   defineProjectState,
+  refreshTrackedProject,
 } from "../../src/main/project-service";
 
 const readProjectSettingsFileMock = vi.hoisted(() => vi.fn());
@@ -164,5 +165,19 @@ describe("project-service addTrackedProject", () => {
       },
     ]);
     expect(refreshProject).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("project-service refreshTrackedProject", () => {
+  it("forwards a normalized project path to the git service", async () => {
+    const refreshProject = vi.fn().mockResolvedValue(undefined);
+    const result = await refreshTrackedProject("  /repo-one  ", {
+      projectGitService: {
+        refreshProject,
+      },
+    });
+
+    expect(result).toEqual({ path: "/repo-one" });
+    expect(refreshProject).toHaveBeenCalledWith("/repo-one");
   });
 });

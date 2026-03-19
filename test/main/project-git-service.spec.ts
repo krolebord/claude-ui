@@ -74,9 +74,7 @@ describe("ProjectGitService", () => {
       return { current: null };
     });
 
-    const service = new ProjectGitService(projectsState, {
-      refreshIntervalMs: 60_000,
-    });
+    const service = new ProjectGitService(projectsState);
     await service.refreshAll();
 
     expect(projectsState.state).toEqual([
@@ -107,9 +105,7 @@ describe("ProjectGitService", () => {
     checkIsRepoMock.mockResolvedValue(true);
     branchLocalMock.mockResolvedValue({ current: "release" });
 
-    const service = new ProjectGitService(projectsState, {
-      refreshIntervalMs: 60_000,
-    });
+    const service = new ProjectGitService(projectsState);
     await service.refreshProject("/repo-two");
 
     expect(projectsState.state).toEqual([
@@ -139,9 +135,7 @@ describe("ProjectGitService", () => {
 
     checkIsRepoMock.mockResolvedValue(false);
 
-    const service = new ProjectGitService(projectsState, {
-      refreshIntervalMs: 60_000,
-    });
+    const service = new ProjectGitService(projectsState);
     await service.refreshProject("/plain-dir");
 
     expect(projectsState.state).toEqual([
@@ -167,9 +161,7 @@ describe("ProjectGitService", () => {
       return { current: null };
     });
 
-    const service = new ProjectGitService(projectsState, {
-      refreshIntervalMs: 60_000,
-    });
+    const service = new ProjectGitService(projectsState);
 
     service.start();
 
@@ -214,9 +206,7 @@ describe("ProjectGitService", () => {
       return { current: null };
     });
 
-    const service = new ProjectGitService(projectsState, {
-      refreshIntervalMs: 60_000,
-    });
+    const service = new ProjectGitService(projectsState);
 
     const refreshAllPromise = service.refreshAll();
     await vi.waitFor(() => {
@@ -270,9 +260,7 @@ describe("ProjectGitService", () => {
     checkIsRepoMock.mockResolvedValue(true);
     branchLocalMock.mockResolvedValue({ current: "main" });
 
-    const service = new ProjectGitService(projectsState, {
-      refreshIntervalMs: 60_000,
-    });
+    const service = new ProjectGitService(projectsState);
     await service.refreshProject("/repo-one");
 
     expect(projectsState.state).toEqual([
@@ -310,9 +298,7 @@ describe("ProjectGitService", () => {
       return "";
     });
 
-    const service = new ProjectGitService(projectsState, {
-      refreshIntervalMs: 60_000,
-    });
+    const service = new ProjectGitService(projectsState);
     await service.refreshProject("/repo-one");
 
     expect(projectsState.state).toEqual([
@@ -342,9 +328,7 @@ describe("ProjectGitService", () => {
     const updateStateSpy = vi.spyOn(projectsState, "updateState");
     updateStateSpy.mockClear();
 
-    const service = new ProjectGitService(projectsState, {
-      refreshIntervalMs: 60_000,
-    });
+    const service = new ProjectGitService(projectsState);
     await service.refreshAll();
 
     expect(updateStateSpy).not.toHaveBeenCalled();
@@ -375,9 +359,7 @@ describe("ProjectGitService", () => {
       return "";
     });
 
-    const service = new ProjectGitService(projectsState, {
-      refreshIntervalMs: 60_000,
-    });
+    const service = new ProjectGitService(projectsState);
     await service.refreshProject("/repo-one");
 
     expect(projectsState.state).toEqual([
@@ -409,9 +391,7 @@ describe("ProjectGitService", () => {
       return "";
     });
 
-    const service = new ProjectGitService(defineProjectState(), {
-      refreshIntervalMs: 60_000,
-    });
+    const service = new ProjectGitService(defineProjectState());
     const result = await service.getWorktreeCreationData("/repo-one");
 
     expect(result).toEqual({
@@ -442,9 +422,7 @@ describe("ProjectGitService", () => {
       return "";
     });
 
-    const service = new ProjectGitService(defineProjectState(), {
-      refreshIntervalMs: 60_000,
-    });
+    const service = new ProjectGitService(defineProjectState());
     const result = await service.getWorktreeCreationData("/repo-one");
 
     expect(result).toEqual({
@@ -475,9 +453,7 @@ describe("ProjectGitService", () => {
       return "";
     });
 
-    const service = new ProjectGitService(defineProjectState(), {
-      refreshIntervalMs: 60_000,
-    });
+    const service = new ProjectGitService(defineProjectState());
     const result = await service.getWorktreeCreationData("/repo-one");
 
     expect(result.localBranches).toEqual(["develop", "main"]);
@@ -526,9 +502,7 @@ describe("ProjectGitService", () => {
       return { current: null, branches: {} };
     });
 
-    const service = new ProjectGitService(projectsState, {
-      refreshIntervalMs: 60_000,
-    });
+    const service = new ProjectGitService(projectsState);
     const result = await service.createWorktreeProject({
       sourcePath: "/repo-one",
       fromBranch: "main",
@@ -621,9 +595,7 @@ describe("ProjectGitService", () => {
       return { current: null, branches: {} };
     });
 
-    const service = new ProjectGitService(defineProjectState(), {
-      refreshIntervalMs: 60_000,
-    });
+    const service = new ProjectGitService(defineProjectState());
 
     await expect(
       service.createWorktreeProject({
@@ -654,9 +626,7 @@ describe("ProjectGitService", () => {
     });
     readdirMock.mockResolvedValue(["README.md"]);
 
-    const service = new ProjectGitService(defineProjectState(), {
-      refreshIntervalMs: 60_000,
-    });
+    const service = new ProjectGitService(defineProjectState());
 
     await expect(
       service.createWorktreeProject({
@@ -679,9 +649,7 @@ describe("ProjectGitService", () => {
       });
     });
 
-    const service = new ProjectGitService(projectsState, {
-      refreshIntervalMs: 60_000,
-    });
+    const service = new ProjectGitService(projectsState);
     const result = await service.deleteWorktreeProject({
       path: "/repo-one-feature-new-ui",
       deleteFolder: true,
@@ -718,9 +686,7 @@ describe("ProjectGitService", () => {
       throw new Error("branch is not fully merged");
     });
 
-    const service = new ProjectGitService(projectsState, {
-      refreshIntervalMs: 60_000,
-    });
+    const service = new ProjectGitService(projectsState);
     const result = await service.deleteWorktreeProject({
       path: "/repo-one-feature-new-ui",
       deleteFolder: true,
@@ -745,9 +711,7 @@ describe("ProjectGitService", () => {
       });
     });
 
-    const service = new ProjectGitService(projectsState, {
-      refreshIntervalMs: 60_000,
-    });
+    const service = new ProjectGitService(projectsState);
 
     await expect(
       service.deleteWorktreeProject({
@@ -778,9 +742,7 @@ describe("ProjectGitService", () => {
       );
     });
 
-    const service = new ProjectGitService(projectsState, {
-      refreshIntervalMs: 60_000,
-    });
+    const service = new ProjectGitService(projectsState);
     const result = await service.deleteWorktreeProject({
       path: "/repo-one-feature-new-ui",
       deleteFolder: true,
@@ -812,9 +774,7 @@ describe("ProjectGitService", () => {
       });
     });
 
-    const service = new ProjectGitService(projectsState, {
-      refreshIntervalMs: 60_000,
-    });
+    const service = new ProjectGitService(projectsState);
     const result = await service.deleteWorktreeProject({
       path: "/repo-one-feature-new-ui",
       deleteFolder: true,
@@ -847,9 +807,7 @@ describe("ProjectGitService", () => {
       throw new Error("branch is not fully merged");
     });
 
-    const service = new ProjectGitService(projectsState, {
-      refreshIntervalMs: 60_000,
-    });
+    const service = new ProjectGitService(projectsState);
     const result = await service.deleteWorktreeProject({
       path: "/repo-one-feature-new-ui",
       deleteFolder: true,

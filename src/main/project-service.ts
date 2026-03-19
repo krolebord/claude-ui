@@ -241,6 +241,23 @@ export async function addTrackedProject(
   return { path: normalizedPath };
 }
 
+export async function refreshTrackedProject(
+  path: string,
+  context: {
+    projectGitService: {
+      refreshProject(projectPath: string): Promise<void>;
+    };
+  },
+): Promise<{ path: string }> {
+  const normalizedPath = normalizeProjectPath(path);
+  if (!normalizedPath) {
+    return { path: normalizedPath };
+  }
+
+  await context.projectGitService.refreshProject(normalizedPath);
+  return { path: normalizedPath };
+}
+
 export const projectsRouter = {
   addProject: procedure
     .input(z.object({ path: projectPathSchema }))
@@ -254,6 +271,11 @@ export const projectsRouter = {
         normalizeProjectPath(input.path),
       );
     }),
+  refreshProject: procedure
+    .input(z.object({ path: projectPathSchema }))
+    .handler(async ({ input, context }) =>
+      refreshTrackedProject(input.path, context),
+    ),
   createWorktreeProject: procedure
     .input(
       z.object({

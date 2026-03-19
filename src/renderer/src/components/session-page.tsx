@@ -252,11 +252,6 @@ function TerminalPage({
   bottomPane?: ReactNode;
 }) {
   const terminalRef = useRef<TerminalPaneHandle | null>(null);
-  const activeProject = useAppState((state) =>
-    state.projects.find(
-      (project) => project.path === session.startupConfig.cwd,
-    ),
-  );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: subscribe and bufferedOutput are intentionally captured once per session switch
   useEffect(() => {
@@ -324,12 +319,7 @@ function TerminalPage({
     <ResizablePanelGroup orientation="vertical" className="min-h-0 flex-1">
       <ResizablePanel defaultSize="70" minSize="35">
         <div className="flex h-full min-h-0 flex-col">
-          <SessionHeader
-            sessionType={session.type}
-            title={session.title}
-            gitBranch={activeProject?.gitBranch}
-            gitDiffStats={activeProject?.gitDiffStats}
-          />
+          <SessionHeader session={session} />
           {controls}
           {errorMessage ? (
             <div className="mx-4 mt-4 flex items-center gap-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">

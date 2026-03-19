@@ -10,7 +10,6 @@ import {
   writeProjectSettingsFile,
 } from "./project-settings-file";
 
-const DEFAULT_GIT_REFRESH_INTERVAL_MS = 15_000;
 const EMPTY_GIT_TREE_HASH = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
 type ProjectGitMetadata = Pick<ClaudeProject, "gitBranch" | "gitDiffStats">;
@@ -286,26 +285,13 @@ export type DeleteWorktreeProjectResult =
     };
 
 export class ProjectGitService {
-  private readonly refreshIntervalMs: number;
-  private refreshTimer: NodeJS.Timeout | null = null;
   private refreshInFlight: Promise<void> | null = null;
   private disposed = false;
 
-  constructor(
-    private readonly projectsState: ProjectState,
-    options?: { refreshIntervalMs?: number },
-  ) {
-    this.refreshIntervalMs =
-      options?.refreshIntervalMs ?? DEFAULT_GIT_REFRESH_INTERVAL_MS;
-  }
+  constructor(private readonly projectsState: ProjectState) {}
 
   start(): void {
     this.triggerRefresh();
-
-    this.refreshTimer = setInterval(() => {
-      this.triggerRefresh();
-    }, this.refreshIntervalMs);
-    this.refreshTimer.unref?.();
   }
 
   async refreshProject(projectPath: string): Promise<void> {
@@ -574,9 +560,5 @@ export class ProjectGitService {
 
   dispose(): void {
     this.disposed = true;
-    if (this.refreshTimer) {
-      clearInterval(this.refreshTimer);
-      this.refreshTimer = null;
-    }
   }
 }
