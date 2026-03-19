@@ -14,7 +14,11 @@ import { defineServiceState } from "../shared/service-state";
 import type { Services } from "./create-services";
 import { procedure } from "./orpc";
 import { defineStatePersistence } from "./persistence-orchestrator";
-import { writeProjectSettingsFile } from "./project-settings-file";
+import {
+  type ProjectSettingsFile,
+  readProjectSettingsFile,
+  writeProjectSettingsFile,
+} from "./project-settings-file";
 import type { Session } from "./sessions/state";
 
 const cursorAgentModeSchema = z.enum(["plan", "ask"]);
@@ -108,6 +112,12 @@ function normalizeProjects(projects: ClaudeProject[]): ClaudeProject[] {
   return normalized;
 }
 
+async function readHydratedProjectSettings(
+  projectPath: string,
+): Promise<ProjectSettingsFile> {
+  return (await readProjectSettingsFile(projectPath)) ?? {};
+}
+
 export const defineProjectState = () =>
   defineServiceState({
     key: "projects" as const,
@@ -185,20 +195,58 @@ async function removeTrackedProject(
   });
 }
 
+export async function addTrackedProject(
+  path: string,
+  context: {
+    projectsState: ProjectState;
+    projectGitService: {
+      refreshProject(projectPath: string): Promise<void>;
+    };
+  },
+): Promise<{ path: string }> {
+  const normalizedPath = normalizeProjectPath(path);
+  if (
+    !normalizedPath ||
+    context.projectsState.state.some(
+      (project) => project.path === normalizedPath,
+    )
+  ) {
+    return { path: normalizedPath };
+  }
+
+  context.projectsState.updateState((projects) => {
+    if (projects.some((project) => project.path === normalizedPath)) {
+      return;
+    }
+
+    projects.push({
+      path: normalizedPath,
+      collapsed: false,
+    });
+  });
+
+  const hydratedSettings = await readHydratedProjectSettings(normalizedPath);
+
+  context.projectsState.updateState((projects) => {
+    const project = projects.find((item) => item.path === normalizedPath);
+    if (!project) {
+      return;
+    }
+
+    Object.assign(project, hydratedSettings);
+  });
+
+  await context.projectGitService.refreshProject(normalizedPath);
+
+  return { path: normalizedPath };
+}
+
 export const projectsRouter = {
   addProject: procedure
     .input(z.object({ path: projectPathSchema }))
-    .handler(async ({ input, context }) => {
-      const path = normalizeProjectPath(input.path);
-      if (!path || context.projectsState.state.some((p) => p.path === path))
-        return { path };
-
-      context.projectsState.updateState((projects) => {
-        projects.push({ path, collapsed: false });
-      });
-      await context.projectGitService.refreshProject(path);
-      return { path };
-    }),
+    .handler(async ({ input, context }) =>
+      addTrackedProject(input.path, context),
+    ),
   getWorktreeCreationData: procedure
     .input(z.object({ path: projectPathSchema }))
     .handler(async ({ input, context }) => {

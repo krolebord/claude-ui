@@ -1,0 +1,168 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  addTrackedProject,
+  defineProjectState,
+} from "../../src/main/project-service";
+
+const readProjectSettingsFileMock = vi.hoisted(() => vi.fn());
+
+vi.mock("../../src/main/project-settings-file", () => ({
+  readProjectSettingsFile: readProjectSettingsFileMock,
+  writeProjectSettingsFile: vi.fn(),
+}));
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+
+  return {
+    promise,
+    resolve,
+    reject,
+  };
+}
+
+describe("project-service addTrackedProject", () => {
+  let tempDir: string;
+  const refreshProject = vi.fn().mockResolvedValue(undefined);
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(path.join(tmpdir(), "project-service-test-"));
+    readProjectSettingsFileMock.mockReset();
+    refreshProject.mockClear();
+  });
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true });
+  });
+
+  it("hydrates existing .agent-ui settings when adding a project", async () => {
+    const projectPath = path.join(tempDir, "repo-with-settings");
+    readProjectSettingsFileMock.mockResolvedValue({
+      localClaude: {
+        defaultModel: "sonnet",
+        defaultEffort: "high",
+      },
+      localCodex: {
+        permissionMode: "yolo",
+        fastMode: "fast",
+      },
+      localCursor: {
+        mode: "ask",
+        permissionMode: "default",
+      },
+    });
+
+    const projectsState = defineProjectState();
+    const context = {
+      projectsState,
+      projectGitService: {
+        refreshProject,
+      },
+    };
+
+    const result = await addTrackedProject(projectPath, context);
+
+    expect(result).toEqual({ path: projectPath });
+    expect(projectsState.state).toEqual([
+      {
+        path: projectPath,
+        collapsed: false,
+        localClaude: {
+          defaultModel: "sonnet",
+          defaultEffort: "high",
+        },
+        localCodex: {
+          permissionMode: "yolo",
+          fastMode: "fast",
+        },
+        localCursor: {
+          mode: "ask",
+          permissionMode: "default",
+        },
+      },
+    ]);
+    expect(refreshProject).toHaveBeenCalledWith(projectPath);
+  });
+
+  it("adds a project without settings when no config file exists", async () => {
+    const projectPath = path.join(tempDir, "plain-repo");
+    readProjectSettingsFileMock.mockResolvedValue(null);
+
+    const projectsState = defineProjectState();
+    const context = {
+      projectsState,
+      projectGitService: {
+        refreshProject,
+      },
+    };
+
+    const result = await addTrackedProject(projectPath, context);
+
+    expect(result).toEqual({ path: projectPath });
+    expect(projectsState.state).toEqual([
+      {
+        path: projectPath,
+        collapsed: false,
+      },
+    ]);
+    expect(refreshProject).toHaveBeenCalledWith(projectPath);
+  });
+
+  it("does not duplicate a project when two adds overlap", async () => {
+    const projectPath = path.join(tempDir, "race-repo");
+    const deferredSettings = createDeferred<{
+      localClaude?: { defaultModel?: string };
+    } | null>();
+    readProjectSettingsFileMock.mockReturnValue(deferredSettings.promise);
+
+    const projectsState = defineProjectState();
+    const context = {
+      projectsState,
+      projectGitService: {
+        refreshProject,
+      },
+    };
+
+    const firstAdd = addTrackedProject(projectPath, context);
+    const secondAdd = addTrackedProject(projectPath, context);
+
+    expect(projectsState.state).toEqual([
+      {
+        path: projectPath,
+        collapsed: false,
+      },
+    ]);
+    expect(readProjectSettingsFileMock).toHaveBeenCalledTimes(1);
+
+    deferredSettings.resolve({
+      localClaude: {
+        defaultModel: "sonnet",
+      },
+    });
+
+    await expect(Promise.all([firstAdd, secondAdd])).resolves.toEqual([
+      { path: projectPath },
+      { path: projectPath },
+    ]);
+
+    expect(projectsState.state).toEqual([
+      {
+        path: projectPath,
+        collapsed: false,
+        localClaude: {
+          defaultModel: "sonnet",
+        },
+      },
+    ]);
+    expect(refreshProject).toHaveBeenCalledTimes(1);
+  });
+});
