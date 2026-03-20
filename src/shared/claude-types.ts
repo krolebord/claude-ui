@@ -68,12 +68,19 @@ export interface GitDiffStats {
   deletedLines: number;
 }
 
+export interface GitUpstreamDiffStats {
+  upstreamBranch: string;
+  aheadCommits: number;
+  behindCommits: number;
+}
+
 export interface ClaudeProject {
   path: string;
   collapsed: boolean;
   alias?: string;
   gitBranch?: string;
   gitDiffStats?: GitDiffStats;
+  gitUpstreamDiffStats?: GitUpstreamDiffStats;
   worktreeOriginPath?: string;
   localClaude?: LocalClaudeProjectSettings;
   localCodex?: LocalCodexProjectSettings;

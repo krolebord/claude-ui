@@ -1,6 +1,10 @@
 import { readdir } from "node:fs/promises";
 import path from "node:path";
-import type { ClaudeProject, GitDiffStats } from "@shared/claude-types";
+import type {
+  ClaudeProject,
+  GitDiffStats,
+  GitUpstreamDiffStats,
+} from "@shared/claude-types";
 import { buildSuggestedWorktreePath } from "@shared/project-worktree";
 import simpleGit from "simple-git";
 import log from "./logger";
@@ -12,11 +16,15 @@ import {
 
 const EMPTY_GIT_TREE_HASH = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
-type ProjectGitMetadata = Pick<ClaudeProject, "gitBranch" | "gitDiffStats">;
+type ProjectGitMetadata = Pick<
+  ClaudeProject,
+  "gitBranch" | "gitDiffStats" | "gitUpstreamDiffStats"
+>;
 
 interface ProjectGitData {
   currentBranch?: string;
   diffStats: GitDiffStats;
+  upstreamDiffStats?: GitUpstreamDiffStats;
   isRepo: boolean;
   localBranches: string[];
   git: ReturnType<typeof simpleGit>;
@@ -135,6 +143,20 @@ function countUntrackedFiles(statusSummary: string): number {
     .filter((line) => line.startsWith("?? ")).length;
 }
 
+function parseAheadBehindSummary(
+  revListSummary: string,
+): { aheadCommits: number; behindCommits: number } | undefined {
+  const [behindValue, aheadValue] = revListSummary.trim().split(/\s+/);
+  const behindCommits = Number.parseInt(behindValue ?? "", 10);
+  const aheadCommits = Number.parseInt(aheadValue ?? "", 10);
+
+  if (!Number.isFinite(behindCommits) || !Number.isFinite(aheadCommits)) {
+    return undefined;
+  }
+
+  return { aheadCommits, behindCommits };
+}
+
 async function resolveDiffBaseRef(
   git: ReturnType<typeof simpleGit>,
 ): Promise<string> {
@@ -143,6 +165,48 @@ async function resolveDiffBaseRef(
     return "HEAD";
   } catch {
     return EMPTY_GIT_TREE_HASH;
+  }
+}
+
+async function resolveUpstreamDiffStats(
+  git: ReturnType<typeof simpleGit>,
+  currentBranch: string | undefined,
+): Promise<GitUpstreamDiffStats | undefined> {
+  if (!currentBranch || currentBranch === "(no branch)") {
+    return undefined;
+  }
+
+  try {
+    const upstreamBranch = (
+      await git.raw([
+        "rev-parse",
+        "--abbrev-ref",
+        "--symbolic-full-name",
+        "@{upstream}",
+      ])
+    ).trim();
+    if (!upstreamBranch) {
+      return undefined;
+    }
+
+    const revListSummary = await git.raw([
+      "rev-list",
+      "--left-right",
+      "--count",
+      `${upstreamBranch}...HEAD`,
+    ]);
+    const aheadBehindCounts = parseAheadBehindSummary(revListSummary);
+    if (!aheadBehindCounts) {
+      return undefined;
+    }
+
+    return {
+      upstreamBranch,
+      aheadCommits: aheadBehindCounts.aheadCommits,
+      behindCommits: aheadBehindCounts.behindCommits,
+    };
+  } catch {
+    return undefined;
   }
 }
 
@@ -161,6 +225,7 @@ async function readProjectGitData(
   }
 
   const summary = await git.branchLocal();
+  const currentBranch = summary.current ?? undefined;
   const diffBaseRef = await resolveDiffBaseRef(git);
   const diffSummary = await git.raw([
     "diff",
@@ -175,8 +240,9 @@ async function readProjectGitData(
   return {
     git,
     isRepo: true,
-    currentBranch: summary.current ?? undefined,
+    currentBranch,
     diffStats,
+    upstreamDiffStats: await resolveUpstreamDiffStats(git, currentBranch),
     localBranches: await getLocalBranchNames(git, summary),
   };
 }
@@ -188,7 +254,13 @@ function projectGitMetadataEquals(
   return (
     current?.gitBranch === next.gitBranch &&
     current?.gitDiffStats?.addedLines === next.gitDiffStats?.addedLines &&
-    current?.gitDiffStats?.deletedLines === next.gitDiffStats?.deletedLines
+    current?.gitDiffStats?.deletedLines === next.gitDiffStats?.deletedLines &&
+    current?.gitUpstreamDiffStats?.upstreamBranch ===
+      next.gitUpstreamDiffStats?.upstreamBranch &&
+    current?.gitUpstreamDiffStats?.aheadCommits ===
+      next.gitUpstreamDiffStats?.aheadCommits &&
+    current?.gitUpstreamDiffStats?.behindCommits ===
+      next.gitUpstreamDiffStats?.behindCommits
   );
 }
 
@@ -201,12 +273,14 @@ async function resolveProjectGitMetadata(
       return {
         gitBranch: undefined,
         gitDiffStats: undefined,
+        gitUpstreamDiffStats: undefined,
       };
     }
 
     return {
       gitBranch: projectGitData.currentBranch,
       gitDiffStats: projectGitData.diffStats,
+      gitUpstreamDiffStats: projectGitData.upstreamDiffStats,
     };
   } catch (error) {
     const gitError = error as { message?: string };
@@ -220,6 +294,7 @@ async function resolveProjectGitMetadata(
     return {
       gitBranch: undefined,
       gitDiffStats: undefined,
+      gitUpstreamDiffStats: undefined,
     };
   }
 }
@@ -314,6 +389,7 @@ export class ProjectGitService {
       }
       draft.gitBranch = metadata.gitBranch;
       draft.gitDiffStats = metadata.gitDiffStats;
+      draft.gitUpstreamDiffStats = metadata.gitUpstreamDiffStats;
     });
   }
 
@@ -539,6 +615,7 @@ export class ProjectGitService {
 
           project.gitBranch = metadata.gitBranch;
           project.gitDiffStats = metadata.gitDiffStats;
+          project.gitUpstreamDiffStats = metadata.gitUpstreamDiffStats;
         }
       });
     })().finally(() => {

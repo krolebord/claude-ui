@@ -47,8 +47,11 @@ describe("ProjectGitService", () => {
       raw: (args: string[]) => rawMock(projectPath, args),
     }));
     rawMock.mockImplementation(async (_projectPath: string, args: string[]) => {
-      if (args[0] === "rev-parse") {
+      if (args[0] === "rev-parse" && args[1] === "--verify") {
         return "0123456789abcdef\n";
+      }
+      if (args[0] === "rev-parse" && args.includes("@{upstream}")) {
+        throw new Error("no upstream configured");
       }
       return "";
     });
@@ -269,6 +272,52 @@ describe("ProjectGitService", () => {
         collapsed: false,
         gitBranch: "main",
         gitDiffStats: { addedLines: 0, deletedLines: 0 },
+      },
+    ]);
+    expect(projectsState.state[0]?.gitUpstreamDiffStats).toBeUndefined();
+  });
+
+  it("tracks commit divergence from the upstream branch", async () => {
+    const projectsState = defineProjectState();
+    projectsState.updateState((projects) => {
+      projects.push({
+        path: "/repo-one",
+        collapsed: false,
+      });
+    });
+
+    checkIsRepoMock.mockResolvedValue(true);
+    branchLocalMock.mockResolvedValue({ current: "main" });
+    rawMock.mockImplementation(async (projectPath: string, args: string[]) => {
+      if (projectPath !== "/repo-one") {
+        return "";
+      }
+      if (args[0] === "rev-parse" && args[1] === "--verify") {
+        return "0123456789abcdef\n";
+      }
+      if (args[0] === "rev-parse" && args.includes("@{upstream}")) {
+        return "origin/main\n";
+      }
+      if (args[0] === "rev-list" && args[1] === "--left-right") {
+        return "2\t5\n";
+      }
+      return "";
+    });
+
+    const service = new ProjectGitService(projectsState);
+    await service.refreshProject("/repo-one");
+
+    expect(projectsState.state).toEqual([
+      {
+        path: "/repo-one",
+        collapsed: false,
+        gitBranch: "main",
+        gitDiffStats: { addedLines: 0, deletedLines: 0 },
+        gitUpstreamDiffStats: {
+          upstreamBranch: "origin/main",
+          aheadCommits: 5,
+          behindCommits: 2,
+        },
       },
     ]);
   });
