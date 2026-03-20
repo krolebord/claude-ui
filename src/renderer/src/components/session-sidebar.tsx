@@ -328,26 +328,36 @@ export function SessionSidebar() {
 
   return (
     <aside className="flex h-full w-full flex-col border-r border-border/70 bg-black/35 backdrop-blur-xl">
-      <div className="flex h-9 border-b border-border/70">
-        <Button
-          variant="flat"
-          className="h-full w-9 shrink-0 px-0"
-          onClick={openSettingsDialog}
-          aria-label="Settings"
-        >
-          <Settings className="size-3.5" />
-        </Button>
-        <Button
-          variant="flat"
-          className="h-full flex-1 gap-1.5 px-2 text-xs"
-          onClick={() => createProjectMutation.mutate()}
-          disabled={createProjectMutation.isPending}
-        >
-          <FolderPlus className="size-3.5" />
-          {createProjectMutation.isPending
-            ? "Selecting project..."
-            : "Add new project"}
-        </Button>
+      <div className="flex h-9 items-center border-b border-border/70 pl-16 [app-region:drag]">
+        <div className="ml-auto flex h-full items-center [app-region:no-drag]">
+          <Button
+            variant="flat"
+            className="h-full w-9 shrink-0 px-0"
+            onClick={openSettingsDialog}
+            aria-label="Settings"
+            title="Settings"
+          >
+            <Settings className="size-3.5" />
+          </Button>
+          <Button
+            variant="flat"
+            className="h-full w-9 shrink-0 px-0"
+            onClick={() => createProjectMutation.mutate()}
+            disabled={createProjectMutation.isPending}
+            aria-label="Add new project"
+            title={
+              createProjectMutation.isPending
+                ? "Selecting project..."
+                : "Add new project"
+            }
+          >
+            {createProjectMutation.isPending ? (
+              <LoaderCircle className="size-3.5 animate-spin" />
+            ) : (
+              <FolderPlus className="size-3.5" />
+            )}
+          </Button>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">

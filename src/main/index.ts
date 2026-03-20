@@ -41,6 +41,11 @@ async function createWindow(): Promise<void> {
     minWidth: 900,
     minHeight: 600,
     title: "Agent UI",
+    titleBarStyle: "hidden",
+    trafficLightPosition: {
+      x: 14,
+      y: 10,
+    },
     webPreferences: {
       preload,
       contextIsolation: true,
