@@ -142,17 +142,13 @@ export function TerminalPane({
       onResizeRef.current(cols, rows);
     });
 
-    // Avoid fitting on container/pane resizes; Codex CLI can lose chat history on SIGWINCH.
-    // Keep window-level resize support, scheduled after layout settles.
-    let resizeFrameId: number | null = null;
+    const resizeObserver = new ResizeObserver(() => {
+      fitAndNotify();
+    });
+    resizeObserver.observe(container);
+
     const onWindowResize = () => {
-      if (resizeFrameId !== null) {
-        window.cancelAnimationFrame(resizeFrameId);
-      }
-      resizeFrameId = window.requestAnimationFrame(() => {
-        resizeFrameId = null;
-        fitAndNotify();
-      });
+      fitAndNotify();
     };
 
     window.addEventListener("resize", onWindowResize);
@@ -161,9 +157,7 @@ export function TerminalPane({
     return () => {
       onDataDisposable.dispose();
       onResizeDisposable.dispose();
-      if (resizeFrameId !== null) {
-        window.cancelAnimationFrame(resizeFrameId);
-      }
+      resizeObserver.disconnect();
       window.removeEventListener("resize", onWindowResize);
       terminal.dispose();
       terminalRef.current = null;
