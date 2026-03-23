@@ -616,7 +616,12 @@ describe("ProjectGitService", () => {
       alias: "UI Worktree",
     });
 
-    expect(result).toEqual({ path: "/repo-one-feature-new-ui" });
+    expect(result).toEqual({
+      path: "/repo-one-feature-new-ui",
+      projectRoot: "/repo-one",
+      worktreeRoot: "/repo-one-feature-new-ui",
+      setupCommands: [],
+    });
     expect(rawMock).toHaveBeenCalledWith("/repo-one", [
       "worktree",
       "add",
@@ -702,14 +707,14 @@ describe("ProjectGitService", () => {
 
     const service = new ProjectGitService(defineProjectState());
 
-    await expect(
-      service.createWorktreeProject({
-        sourcePath: "/repo-one",
-        fromBranch: "main",
-        newBranch: "feature/new-ui",
-        destinationPath: "/repo-one-feature-new-ui",
-      }),
-    ).resolves.toEqual({ path: "/repo-one-feature-new-ui" });
+    const result = await service.createWorktreeProject({
+      sourcePath: "/repo-one",
+      fromBranch: "main",
+      newBranch: "feature/new-ui",
+      destinationPath: "/repo-one-feature-new-ui",
+    });
+    expect(result.path).toBe("/repo-one-feature-new-ui");
+    expect(result.setupCommands).toEqual([]);
 
     expect(rawMock).toHaveBeenCalledWith("/repo-one", [
       "worktree",
@@ -930,5 +935,38 @@ describe("ProjectGitService", () => {
       "--force",
       "/repo-one-feature-new-ui",
     ]);
+  });
+
+  it("returns parsed setup commands in the result without running them", async () => {
+    const projectsState = defineProjectState();
+    projectsState.updateState((projects) => {
+      projects.push({
+        path: "/repo-one",
+        collapsed: false,
+        gitBranch: "main",
+        worktreeSetupCommands: "pnpm install\n\n  \npnpm build",
+      });
+    });
+
+    checkIsRepoMock.mockResolvedValue(true);
+    branchLocalMock.mockImplementation(async (projectPath: string) => {
+      if (projectPath === "/repo-one") {
+        return { current: "main", branches: { main: {} } };
+      }
+      return { current: null, branches: {} };
+    });
+
+    const service = new ProjectGitService(projectsState);
+    const result = await service.createWorktreeProject({
+      sourcePath: "/repo-one",
+      fromBranch: "main",
+      newBranch: "feature/blank-lines",
+      destinationPath: "/repo-one-blank-lines",
+    });
+
+    expect(result.setupCommands).toEqual(["pnpm install", "pnpm build"]);
+    expect(
+      projectsState.state.some((p) => p.path === "/repo-one-blank-lines"),
+    ).toBe(true);
   });
 });

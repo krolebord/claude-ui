@@ -34,6 +34,7 @@ import {
   defineSessionStatePersistence,
   removeLegacyLocalTerminalSessions,
 } from "./sessions/state";
+import { WorktreeSetupSessionsManager } from "./sessions/worktree-setup.session";
 import { StateOrchestrator } from "./state-orchestrator";
 
 const STORAGE_SCHEMA_VERSION = 3;
@@ -97,7 +98,7 @@ async function initializeManagedCursorHooks(
 export type CreateServicesResult = Awaited<ReturnType<typeof createServices>>;
 
 export async function createServices(options: CreateServicesOptions) {
-  const { userDataPath, getMainWindow } = options;
+  const { userDataPath, getMainWindow, disposeSignal } = options;
   const { managedPluginDir, pluginWarning } =
     await initializeManagedPlugin(userDataPath);
   const { cursorConfigDir, cursorHooksWarning } =
@@ -189,6 +190,10 @@ export async function createServices(options: CreateServicesOptions) {
     sessionLogFileManager: cursorSessionLogFileManager,
     cursorHooksWarning,
   });
+  const worktreeSetupSessionsManager = new WorktreeSetupSessionsManager(
+    sessionsState,
+    disposeSignal,
+  );
   const powerSaveBlockerManager = new PowerSaveBlockerManager(
     sessionsState,
     appSettingsState,
@@ -226,6 +231,9 @@ export async function createServices(options: CreateServicesOptions) {
   shutdownDisposable.addDisposable(
     async () => await cursorAgentSessionsManager.dispose(),
   );
+  shutdownDisposable.addDisposable(
+    async () => await worktreeSetupSessionsManager.dispose(),
+  );
   shutdownDisposable.addDisposable(() => powerSaveBlockerManager.dispose());
   shutdownDisposable.addDisposable(() => stateService.dispose());
   shutdownDisposable.addDisposable(() => persistenceService.dispose());
@@ -248,6 +256,7 @@ export async function createServices(options: CreateServicesOptions) {
       codex: codexSessionsManager,
       ralphLoop: ralphLoopSessionsManager,
       cursorAgent: cursorAgentSessionsManager,
+      worktreeSetup: worktreeSetupSessionsManager,
     },
   };
 }

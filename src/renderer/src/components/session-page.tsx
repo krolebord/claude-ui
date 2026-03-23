@@ -8,6 +8,11 @@ import {
 import { Badge } from "@renderer/components/ui/badge";
 import { Button } from "@renderer/components/ui/button";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@renderer/components/ui/collapsible";
+import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
@@ -16,7 +21,13 @@ import { useActiveSessionId } from "@renderer/hooks/use-active-session-id";
 import { orpc } from "@renderer/orpc-client";
 import type { TerminalEvent } from "@shared/terminal-types";
 import { useMutation } from "@tanstack/react-query";
-import { AlertCircle } from "lucide-react";
+import {
+  AlertCircle,
+  ChevronRight,
+  CircleCheck,
+  CircleX,
+  LoaderCircle,
+} from "lucide-react";
 import {
   type ReactNode,
   useCallback,
@@ -100,9 +111,79 @@ export function SessionPage() {
       );
     case "ralph-loop":
       return <RalphLoopSessionPage session={session} />;
+    case "worktree-setup":
+      return <WorktreeSetupSessionPage session={session} />;
     default:
       return null;
   }
+}
+
+function WorktreeSetupSessionPage({
+  session,
+}: {
+  session: Extract<Session, { type: "worktree-setup" }>;
+}) {
+  return (
+    <SessionPageLayout
+      topPane={
+        <div className="flex h-full min-h-0 flex-col">
+          <SessionHeader session={session} />
+          <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto p-4">
+            {session.steps.map((step, index) => (
+              <WorktreeSetupStepRow
+                key={`${index}-${step.command}`}
+                step={step}
+              />
+            ))}
+          </div>
+        </div>
+      }
+      bottomPane={<ProjectTerminalPane cwd={session.startupConfig.cwd} />}
+    />
+  );
+}
+
+function WorktreeSetupStepRow({
+  step,
+}: {
+  step: Extract<Session, { type: "worktree-setup" }>["steps"][number];
+}) {
+  const isError = step.status === "error";
+  const isRunning = step.status === "running";
+  const isPending = step.status === "pending";
+
+  return (
+    <Collapsible defaultOpen={isRunning || isError}>
+      <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent/50">
+        <ChevronRight className="size-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-90" />
+        {isRunning ? (
+          <LoaderCircle className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
+        ) : isError ? (
+          <CircleX className="size-3.5 shrink-0 text-rose-400" />
+        ) : isPending ? (
+          <span className="size-3.5 shrink-0 text-muted-foreground">○</span>
+        ) : (
+          <CircleCheck className="size-3.5 shrink-0 text-emerald-400" />
+        )}
+        <code className="truncate">{step.command}</code>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        {step.output ? (
+          <pre className="mx-2 mb-1 max-h-60 overflow-auto rounded border border-border/60 bg-muted/30 p-2 font-mono text-xs whitespace-pre-wrap">
+            {step.output}
+            {step.outputTruncated ? (
+              <span className="text-muted-foreground"> (truncated)</span>
+            ) : null}
+          </pre>
+        ) : null}
+        {isError && step.errorMessage ? (
+          <pre className="mx-2 mb-1 max-h-40 overflow-auto rounded border border-rose-500/30 bg-rose-500/10 p-2 text-xs text-rose-300 whitespace-pre-wrap">
+            {step.errorMessage}
+          </pre>
+        ) : null}
+      </CollapsibleContent>
+    </Collapsible>
+  );
 }
 
 function RalphLoopSessionPage({

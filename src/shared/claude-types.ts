@@ -82,6 +82,7 @@ export interface ClaudeProject {
   gitDiffStats?: GitDiffStats;
   gitUpstreamDiffStats?: GitUpstreamDiffStats;
   worktreeOriginPath?: string;
+  worktreeSetupCommands?: string;
   localClaude?: LocalClaudeProjectSettings;
   localCodex?: LocalCodexProjectSettings;
   localCursor?: LocalCursorProjectSettings;

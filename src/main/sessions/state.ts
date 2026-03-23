@@ -6,6 +6,7 @@ import { codexLocalTerminalSessionSchema } from "./codex.session";
 import { cursorAgentSessionSchema } from "./cursor-agent.session";
 import { localTerminalSessionSchema } from "./local-terminal.session";
 import { ralphLoopSessionSchema } from "./ralph-loop.session";
+import { worktreeSetupSessionSchema } from "./worktree-setup.session";
 
 const sessionSchema = z.discriminatedUnion("type", [
   claudeLocalTerminalSessionSchema,
@@ -13,6 +14,7 @@ const sessionSchema = z.discriminatedUnion("type", [
   ralphLoopSessionSchema,
   codexLocalTerminalSessionSchema,
   cursorAgentSessionSchema,
+  worktreeSetupSessionSchema,
 ]);
 export type Session = z.infer<typeof sessionSchema>;
 

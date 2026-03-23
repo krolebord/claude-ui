@@ -73,6 +73,7 @@ export const claudeProjectSchema = z.object({
   collapsed: z.boolean().catch(false),
   alias: projectAliasSchema,
   worktreeOriginPath: worktreeOriginPathSchema,
+  worktreeSetupCommands: z.string().optional().catch(undefined),
   localClaude: localClaudeProjectSettingsSchema.optional().catch(undefined),
   localCodex: localCodexProjectSettingsSchema.optional().catch(undefined),
   localCursor: localCursorProjectSettingsSchema.optional().catch(undefined),
@@ -172,6 +173,9 @@ async function deleteProjectSessionsForPath(
         break;
       case "cursor-agent":
         await context.sessions.cursorAgent.deleteSession(sessionId);
+        break;
+      case "worktree-setup":
+        await context.sessions.worktreeSetup.deleteSession(sessionId);
         break;
     }
   }
@@ -287,13 +291,24 @@ export const projectsRouter = {
       }),
     )
     .handler(async ({ input, context }) => {
-      return context.projectGitService.createWorktreeProject({
+      const result = await context.projectGitService.createWorktreeProject({
         sourcePath: normalizeProjectPath(input.sourcePath),
         fromBranch: input.fromBranch.trim(),
         newBranch: input.newBranch.trim(),
         destinationPath: normalizeProjectPath(input.destinationPath),
         alias: normalizeProjectAlias(input.alias),
       });
+
+      let sessionId: string | undefined;
+      if (result.setupCommands.length > 0) {
+        sessionId = context.sessions.worktreeSetup.createSessionAndStart({
+          cwd: result.worktreeRoot,
+          projectRoot: result.projectRoot,
+          commands: result.setupCommands,
+        });
+      }
+
+      return { path: result.path, sessionId };
     }),
   setProjectCollapsed: procedure
     .input(z.object({ path: projectPathSchema, collapsed: z.boolean() }))
@@ -314,16 +329,19 @@ export const projectsRouter = {
         localClaude: localClaudeProjectSettingsSchema.optional(),
         localCodex: localCodexProjectSettingsSchema.optional(),
         localCursor: localCursorProjectSettingsSchema.optional(),
+        worktreeSetupCommands: z.string().optional(),
       }),
     )
     .handler(async ({ input, context }) => {
       const path = normalizeProjectPath(input.path);
       if (!path) return;
 
+      const worktreeSetupCommands = input.worktreeSetupCommands || undefined;
       const settings = {
         localClaude: toOptionalSettings(input.localClaude),
         localCodex: toOptionalSettings(input.localCodex),
         localCursor: toOptionalSettings(input.localCursor),
+        worktreeSetupCommands,
       };
 
       context.projectsState.updateState((projects) => {
@@ -332,6 +350,7 @@ export const projectsRouter = {
         project.localClaude = settings.localClaude;
         project.localCodex = settings.localCodex;
         project.localCursor = settings.localCursor;
+        project.worktreeSetupCommands = worktreeSetupCommands;
       });
 
       await writeProjectSettingsFile(path, settings);

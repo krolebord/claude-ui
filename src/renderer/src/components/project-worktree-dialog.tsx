@@ -15,6 +15,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@renderer/components/ui/popover";
+import { useActiveSessionStore } from "@renderer/hooks/use-active-session-id";
 import { cn } from "@renderer/lib/utils";
 import { orpc } from "@renderer/orpc-client";
 import { getProjectDisplayName } from "@renderer/services/terminal-session-selectors";
@@ -135,8 +136,11 @@ export function ProjectWorktreeDialog() {
         alias: alias || undefined,
       });
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       setOpenProjectPath(null);
+      if (data.sessionId) {
+        useActiveSessionStore.getState().setActiveSessionId(data.sessionId);
+      }
     },
     onError: (error) => {
       if (error instanceof Error && error.message.trim()) {

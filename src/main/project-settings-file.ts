@@ -60,6 +60,7 @@ export const projectSettingsFileSchema = z.object({
   localClaude: localClaudeProjectSettingsSchema.optional().catch(undefined),
   localCodex: localCodexProjectSettingsSchema.optional().catch(undefined),
   localCursor: localCursorProjectSettingsSchema.optional().catch(undefined),
+  worktreeSetupCommands: z.string().optional().catch(undefined),
 });
 
 export type ProjectSettingsFile = z.infer<typeof projectSettingsFileSchema>;
@@ -149,11 +150,13 @@ export async function writeProjectSettingsFile(
   const localClaude = toOptionalSettings(settings.localClaude);
   const localCodex = toOptionalSettings(settings.localCodex);
   const localCursor = toOptionalSettings(settings.localCursor);
+  const worktreeSetupCommands = settings.worktreeSetupCommands ?? undefined;
 
   for (const [key, value] of [
     ["localClaude", localClaude],
     ["localCodex", localCodex],
     ["localCursor", localCursor],
+    ["worktreeSetupCommands", worktreeSetupCommands],
   ] as const) {
     const edits = modify(content, [key], value ?? undefined, {
       isArrayInsertion: false,

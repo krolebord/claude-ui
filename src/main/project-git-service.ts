@@ -13,6 +13,7 @@ import {
   type ProjectSettingsFile,
   writeProjectSettingsFile,
 } from "./project-settings-file";
+import { parseSetupCommands } from "./sessions/worktree-setup.session";
 
 const EMPTY_GIT_TREE_HASH = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
 
@@ -312,12 +313,16 @@ function getProjectSettingsSnapshot(
     localCursor: project?.localCursor
       ? structuredClone(project.localCursor)
       : undefined,
+    worktreeSetupCommands: project?.worktreeSetupCommands,
   };
 }
 
 function hasProjectSettings(settings: ProjectSettingsFile): boolean {
   return Boolean(
-    settings.localClaude || settings.localCodex || settings.localCursor,
+    settings.localClaude ||
+      settings.localCodex ||
+      settings.localCursor ||
+      settings.worktreeSetupCommands,
   );
 }
 
@@ -433,7 +438,12 @@ export class ProjectGitService {
     newBranch: string;
     destinationPath: string;
     alias?: string;
-  }): Promise<{ path: string }> {
+  }): Promise<{
+    path: string;
+    projectRoot: string;
+    worktreeRoot: string;
+    setupCommands: string[];
+  }> {
     const sourcePath = input.sourcePath.trim();
     const fromBranch = input.fromBranch.trim();
     const newBranch = input.newBranch.trim();
@@ -489,27 +499,33 @@ export class ProjectGitService {
       await writeProjectSettingsFile(destinationPath, sourceProjectSettings);
     }
 
-    if (this.disposed) {
-      return { path: destinationPath };
+    const setupCommands = parseSetupCommands(
+      sourceProject?.worktreeSetupCommands,
+    );
+
+    if (!this.disposed) {
+      this.projectsState.updateState((projects) => {
+        if (projects.some((project) => project.path === destinationPath)) {
+          return;
+        }
+        projects.push({
+          path: destinationPath,
+          collapsed: false,
+          alias,
+          worktreeOriginPath: sourcePath,
+          ...sourceProjectSettings,
+        });
+      });
+
+      await this.refreshProject(destinationPath);
     }
 
-    this.projectsState.updateState((projects) => {
-      if (projects.some((project) => project.path === destinationPath)) {
-        return;
-      }
-
-      projects.push({
-        path: destinationPath,
-        collapsed: false,
-        alias,
-        worktreeOriginPath: sourcePath,
-        ...sourceProjectSettings,
-      });
-    });
-
-    await this.refreshProject(destinationPath);
-
-    return { path: destinationPath };
+    return {
+      path: destinationPath,
+      projectRoot: sourcePath,
+      worktreeRoot: destinationPath,
+      setupCommands,
+    };
   }
 
   async deleteWorktreeProject(input: {

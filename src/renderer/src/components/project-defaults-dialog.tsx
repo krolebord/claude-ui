@@ -45,7 +45,7 @@ import type {
 } from "@shared/codex-types";
 import { cursorModels } from "@shared/cursor-models";
 import { useMutation } from "@tanstack/react-query";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, GitFork } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 import { useEffect, useState } from "react";
 import { create } from "zustand";
@@ -98,16 +98,17 @@ const CURSOR_AGENT_MODE_OPTIONS: { value: string; label: string }[] = [
   { value: "ask", label: "Ask" },
 ];
 
-type ProjectDefaultsTab = "claude" | "codex" | "cursor";
+type ProjectDefaultsTab = "claude" | "codex" | "cursor" | "worktree";
 
 const PROJECT_DEFAULTS_TAB_OPTIONS: {
   value: ProjectDefaultsTab;
   label: string;
-  icon: ComponentType<SVGProps<SVGSVGElement>>;
+  icon: ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>;
 }[] = [
   { value: "claude", label: "Claude", icon: ClaudeCodeIcon },
   { value: "codex", label: "Codex", icon: CodexIcon },
   { value: "cursor", label: "Cursor", icon: CursorAgentIcon },
+  { value: "worktree", label: "Worktree", icon: GitFork },
 ];
 
 const CURSOR_AUTO_MODEL_VALUE = "auto";
@@ -153,6 +154,7 @@ export function ProjectDefaultsDialog() {
   );
   const [cursorPermissionMode, setCursorPermissionMode] =
     useState<CursorAgentPermissionMode>("default");
+  const [worktreeSetupCommands, setWorktreeSetupCommands] = useState("");
   const [activeTab, setActiveTab] = useState<ProjectDefaultsTab>("claude");
 
   const saveMutation = useMutation(
@@ -191,6 +193,7 @@ export function ProjectDefaultsDialog() {
     setCursorModel(project.localCursor?.model ?? "");
     setCursorMode(project.localCursor?.mode);
     setCursorPermissionMode(project.localCursor?.permissionMode ?? "default");
+    setWorktreeSetupCommands(project.worktreeSetupCommands ?? "");
   }, [project]);
 
   if (!openProjectCwd || !project) {
@@ -262,6 +265,7 @@ export function ProjectDefaultsDialog() {
                 mode: cursorMode,
                 permissionMode: cursorPermissionMode,
               },
+              worktreeSetupCommands: worktreeSetupCommands || undefined,
             });
           }}
         >
@@ -516,7 +520,7 @@ export function ProjectDefaultsDialog() {
                 />
               </div>
             </div>
-          ) : (
+          ) : activeTab === "cursor" ? (
             <div key="cursor-defaults-tab" className="space-y-4">
               <div className="text-sm font-medium">Cursor defaults</div>
 
@@ -603,6 +607,32 @@ export function ProjectDefaultsDialog() {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+            </div>
+          ) : (
+            <div key="worktree-defaults-tab" className="space-y-4">
+              <div className="text-sm font-medium">Worktree setup</div>
+
+              <div className="space-y-2">
+                <Label htmlFor="project-worktree-setup-commands">
+                  Setup commands
+                </Label>
+                <Textarea
+                  id="project-worktree-setup-commands"
+                  placeholder={"pnpm install\ncp .env.example .env"}
+                  value={worktreeSetupCommands}
+                  onChange={(event) => {
+                    setWorktreeSetupCommands(event.target.value);
+                  }}
+                  rows={6}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Commands run sequentially in the new worktree root. A failed
+                  command stops the remaining commands.{" "}
+                  <code className="select-all">$PROJECT_ROOT</code> and{" "}
+                  <code className="select-all">$WORKTREE_ROOT</code> are
+                  available as env variables.
+                </p>
               </div>
             </div>
           )}

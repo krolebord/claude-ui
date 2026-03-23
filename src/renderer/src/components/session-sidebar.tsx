@@ -158,6 +158,7 @@ const sessionTypeIcon: Record<
   "ralph-loop": { icon: Repeat, label: "Ralph Loop" },
   "codex-local-terminal": { icon: CodexIcon, label: "Codex" },
   "cursor-agent": { icon: CursorAgentIcon, label: "Cursor Agent" },
+  "worktree-setup": { icon: GitFork, label: "Worktree setup" },
 };
 
 type RenamableSessionType = Session["type"];
@@ -188,6 +189,14 @@ function isSessionActive(session: Session): boolean {
     return session.loopState.autonomousEnabled || session.status !== "stopped";
   }
 
+  if (session.type === "worktree-setup") {
+    return (
+      session.status === "running" ||
+      session.status === "starting" ||
+      session.status === "awaiting_user_response"
+    );
+  }
+
   return session.status !== "stopped";
 }
 
@@ -215,6 +224,11 @@ async function stopSession(session: Session): Promise<void> {
       return;
     case "cursor-agent":
       await orpc.sessions.cursorAgent.stopLiveSession.call({
+        sessionId: session.sessionId,
+      });
+      return;
+    case "worktree-setup":
+      await orpc.sessions.worktreeSetup.cancelSetup.call({
         sessionId: session.sessionId,
       });
       return;
@@ -706,6 +720,15 @@ function GroupSessionsList({
                   onViewRawSessionState={onViewRawSessionState}
                 />
               );
+            case "worktree-setup":
+              return (
+                <WorktreeSetupSessionSidebarItem
+                  key={session.sessionId}
+                  sessionId={session.sessionId}
+                  onRenameSession={onRenameSession}
+                  onViewRawSessionState={onViewRawSessionState}
+                />
+              );
             default:
               return null;
           }
@@ -1090,6 +1113,78 @@ function CursorAgentSessionSidebarItem({
   );
 }
 
+function WorktreeSetupSessionSidebarItem({
+  sessionId,
+  onRenameSession,
+  onViewRawSessionState,
+}: {
+  sessionId: string;
+  onRenameSession: (target: RenameSessionTarget) => void;
+  onViewRawSessionState: (sessionId: string) => void;
+}) {
+  const setActiveSessionId = useActiveSessionStore((x) => x.setActiveSessionId);
+  const session = useAppState((x) => x.sessions[sessionId]);
+
+  const cancelMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await orpc.sessions.worktreeSetup.cancelSetup.call({ sessionId: id });
+    },
+  });
+
+  const deleteSessionMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await orpc.sessions.worktreeSetup.deleteSession.call({ sessionId: id });
+    },
+    onSuccess: () => {
+      if (useActiveSessionStore.getState().activeSessionId === sessionId) {
+        setActiveSessionId(null);
+      }
+    },
+  });
+
+  if (!session || session.type !== "worktree-setup") {
+    return null;
+  }
+
+  const isRunning =
+    session.status === "running" || session.status === "starting";
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <SessionSidebarItemTrigger sessionId={sessionId}>
+          {isRunning ? (
+            <SidebarIconButton
+              icon={SquareIcon}
+              label="Cancel setup"
+              disabled={cancelMutation.isPending}
+              onClick={() => {
+                cancelMutation.mutate(sessionId);
+              }}
+            />
+          ) : null}
+          <SidebarIconButton
+            icon={TrashIcon}
+            label="Delete session"
+            variant="destructive"
+            disabled={deleteSessionMutation.isPending}
+            onClick={() => {
+              deleteSessionMutation.mutate(sessionId);
+            }}
+          />
+        </SessionSidebarItemTrigger>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <CommonSessionContextMenuItems
+          session={session}
+          onRenameSession={onRenameSession}
+          onViewRawSessionState={onViewRawSessionState}
+        />
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
+
 function RalphLoopSessionSidebarItem({
   sessionId,
   onRenameSession,
@@ -1238,6 +1333,12 @@ function RenameSessionDialog({
           return;
         case "ralph-loop":
           await orpc.sessions.ralphLoop.renameSession.call({
+            sessionId: target.sessionId,
+            title: target.title,
+          });
+          return;
+        case "worktree-setup":
+          await orpc.sessions.worktreeSetup.renameSession.call({
             sessionId: target.sessionId,
             title: target.title,
           });

@@ -217,6 +217,16 @@ export function useAppShortcuts(): void {
                 sessionId: activeSessionId,
               });
               break;
+            case "cursor-agent":
+              await orpc.sessions.cursorAgent.deleteSession.call({
+                sessionId: activeSessionId,
+              });
+              break;
+            case "worktree-setup":
+              await orpc.sessions.worktreeSetup.deleteSession.call({
+                sessionId: activeSessionId,
+              });
+              break;
           }
           switchSession(nextSessionId);
         },

@@ -7,6 +7,7 @@ import { skipToken, useMutation, useQuery } from "@tanstack/react-query";
 import {
   ChevronDown,
   FolderOpen,
+  GitFork,
   Github,
   Repeat,
   TerminalSquare,
@@ -49,6 +50,7 @@ const sessionTypeConfig: Record<
   "ralph-loop": { icon: Repeat },
   "codex-local-terminal": { icon: CodexIcon },
   "cursor-agent": { icon: CursorAgentIcon },
+  "worktree-setup": { icon: GitFork },
 };
 
 const openInAppItems: Array<{
