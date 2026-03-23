@@ -508,6 +508,62 @@ describe("ProjectGitService", () => {
     expect(result.localBranches).toEqual(["develop", "main"]);
   });
 
+  it("rejects worktree creation data when source is itself a worktree", async () => {
+    const projectsState = defineProjectState();
+    projectsState.updateState((projects) => {
+      projects.push({
+        path: "/repo-one-feature",
+        collapsed: false,
+        gitBranch: "feature",
+        worktreeOriginPath: "/repo-one",
+      });
+    });
+
+    const service = new ProjectGitService(projectsState);
+
+    await expect(
+      service.getWorktreeCreationData("/repo-one-feature"),
+    ).rejects.toThrow(
+      "Cannot create a worktree from a project that is itself a worktree.",
+    );
+  });
+
+  it("rejects worktree project creation when source is itself a worktree", async () => {
+    const projectsState = defineProjectState();
+    projectsState.updateState((projects) => {
+      projects.push({
+        path: "/repo-one-feature",
+        collapsed: false,
+        gitBranch: "feature",
+        worktreeOriginPath: "/repo-one",
+      });
+    });
+
+    checkIsRepoMock.mockResolvedValue(true);
+    branchLocalMock.mockResolvedValue({
+      current: "feature",
+      branches: { feature: {}, main: {} },
+    });
+
+    const service = new ProjectGitService(projectsState);
+
+    await expect(
+      service.createWorktreeProject({
+        sourcePath: "/repo-one-feature",
+        fromBranch: "feature",
+        newBranch: "feature/nested",
+        destinationPath: "/repo-one-feature-nested",
+      }),
+    ).rejects.toThrow(
+      "Cannot create a worktree from a project that is itself a worktree.",
+    );
+
+    expect(rawMock).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.arrayContaining(["worktree", "add"]),
+    );
+  });
+
   it("creates a worktree project with alias and origin metadata", async () => {
     const projectsState = defineProjectState();
     projectsState.updateState((projects) => {

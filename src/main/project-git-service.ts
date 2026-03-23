@@ -400,6 +400,15 @@ export class ProjectGitService {
     suggestedDestinationParentPath: string;
     sourceProjectName: string;
   }> {
+    const sourceProject = this.projectsState.state.find(
+      (project) => project.path === projectPath,
+    );
+    if (sourceProject?.worktreeOriginPath) {
+      throw new Error(
+        "Cannot create a worktree from a project that is itself a worktree.",
+      );
+    }
+
     const projectGitData = await readProjectGitData(projectPath);
     if (!projectGitData.isRepo) {
       throw new Error("Project is not a Git repository.");
@@ -437,6 +446,11 @@ export class ProjectGitService {
     if (!sourcePath || !fromBranch || !newBranch || !destinationPath) {
       throw new Error(
         "Source path, branches, and destination path are required.",
+      );
+    }
+    if (sourceProject?.worktreeOriginPath) {
+      throw new Error(
+        "Cannot create a worktree from a project that is itself a worktree.",
       );
     }
     if (

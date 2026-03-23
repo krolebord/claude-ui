@@ -382,7 +382,9 @@ export function SessionSidebar() {
                   onCreateWorktree={() =>
                     setOpenProjectWorktreePath(group.path)
                   }
-                  canCreateWorktree={Boolean(group.gitBranch)}
+                  canCreateWorktree={
+                    Boolean(group.gitBranch) && !group.isWorktree
+                  }
                   onOpenSettings={() => setOpenProjectCwd(group.path)}
                   onOpenFolder={() => openFolderMutation.mutate(group.path)}
                   onDelete={() => {
