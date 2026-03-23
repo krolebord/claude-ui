@@ -7,10 +7,10 @@ import { ensureManagedClaudeStatePlugin } from "./claude-state-plugin";
 import { CodexSessionLogFileManager } from "./codex-session-log-file-manager";
 import { CursorSessionLogFileManager } from "./cursor-session-log-file-manager";
 import { ensureManagedCursorStateHooks } from "./cursor-state-hooks";
+import { DesktopIntegrationManager } from "./desktop-integration-manager";
 import { generateCodexSessionTitle } from "./generate-codex-session-title";
 import log from "./logger";
 import { PersistenceOrchestrator } from "./persistence-orchestrator";
-import { PowerSaveBlockerManager } from "./power-save-blocker-manager";
 import { ProjectGitService } from "./project-git-service";
 import {
   defineProjectState,
@@ -194,7 +194,7 @@ export async function createServices(options: CreateServicesOptions) {
     sessionsState,
     disposeSignal,
   );
-  const powerSaveBlockerManager = new PowerSaveBlockerManager(
+  const desktopIntegrationManager = new DesktopIntegrationManager(
     sessionsState,
     appSettingsState,
   );
@@ -234,7 +234,7 @@ export async function createServices(options: CreateServicesOptions) {
   shutdownDisposable.addDisposable(
     async () => await worktreeSetupSessionsManager.dispose(),
   );
-  shutdownDisposable.addDisposable(() => powerSaveBlockerManager.dispose());
+  shutdownDisposable.addDisposable(() => desktopIntegrationManager.dispose());
   shutdownDisposable.addDisposable(() => stateService.dispose());
   shutdownDisposable.addDisposable(() => persistenceService.dispose());
 

@@ -51,6 +51,8 @@ export function SettingsDialog() {
 
         <div className="divide-y divide-border/40">
           <PreventSleepToggle />
+          <DockBadgeForAttentionToggle />
+          <DockBounceOnAttentionToggle />
 
           <OpenLogFolder />
           <OpenStatePluginFolder />
@@ -204,6 +206,51 @@ function PreventSleepToggle() {
       </div>
       <Switch
         checked={preventSleep}
+        onCheckedChange={(checked) => mutate({ enabled: checked })}
+      />
+    </div>
+  );
+}
+
+function DockBadgeForAttentionToggle() {
+  const enabled = useAppState((s) => s.appSettings.dockBadgeForAttention);
+  const { mutate } = useMutation(
+    orpc.appSettings.setDockBadgeForAttention.mutationOptions(),
+  );
+
+  return (
+    <div className="flex items-center justify-between py-2.5">
+      <div className="space-y-0.5">
+        <div className="text-sm font-medium">Dock badge for attention</div>
+        <div className="text-xs text-muted-foreground">
+          Show a count on the Dock icon when sessions need input or approval
+        </div>
+      </div>
+      <Switch
+        checked={enabled}
+        onCheckedChange={(checked) => mutate({ enabled: checked })}
+      />
+    </div>
+  );
+}
+
+function DockBounceOnAttentionToggle() {
+  const enabled = useAppState((s) => s.appSettings.dockBounceOnAttention);
+  const { mutate } = useMutation(
+    orpc.appSettings.setDockBounceOnAttention.mutationOptions(),
+  );
+
+  return (
+    <div className="flex items-center justify-between py-2.5">
+      <div className="space-y-0.5">
+        <div className="text-sm font-medium">Dock bounce on attention</div>
+        <div className="text-xs text-muted-foreground">
+          Bounce the Dock icon when a session needs input and the app is not
+          focused
+        </div>
+      </div>
+      <Switch
+        checked={enabled}
         onCheckedChange={(checked) => mutate({ enabled: checked })}
       />
     </div>

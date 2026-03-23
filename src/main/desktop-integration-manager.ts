@@ -1,13 +1,20 @@
-import { powerSaveBlocker } from "electron";
+import { app, BrowserWindow, powerSaveBlocker } from "electron";
 import type { AppSettingsState } from "./app-settings";
 import log from "./logger";
+import type { SessionStatus } from "./sessions/common";
 import type { SessionServiceState } from "./sessions/state";
 
 const BLOCKER_TYPE = "prevent-display-sleep";
 
-export class PowerSaveBlockerManager {
+const ATTENTION_STATUSES = new Set<SessionStatus>([
+  "awaiting_user_response",
+  "awaiting_approval",
+]);
+
+export class DesktopIntegrationManager {
   private blockerId: number | null = null;
   private isDisposed = false;
+  private sessionStatusSnapshot: Map<string, SessionStatus> | null = null;
 
   constructor(
     private readonly sessionsState: SessionServiceState,
@@ -39,6 +46,7 @@ export class PowerSaveBlockerManager {
       this.handleStateUpdate,
     );
     this.stopBlockerIfNeeded();
+    this.clearDockBadge();
   }
 
   private readonly handleStateUpdate = () => {
@@ -59,10 +67,72 @@ export class PowerSaveBlockerManager {
 
     if (shouldBlock) {
       this.startBlockerIfNeeded();
+    } else {
+      this.stopBlockerIfNeeded();
+    }
+
+    this.syncDockAttention();
+  }
+
+  private syncDockAttention() {
+    if (process.platform !== "darwin") {
       return;
     }
 
-    this.stopBlockerIfNeeded();
+    const current = new Map<string, SessionStatus>();
+    for (const [id, session] of Object.entries(this.sessionsState.state)) {
+      current.set(id, session.status);
+    }
+
+    try {
+      if (this.appSettingsState.state.dockBadgeForAttention) {
+        const n = [...current.values()].filter((s) =>
+          ATTENTION_STATUSES.has(s),
+        ).length;
+        app.setBadgeCount(n);
+      } else {
+        app.setBadgeCount(0);
+      }
+    } catch (error) {
+      log.error("Failed to update dock badge", { error });
+    }
+
+    const bounceEnabled = this.appSettingsState.state.dockBounceOnAttention;
+    const appHasFocusedWindow = BrowserWindow.getFocusedWindow() != null;
+
+    if (
+      this.sessionStatusSnapshot !== null &&
+      bounceEnabled &&
+      !appHasFocusedWindow
+    ) {
+      for (const [sessionId, newStatus] of current) {
+        const oldStatus = this.sessionStatusSnapshot.get(sessionId);
+        const wasAttention =
+          oldStatus !== undefined && ATTENTION_STATUSES.has(oldStatus);
+        const isAttention = ATTENTION_STATUSES.has(newStatus);
+        if (!wasAttention && isAttention) {
+          try {
+            app.dock?.bounce("informational");
+          } catch (error) {
+            log.error("Failed to bounce dock", { error });
+          }
+          break;
+        }
+      }
+    }
+
+    this.sessionStatusSnapshot = new Map(current);
+  }
+
+  private clearDockBadge() {
+    if (process.platform !== "darwin") {
+      return;
+    }
+    try {
+      app.setBadgeCount(0);
+    } catch (error) {
+      log.error("Failed to clear dock badge", { error });
+    }
   }
 
   private startBlockerIfNeeded() {

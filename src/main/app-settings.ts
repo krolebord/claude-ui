@@ -5,10 +5,14 @@ import { defineStatePersistence } from "./persistence-orchestrator";
 
 export interface AppSettings {
   preventSleep: boolean;
+  dockBadgeForAttention: boolean;
+  dockBounceOnAttention: boolean;
 }
 
 const defaults: AppSettings = {
   preventSleep: true,
+  dockBadgeForAttention: true,
+  dockBounceOnAttention: false,
 };
 
 export type AppSettingsState = ReturnType<typeof defineAppSettingsState>;
@@ -19,6 +23,8 @@ export function defineAppSettingsState() {
 
 const appSettingsPersistenceSchema = z.object({
   preventSleep: z.boolean().catch(true),
+  dockBadgeForAttention: z.boolean().catch(true),
+  dockBounceOnAttention: z.boolean().catch(false),
 });
 
 export function defineAppSettingsPersistence(state: AppSettingsState) {
@@ -34,6 +40,20 @@ export const appSettingsRouter = {
     .handler(async ({ input, context }) => {
       context.appSettingsState.updateState((state) => {
         state.preventSleep = input.enabled;
+      });
+    }),
+  setDockBadgeForAttention: procedure
+    .input(z.object({ enabled: z.boolean() }))
+    .handler(async ({ input, context }) => {
+      context.appSettingsState.updateState((state) => {
+        state.dockBadgeForAttention = input.enabled;
+      });
+    }),
+  setDockBounceOnAttention: procedure
+    .input(z.object({ enabled: z.boolean() }))
+    .handler(async ({ input, context }) => {
+      context.appSettingsState.updateState((state) => {
+        state.dockBounceOnAttention = input.enabled;
       });
     }),
 };
