@@ -364,6 +364,18 @@ export type DeleteWorktreeProjectResult =
       warning?: undefined;
     };
 
+export type PerformDeleteWorktreeFolderResult = {
+  warning?: string;
+};
+
+async function isWorktreeWorkingTreeClean(
+  worktreePath: string,
+): Promise<boolean> {
+  const worktreeGit = simpleGit(worktreePath);
+  const porcelain = await worktreeGit.raw(["status", "--porcelain"]);
+  return porcelain.trim().length === 0;
+}
+
 export class ProjectGitService {
   private refreshInFlight: Promise<void> | null = null;
   private disposed = false;
@@ -528,17 +540,14 @@ export class ProjectGitService {
     };
   }
 
-  async deleteWorktreeProject(input: {
-    path: string;
-    deleteFolder: boolean;
-    deleteBranch: boolean;
-    forceDeleteFolder: boolean;
-  }): Promise<DeleteWorktreeProjectResult> {
-    const projectPath = input.path.trim();
-    const project = this.projectsState.state.find(
-      (item) => item.path === projectPath,
-    );
-
+  private assertDeleteWorktreeProjectInput(
+    input: {
+      path: string;
+      deleteFolder: boolean;
+      deleteBranch: boolean;
+    },
+    project: ClaudeProject | undefined,
+  ): asserts project is ClaudeProject & { worktreeOriginPath: string } {
     if (!project?.worktreeOriginPath) {
       throw new Error("Project is not a tracked worktree.");
     }
@@ -552,6 +561,60 @@ export class ProjectGitService {
         "Worktree project does not have a local branch to delete.",
       );
     }
+  }
+
+  /**
+   * When not forcing removal, checks the worktree is clean (porcelain status).
+   * Returns `requiresForce` if the user must enable force delete.
+   */
+  async preflightDeleteWorktreeFolder(input: {
+    path: string;
+    deleteFolder: boolean;
+    deleteBranch: boolean;
+    forceDeleteFolder: boolean;
+  }): Promise<DeleteWorktreeProjectResult | null> {
+    const projectPath = input.path.trim();
+    const project = this.projectsState.state.find(
+      (item) => item.path === projectPath,
+    );
+
+    this.assertDeleteWorktreeProjectInput(input, project);
+
+    if (!input.deleteFolder) {
+      return null;
+    }
+
+    if (!input.forceDeleteFolder) {
+      const clean = await isWorktreeWorkingTreeClean(projectPath);
+      if (!clean) {
+        return {
+          requiresForce: true,
+          errorMessage:
+            "Project folder has modified or untracked files. Enable force delete to remove the worktree and discard those changes.",
+        };
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Removes the Git worktree folder and optionally deletes the local branch.
+   * Call only after `preflightDeleteWorktreeFolder` passes (or `forceDeleteFolder` is true).
+   */
+  async performDeleteWorktreeFolderAndBranch(input: {
+    path: string;
+    deleteFolder: boolean;
+    deleteBranch: boolean;
+    forceDeleteFolder: boolean;
+  }): Promise<PerformDeleteWorktreeFolderResult> {
+    const projectPath = input.path.trim();
+    const project = this.projectsState.state.find(
+      (item) => item.path === projectPath,
+    );
+
+    this.assertDeleteWorktreeProjectInput(input, project);
+
     if (!input.deleteFolder) {
       return {};
     }
@@ -567,11 +630,9 @@ export class ProjectGitService {
       await sourceGit.raw(removeWorktreeArgs);
     } catch (error) {
       if (!input.forceDeleteFolder && isDirtyWorktreeRemovalError(error)) {
-        return {
-          requiresForce: true,
-          errorMessage:
-            "Project folder has modified or untracked files. Enable force delete to remove the worktree and discard those changes.",
-        };
+        throw new Error(
+          "Project folder has modified or untracked files. Enable force delete to remove the worktree and discard those changes.",
+        );
       }
 
       throw error;
@@ -592,6 +653,31 @@ export class ProjectGitService {
           : `Worktree folder was removed, but deleting local branch "${project.gitBranch}" failed.`,
       };
     }
+  }
+
+  async deleteWorktreeProject(input: {
+    path: string;
+    deleteFolder: boolean;
+    deleteBranch: boolean;
+    forceDeleteFolder: boolean;
+  }): Promise<DeleteWorktreeProjectResult> {
+    const projectPath = input.path.trim();
+    const project = this.projectsState.state.find(
+      (item) => item.path === projectPath,
+    );
+
+    this.assertDeleteWorktreeProjectInput(input, project);
+
+    if (!input.deleteFolder) {
+      return {};
+    }
+
+    const preflight = await this.preflightDeleteWorktreeFolder(input);
+    if (preflight?.requiresForce) {
+      return preflight;
+    }
+
+    return await this.performDeleteWorktreeFolderAndBranch(input);
   }
 
   async refreshAll(): Promise<void> {

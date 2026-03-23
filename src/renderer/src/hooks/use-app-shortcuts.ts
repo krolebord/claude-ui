@@ -14,6 +14,14 @@ import { useHotkey } from "@tanstack/react-hotkeys";
 import type { Session } from "src/main/sessions/state";
 import { switchSession, useActiveSessionId } from "./use-active-session-id";
 
+function isProjectPathInteractionLocked(
+  projects: { path: string; interactionDisabled?: boolean }[],
+  cwd: string,
+): boolean {
+  const match = projects.find((p) => p.path === cwd);
+  return match?.interactionDisabled === true;
+}
+
 export const SHORTCUT_DEFINITIONS = [
   { id: "new-session", label: "New session", key: "N", cmdOrCtrl: true },
   { id: "next-session", label: "Next session", key: "J", cmdOrCtrl: true },
@@ -128,6 +136,15 @@ export function useAppShortcuts(): void {
       const activeSession = sessions[activeSessionId];
       if (!activeSession) return;
 
+      if (
+        isProjectPathInteractionLocked(
+          projects,
+          activeSession.startupConfig.cwd,
+        )
+      ) {
+        return;
+      }
+
       setOpenNewSessionDialogCwd(activeSession.startupConfig.cwd);
     },
     { enabled: !dialogsAreOpen },
@@ -184,6 +201,10 @@ export function useAppShortcuts(): void {
 
       const session = sessions[activeSessionId];
       if (!session) return;
+
+      if (isProjectPathInteractionLocked(projects, session.startupConfig.cwd)) {
+        return;
+      }
 
       useConfirmDialogStore.getState().confirm({
         title: "Delete session",

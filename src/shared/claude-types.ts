@@ -74,6 +74,13 @@ export interface GitUpstreamDiffStats {
   behindCommits: number;
 }
 
+export type ProjectDeletionToastKind = "warning" | "error";
+
+export interface ProjectDeletionToast {
+  kind: ProjectDeletionToastKind;
+  message: string;
+}
+
 export interface ClaudeProject {
   path: string;
   collapsed: boolean;
@@ -86,6 +93,10 @@ export interface ClaudeProject {
   localClaude?: LocalClaudeProjectSettings;
   localCodex?: LocalCodexProjectSettings;
   localCursor?: LocalCursorProjectSettings;
+  /** Ephemeral: UI + main reject mutations while a worktree delete is in flight */
+  interactionDisabled?: boolean;
+  /** Ephemeral: one-shot toast payload for renderer (not persisted) */
+  deletionToast?: ProjectDeletionToast;
 }
 
 export interface ClaudeHookEvent {

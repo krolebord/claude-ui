@@ -59,7 +59,7 @@ import {
 import { useMutation } from "@tanstack/react-query";
 import { AlertCircle, ChevronsUpDown, Repeat } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { create } from "zustand";
 import { combine } from "zustand/middleware";
 import {
@@ -146,6 +146,12 @@ export function NewSessionDialog() {
     }
     return state.projects.find((item) => item.path === openProjectCwd) ?? null;
   });
+
+  useEffect(() => {
+    if (openProjectCwd && project?.interactionDisabled) {
+      setOpenProjectCwd(null);
+    }
+  }, [openProjectCwd, project?.interactionDisabled, setOpenProjectCwd]);
 
   const [sessionType, setSessionType] = useState<SessionType>("claude");
 

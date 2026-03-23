@@ -310,6 +310,9 @@ export function SessionSidebar() {
       const fromGroup = projectGroups[fromIndex];
       const toGroup = projectGroups[toIndex];
       if (!fromGroup || !toGroup) return;
+      if (fromGroup.interactionDisabled || toGroup.interactionDisabled) {
+        return;
+      }
       reorderProjectsMutation.mutate({
         fromPath: fromGroup.path,
         toPath: toGroup.path,
@@ -513,9 +516,11 @@ function SortableProjectGroup({
   onRenameSession: (target: RenameSessionTarget) => void;
   onViewRawSessionState: (sessionId: string) => void;
 }) {
+  const locked = group.interactionDisabled;
   const { ref, handleRef, isDragging } = useSortable({
     id: group.path,
     index,
+    disabled: locked,
   });
   const projectMeta = [group.gitBranch];
   if (group.isWorktree && group.worktreeOriginName) {
@@ -562,14 +567,25 @@ function SortableProjectGroup({
       className={cn(
         "group/project border-b border-border/40",
         isDragging && "opacity-50",
+        locked && "opacity-60",
       )}
     >
       <div className="relative flex">
         <button
           ref={handleRef}
           type="button"
-          onClick={onToggleCollapsed}
-          className="flex min-w-0 flex-1 cursor-grab items-center gap-1.5 pl-1.5 pr-[3rem] py-1 text-left transition hover:bg-white/8 active:cursor-grabbing"
+          onClick={() => {
+            if (!locked) {
+              onToggleCollapsed();
+            }
+          }}
+          disabled={locked}
+          className={cn(
+            "flex min-w-0 flex-1 items-center gap-1.5 pl-1.5 pr-[3rem] py-1 text-left transition hover:bg-white/8",
+            locked
+              ? "cursor-not-allowed"
+              : "cursor-grab active:cursor-grabbing",
+          )}
         >
           <span className="min-w-0 flex-1">
             <span className="flex items-center gap-1 text-sm font-medium text-zinc-100">
@@ -608,11 +624,12 @@ function SortableProjectGroup({
               <SidebarIconButton
                 icon={EllipsisVertical}
                 label={`Project menu for ${group.displayName}`}
+                disabled={locked}
               />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
               {canCreateWorktree ? (
-                <DropdownMenuItem onClick={onCreateWorktree}>
+                <DropdownMenuItem disabled={locked} onClick={onCreateWorktree}>
                   <GitFork className="size-3.5" />
                   Create worktree project
                 </DropdownMenuItem>
@@ -620,6 +637,7 @@ function SortableProjectGroup({
               {canCreateWorktree ? <DropdownMenuSeparator /> : null}
               <DropdownMenuItem
                 disabled={
+                  locked ||
                   stopAllActiveSessionsMutation.isPending ||
                   activeSessions.length === 0
                 }
@@ -631,18 +649,18 @@ function SortableProjectGroup({
                 Stop all active sessions
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={onOpenSettings}>
+              <DropdownMenuItem disabled={locked} onClick={onOpenSettings}>
                 <Settings className="size-3.5" />
                 Settings
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={onOpenFolder}>
+              <DropdownMenuItem disabled={locked} onClick={onOpenFolder}>
                 <FolderOpen className="size-3.5" />
                 Open project folder
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 variant="destructive"
-                disabled={isDeleting}
+                disabled={locked || isDeleting}
                 onClick={onDelete}
               >
                 <Trash2 className="size-3.5" />
@@ -654,15 +672,20 @@ function SortableProjectGroup({
             icon={Plus}
             label={`New session in ${group.displayName}`}
             onClick={onNewSession}
+            disabled={locked}
           />
         </div>
       </div>
       {!group.collapsed ? (
-        <GroupSessionsList
-          sessions={group.sessions}
-          onRenameSession={onRenameSession}
-          onViewRawSessionState={onViewRawSessionState}
-        />
+        <div
+          className={cn(locked && "pointer-events-none select-none opacity-50")}
+        >
+          <GroupSessionsList
+            sessions={group.sessions}
+            onRenameSession={onRenameSession}
+            onViewRawSessionState={onViewRawSessionState}
+          />
+        </div>
       ) : null}
     </section>
   );

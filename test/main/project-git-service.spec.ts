@@ -768,12 +768,16 @@ describe("ProjectGitService", () => {
     });
 
     expect(result).toEqual({});
-    expect(rawMock).toHaveBeenNthCalledWith(1, "/repo-one", [
+    expect(rawMock).toHaveBeenNthCalledWith(1, "/repo-one-feature-new-ui", [
+      "status",
+      "--porcelain",
+    ]);
+    expect(rawMock).toHaveBeenNthCalledWith(2, "/repo-one", [
       "worktree",
       "remove",
       "/repo-one-feature-new-ui",
     ]);
-    expect(rawMock).toHaveBeenNthCalledWith(2, "/repo-one", [
+    expect(rawMock).toHaveBeenNthCalledWith(3, "/repo-one", [
       "branch",
       "-d",
       "feature/new-ui",
@@ -791,6 +795,7 @@ describe("ProjectGitService", () => {
       });
     });
 
+    rawMock.mockImplementationOnce(async () => "");
     rawMock.mockImplementationOnce(async () => "");
     rawMock.mockImplementationOnce(async () => {
       throw new Error("branch is not fully merged");
@@ -846,11 +851,14 @@ describe("ProjectGitService", () => {
       });
     });
 
-    rawMock.mockImplementationOnce(async () => {
-      throw new Error(
-        "fatal: '/repo-one-feature-new-ui' contains modified or untracked files, use --force to delete it",
-      );
-    });
+    rawMock.mockImplementationOnce(
+      async (_projectPath: string, args: string[]) => {
+        if (args[0] === "status" && args[1] === "--porcelain") {
+          return " M dirty\n";
+        }
+        return "";
+      },
+    );
 
     const service = new ProjectGitService(projectsState);
     const result = await service.deleteWorktreeProject({
@@ -866,10 +874,9 @@ describe("ProjectGitService", () => {
         "Project folder has modified or untracked files. Enable force delete to remove the worktree and discard those changes.",
     });
     expect(rawMock).toHaveBeenCalledTimes(1);
-    expect(rawMock).toHaveBeenNthCalledWith(1, "/repo-one", [
-      "worktree",
-      "remove",
-      "/repo-one-feature-new-ui",
+    expect(rawMock).toHaveBeenNthCalledWith(1, "/repo-one-feature-new-ui", [
+      "status",
+      "--porcelain",
     ]);
   });
 

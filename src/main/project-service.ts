@@ -12,6 +12,7 @@ import {
 } from "../shared/codex-types";
 import { defineServiceState } from "../shared/service-state";
 import type { Services } from "./create-services";
+import log from "./logger";
 import { procedure } from "./orpc";
 import { defineStatePersistence } from "./persistence-orchestrator";
 import {
@@ -68,6 +69,11 @@ function toOptionalSettings<T extends Record<string, unknown>>(
     : undefined;
 }
 
+const projectDeletionToastSchema = z.object({
+  kind: z.enum(["warning", "error"]),
+  message: z.string(),
+});
+
 export const claudeProjectSchema = z.object({
   path: z.string().trim().min(1),
   collapsed: z.boolean().catch(false),
@@ -77,6 +83,8 @@ export const claudeProjectSchema = z.object({
   localClaude: localClaudeProjectSettingsSchema.optional().catch(undefined),
   localCodex: localCodexProjectSettingsSchema.optional().catch(undefined),
   localCursor: localCursorProjectSettingsSchema.optional().catch(undefined),
+  interactionDisabled: z.boolean().optional().catch(undefined),
+  deletionToast: projectDeletionToastSchema.optional().catch(undefined),
 });
 
 function normalizeProjectPath(pathValue: string): string {
@@ -199,6 +207,67 @@ async function removeTrackedProject(
   });
 }
 
+export function assertProjectPathInteractionAllowed(
+  path: string | undefined | null,
+  context: Pick<Services, "projectsState">,
+): void {
+  const normalized = path?.trim();
+  if (!normalized) {
+    return;
+  }
+  const project = context.projectsState.state.find(
+    (p) => p.path === normalized,
+  );
+  if (project?.interactionDisabled) {
+    throw new Error("This project is busy. Try again in a moment.");
+  }
+}
+
+async function runWorktreeDeletionJob(
+  context: Services,
+  input: {
+    path: string;
+    deleteBranch: boolean;
+    forceDeleteFolder: boolean;
+  },
+): Promise<void> {
+  const { path } = input;
+  try {
+    const result =
+      await context.projectGitService.performDeleteWorktreeFolderAndBranch({
+        path,
+        deleteFolder: true,
+        deleteBranch: input.deleteBranch,
+        forceDeleteFolder: input.forceDeleteFolder,
+      });
+
+    const branchWarning = result.warning;
+    if (branchWarning) {
+      context.projectsState.updateState((projects) => {
+        const p = projects.find((x) => x.path === path);
+        if (p) {
+          p.deletionToast = { kind: "warning", message: branchWarning };
+        }
+      });
+    }
+
+    await removeTrackedProject(path, context);
+  } catch (error) {
+    log.error("Background worktree deletion failed", error);
+    const message =
+      error instanceof Error && error.message.trim()
+        ? error.message
+        : "Worktree deletion failed.";
+    context.projectsState.updateState((projects) => {
+      const p = projects.find((x) => x.path === path);
+      if (p) {
+        p.interactionDisabled = false;
+        p.deletionToast = { kind: "error", message };
+      }
+    });
+  }
+}
+
 export async function addTrackedProject(
   path: string,
   context: {
@@ -277,9 +346,10 @@ export const projectsRouter = {
     }),
   refreshProject: procedure
     .input(z.object({ path: projectPathSchema }))
-    .handler(async ({ input, context }) =>
-      refreshTrackedProject(input.path, context),
-    ),
+    .handler(async ({ input, context }) => {
+      assertProjectPathInteractionAllowed(input.path, context);
+      return refreshTrackedProject(input.path, context);
+    }),
   createWorktreeProject: procedure
     .input(
       z.object({
@@ -291,6 +361,7 @@ export const projectsRouter = {
       }),
     )
     .handler(async ({ input, context }) => {
+      assertProjectPathInteractionAllowed(input.sourcePath, context);
       const result = await context.projectGitService.createWorktreeProject({
         sourcePath: normalizeProjectPath(input.sourcePath),
         fromBranch: input.fromBranch.trim(),
@@ -316,6 +387,8 @@ export const projectsRouter = {
       const path = normalizeProjectPath(input.path);
       if (!path) return;
 
+      assertProjectPathInteractionAllowed(path, context);
+
       context.projectsState.updateState((projects) => {
         const project = projects.find((p) => p.path === path);
         if (!project || project.collapsed === input.collapsed) return;
@@ -335,6 +408,8 @@ export const projectsRouter = {
     .handler(async ({ input, context }) => {
       const path = normalizeProjectPath(input.path);
       if (!path) return;
+
+      assertProjectPathInteractionAllowed(path, context);
 
       const worktreeSetupCommands = input.worktreeSetupCommands || undefined;
       const settings = {
@@ -361,7 +436,21 @@ export const projectsRouter = {
       const path = normalizeProjectPath(input.path);
       if (!path) return;
 
+      assertProjectPathInteractionAllowed(path, context);
+
       await removeTrackedProject(path, context);
+    }),
+  ackDeletionToast: procedure
+    .input(z.object({ path: projectPathSchema }))
+    .handler(async ({ input, context }) => {
+      const path = normalizeProjectPath(input.path);
+      if (!path) return;
+
+      context.projectsState.updateState((projects) => {
+        const project = projects.find((p) => p.path === path);
+        if (!project) return;
+        project.deletionToast = undefined;
+      });
     }),
   deleteWorktreeProject: procedure
     .input(
@@ -378,22 +467,59 @@ export const projectsRouter = {
         return {};
       }
 
-      const result = await context.projectGitService.deleteWorktreeProject({
-        path,
-        deleteFolder: input.deleteFolder,
-        deleteBranch: input.deleteBranch,
-        forceDeleteFolder: input.forceDeleteFolder,
-      });
-
-      if (!result.requiresForce) {
-        await removeTrackedProject(path, context);
+      const project = context.projectsState.state.find((p) => p.path === path);
+      if (project?.interactionDisabled) {
+        throw new Error(
+          "Worktree removal is already in progress for this project.",
+        );
       }
 
-      return result;
+      if (!input.deleteFolder) {
+        await context.projectGitService.deleteWorktreeProject({
+          path,
+          deleteFolder: false,
+          deleteBranch: input.deleteBranch,
+          forceDeleteFolder: false,
+        });
+        await removeTrackedProject(path, context);
+        return {};
+      }
+
+      const preflight =
+        await context.projectGitService.preflightDeleteWorktreeFolder({
+          path,
+          deleteFolder: true,
+          deleteBranch: input.deleteBranch,
+          forceDeleteFolder: input.forceDeleteFolder,
+        });
+
+      if (preflight?.requiresForce) {
+        return preflight;
+      }
+
+      context.projectsState.updateState((projects) => {
+        const p = projects.find((x) => x.path === path);
+        if (p) {
+          p.interactionDisabled = true;
+        }
+      });
+
+      void runWorktreeDeletionJob(context, {
+        path,
+        deleteBranch: input.deleteBranch,
+        forceDeleteFolder: input.forceDeleteFolder,
+      }).catch((error) => {
+        log.error("Worktree deletion job rejected", error);
+      });
+
+      return { accepted: true as const };
     }),
   reorderProjects: procedure
     .input(z.object({ fromPath: projectPathSchema, toPath: projectPathSchema }))
     .handler(async ({ input, context }) => {
+      assertProjectPathInteractionAllowed(input.fromPath, context);
+      assertProjectPathInteractionAllowed(input.toPath, context);
+
       context.projectsState.updateState((projects) => {
         const fromIdx = projects.findIndex((p) => p.path === input.fromPath);
         const toIdx = projects.findIndex((p) => p.path === input.toPath);

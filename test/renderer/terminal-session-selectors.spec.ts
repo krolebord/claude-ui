@@ -28,6 +28,7 @@ describe("buildProjectSessionGroups", () => {
         gitBranch: "feature/sidebar-branch",
         isWorktree: false,
         worktreeOriginName: undefined,
+        interactionDisabled: false,
         sessions: [],
       },
     ]);
@@ -56,6 +57,7 @@ describe("buildProjectSessionGroups", () => {
         gitBranch: "feature/sidebar",
         isWorktree: true,
         worktreeOriginName: "app",
+        interactionDisabled: false,
         sessions: [],
       },
     ]);

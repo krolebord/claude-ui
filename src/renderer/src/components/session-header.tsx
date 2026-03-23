@@ -125,6 +125,8 @@ export function SessionHeader({ session }: { session: Session }) {
       ? activeProject.gitUpstreamDiffStats.behindCommits
       : undefined;
 
+  const projectLocked = activeProject?.interactionDisabled === true;
+
   const { refetch } = useQuery(
     orpc.projects.refreshProject.queryOptions({
       input: activeProject
@@ -132,7 +134,7 @@ export function SessionHeader({ session }: { session: Session }) {
             path: activeProject.path,
           }
         : skipToken,
-      enabled: !!activeProject,
+      enabled: !!activeProject && !projectLocked,
     }),
   );
 
@@ -212,7 +214,7 @@ export function SessionHeader({ session }: { session: Session }) {
           type="button"
           variant="outline"
           size="sm"
-          disabled={openFolderInAppMutation.isPending}
+          disabled={openFolderInAppMutation.isPending || projectLocked}
           className="rounded-r-none border-r-0 text-xs"
           onClick={() => {
             openFolder(preferredApp);
@@ -227,7 +229,7 @@ export function SessionHeader({ session }: { session: Session }) {
               type="button"
               variant="outline"
               size="sm"
-              disabled={openFolderInAppMutation.isPending}
+              disabled={openFolderInAppMutation.isPending || projectLocked}
               className="rounded-l-none px-2 text-xs"
             >
               <ChevronDown className="size-3.5 text-muted-foreground" />
@@ -239,7 +241,7 @@ export function SessionHeader({ session }: { session: Session }) {
             {openInAppItems.map(({ app, icon: AppIcon }) => (
               <DropdownMenuItem
                 key={app}
-                disabled={openFolderInAppMutation.isPending}
+                disabled={openFolderInAppMutation.isPending || projectLocked}
                 onClick={() => {
                   setPreferredApp(app);
                   setMenuOpen(false);

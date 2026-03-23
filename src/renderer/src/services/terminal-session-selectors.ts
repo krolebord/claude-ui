@@ -9,6 +9,7 @@ export interface ProjectSessionGroup {
   gitBranch?: string;
   isWorktree: boolean;
   worktreeOriginName?: string;
+  interactionDisabled: boolean;
   sessions: Session[];
 }
 
@@ -151,6 +152,7 @@ export function buildProjectSessionGroups(
       worktreeOriginName: project.worktreeOriginPath
         ? getProjectNameFromPath(project.worktreeOriginPath)
         : undefined,
+      interactionDisabled: project.interactionDisabled === true,
       sessions: sessionsByPath.get(project.path) ?? [],
     });
     seenPaths.add(project.path);
@@ -167,6 +169,7 @@ export function buildProjectSessionGroups(
       collapsed: false,
       fromProjectList: false,
       isWorktree: false,
+      interactionDisabled: false,
       sessions,
     });
   }

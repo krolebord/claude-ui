@@ -126,6 +126,12 @@ export function ProjectDefaultsDialog() {
     return state.projects.find((item) => item.path === openProjectCwd) ?? null;
   });
 
+  useEffect(() => {
+    if (openProjectCwd && project?.interactionDisabled) {
+      setOpenProjectCwd(null);
+    }
+  }, [openProjectCwd, project?.interactionDisabled, setOpenProjectCwd]);
+
   const [claudeDefaultModel, setClaudeDefaultModel] =
     useState<ClaudeModel>("opus");
   const [claudeDefaultEffort, setClaudeDefaultEffort] = useState<

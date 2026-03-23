@@ -9,10 +9,11 @@
   "localCodex": {
     "model": "gpt-5.4",
     "permissionMode": "yolo",
-    "modelReasoningEffort": "high"
+    "modelReasoningEffort": "high",
+    "fastMode": "default"
   },
   "localCursor": {
-    "model": "gpt-5.3-codex-high",
+    "model": "composer-2",
     "permissionMode": "yolo"
   }
 }

@@ -105,6 +105,12 @@ export function ProjectWorktreeDialog() {
     return state.projects.find((item) => item.path === openProjectPath) ?? null;
   });
 
+  useEffect(() => {
+    if (openProjectPath && project?.interactionDisabled) {
+      setOpenProjectPath(null);
+    }
+  }, [openProjectPath, project?.interactionDisabled, setOpenProjectPath]);
+
   const [creationData, setCreationData] = useState<WorktreeCreationData | null>(
     null,
   );

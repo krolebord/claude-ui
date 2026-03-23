@@ -24,6 +24,7 @@ interface WorktreeDeleteDialogTarget {
 }
 
 type DeleteWorktreeProjectResult = {
+  accepted?: true;
   warning?: string;
   requiresForce?: boolean;
   errorMessage?: string;
@@ -168,7 +169,7 @@ export function WorktreeDeleteDialog() {
     <Dialog
       open={target !== null}
       onOpenChange={(open) => {
-        if (!open && !deleteMutation.isPending) {
+        if (!open) {
           close();
         }
       }}

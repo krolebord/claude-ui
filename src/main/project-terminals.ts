@@ -6,6 +6,7 @@ import { defineServiceState } from "../shared/service-state";
 import { withDebouncedRunner } from "./debounce-runner";
 import { procedure } from "./orpc";
 import { defineStatePersistence } from "./persistence-orchestrator";
+import { assertProjectPathInteractionAllowed } from "./project-service";
 import {
   generateUniqueSessionId,
   type SessionStatus,
@@ -158,6 +159,7 @@ export const projectTerminalsRouter = {
       }),
     )
     .handler(async ({ input, context }) => {
+      assertProjectPathInteractionAllowed(input.cwd, context);
       context.projectTerminalsManager.ensureWorkspace(input);
     }),
   createTerminal: procedure
@@ -169,6 +171,7 @@ export const projectTerminalsRouter = {
       }),
     )
     .handler(async ({ input, context }) => {
+      assertProjectPathInteractionAllowed(input.cwd, context);
       return context.projectTerminalsManager.createTerminal(input);
     }),
   selectTerminal: procedure
@@ -179,6 +182,7 @@ export const projectTerminalsRouter = {
       }),
     )
     .handler(async ({ input, context }) => {
+      assertProjectPathInteractionAllowed(input.cwd, context);
       context.projectTerminalsManager.selectTerminal(input);
     }),
   closeTerminal: procedure
@@ -189,11 +193,17 @@ export const projectTerminalsRouter = {
       }),
     )
     .handler(async ({ input, context }) => {
+      assertProjectPathInteractionAllowed(input.cwd, context);
       await context.projectTerminalsManager.closeTerminal(input);
     }),
   subscribeToTerminal: procedure
     .input(z.object({ terminalId: z.string() }))
     .handler(async function* ({ input, context, signal }) {
+      const cwd = context.projectTerminalsManager.resolveTerminalWorkspaceCwd(
+        input.terminalId,
+      );
+      assertProjectPathInteractionAllowed(cwd, context);
+
       const { bufferedOutput, stream, isLive } =
         context.projectTerminalsManager.subscribeToTerminalEvents(
           input.terminalId,
@@ -214,6 +224,10 @@ export const projectTerminalsRouter = {
   writeToTerminal: procedure
     .input(z.object({ terminalId: z.string(), data: z.string() }))
     .handler(async ({ input, context }) => {
+      const cwd = context.projectTerminalsManager.resolveTerminalWorkspaceCwd(
+        input.terminalId,
+      );
+      assertProjectPathInteractionAllowed(cwd, context);
       context.projectTerminalsManager.writeToTerminal(input);
     }),
   resizeTerminal: procedure
@@ -225,6 +239,10 @@ export const projectTerminalsRouter = {
       }),
     )
     .handler(async ({ input, context }) => {
+      const cwd = context.projectTerminalsManager.resolveTerminalWorkspaceCwd(
+        input.terminalId,
+      );
+      assertProjectPathInteractionAllowed(cwd, context);
       context.projectTerminalsManager.resizeTerminal(input);
     }),
 };
@@ -351,6 +369,13 @@ export class ProjectTerminalsManager {
       workspace.order = nextOrder;
       workspace.selectedTerminalId = nextSelectedTerminalId;
     });
+  }
+
+  resolveTerminalWorkspaceCwd(terminalId: string): string | undefined {
+    return (
+      this.liveTerminals.get(terminalId)?.cwd ??
+      this.findTerminalState(terminalId)?.cwd
+    );
   }
 
   async deleteWorkspace(cwd: string) {

@@ -53,6 +53,13 @@ function getTerminalStatusMeta(status: string) {
 
 export function ProjectTerminalPane({ cwd }: { cwd: string | null }) {
   const hasCwd = Boolean(cwd);
+  const projectLocked = useAppState((state) =>
+    cwd
+      ? state.projects.some(
+          (p) => p.path === cwd && p.interactionDisabled === true,
+        )
+      : false,
+  );
   const workspace = useAppState((state) =>
     cwd ? (state.projectTerminals[cwd] ?? null) : null,
   );
@@ -86,6 +93,10 @@ export function ProjectTerminalPane({ cwd }: { cwd: string | null }) {
       return;
     }
 
+    if (projectLocked) {
+      return;
+    }
+
     if (hasWorkspace && !activeTerminalId) {
       return;
     }
@@ -102,11 +113,11 @@ export function ProjectTerminalPane({ cwd }: { cwd: string | null }) {
           error instanceof Error ? error.message : "Unknown error";
         toast.error(`Failed to open project terminal: ${message}`);
       });
-  }, [activeTerminalId, cwd, getCurrentSize, hasWorkspace]);
+  }, [activeTerminalId, cwd, getCurrentSize, hasWorkspace, projectLocked]);
 
   useEffect(() => {
     const currentTerminal = activeTerminalRef.current;
-    if (!activeTerminalId || !currentTerminal) {
+    if (!activeTerminalId || !currentTerminal || projectLocked) {
       terminalRef.current?.clear();
       return;
     }
@@ -145,11 +156,11 @@ export function ProjectTerminalPane({ cwd }: { cwd: string | null }) {
     );
 
     return () => void cancel();
-  }, [activeTerminalId]);
+  }, [activeTerminalId, projectLocked]);
 
   const handleTerminalInput = useCallback(
     (data: string) => {
-      if (!activeTerminalId) {
+      if (!activeTerminalId || projectLocked) {
         return;
       }
 
@@ -158,12 +169,12 @@ export function ProjectTerminalPane({ cwd }: { cwd: string | null }) {
         data,
       });
     },
-    [activeTerminalId],
+    [activeTerminalId, projectLocked],
   );
 
   const handleTerminalResize = useCallback(
     (cols: number, rows: number) => {
-      if (!activeTerminalId) {
+      if (!activeTerminalId || projectLocked) {
         return;
       }
 
@@ -173,11 +184,11 @@ export function ProjectTerminalPane({ cwd }: { cwd: string | null }) {
         rows,
       });
     },
-    [activeTerminalId],
+    [activeTerminalId, projectLocked],
   );
 
   const handleCreateTerminal = useCallback(async () => {
-    if (!cwd) {
+    if (!cwd || projectLocked) {
       return;
     }
 
@@ -195,11 +206,11 @@ export function ProjectTerminalPane({ cwd }: { cwd: string | null }) {
     } finally {
       setIsCreating(false);
     }
-  }, [cwd, getCurrentSize]);
+  }, [cwd, getCurrentSize, projectLocked]);
 
   const handleSelectTerminal = useCallback(
     async (terminalId: string) => {
-      if (!cwd) {
+      if (!cwd || projectLocked) {
         return;
       }
 
@@ -223,12 +234,12 @@ export function ProjectTerminalPane({ cwd }: { cwd: string | null }) {
         );
       }
     },
-    [activeTerminalId, cwd],
+    [activeTerminalId, cwd, projectLocked],
   );
 
   const handleCloseTerminal = useCallback(
     async (terminalId: string) => {
-      if (!cwd) {
+      if (!cwd || projectLocked) {
         return;
       }
 
@@ -248,7 +259,7 @@ export function ProjectTerminalPane({ cwd }: { cwd: string | null }) {
         );
       }
     },
-    [cwd],
+    [cwd, projectLocked],
   );
 
   return (
@@ -268,12 +279,19 @@ export function ProjectTerminalPane({ cwd }: { cwd: string | null }) {
               </div>
             </div>
           ) : activeTerminal ? (
-            <TerminalPane
-              ref={terminalRef}
-              onInput={handleTerminalInput}
-              onResize={handleTerminalResize}
-              trackGlobalSize={false}
-            />
+            <div
+              className={cn(
+                "h-full min-h-0",
+                projectLocked && "pointer-events-none opacity-60",
+              )}
+            >
+              <TerminalPane
+                ref={terminalRef}
+                onInput={handleTerminalInput}
+                onResize={handleTerminalResize}
+                trackGlobalSize={false}
+              />
+            </div>
           ) : (
             <div className="flex h-full items-center justify-center p-6">
               <div className="max-w-xs space-y-3 text-center">
@@ -285,7 +303,7 @@ export function ProjectTerminalPane({ cwd }: { cwd: string | null }) {
                   onClick={() => {
                     void handleCreateTerminal();
                   }}
-                  disabled={isCreating}
+                  disabled={isCreating || projectLocked}
                 >
                   Create terminal
                 </Button>
@@ -311,7 +329,7 @@ export function ProjectTerminalPane({ cwd }: { cwd: string | null }) {
                 onClick={() => {
                   void handleCreateTerminal();
                 }}
-                disabled={isCreating}
+                disabled={isCreating || projectLocked}
               >
                 <Plus className="size-3.5" />
               </Button>
@@ -352,7 +370,7 @@ export function ProjectTerminalPane({ cwd }: { cwd: string | null }) {
                       onClick={() => {
                         void handleSelectTerminal(terminalId);
                       }}
-                      disabled={isClosing || isSelecting}
+                      disabled={projectLocked || isClosing || isSelecting}
                     >
                       <StatusIcon
                         className={cn(
@@ -366,7 +384,7 @@ export function ProjectTerminalPane({ cwd }: { cwd: string | null }) {
                     <Button
                       variant="flat"
                       className="absolute inset-y-0 right-0 h-full w-7 px-0 opacity-0 group-hover/terminal:opacity-100"
-                      disabled={isClosing}
+                      disabled={projectLocked || isClosing}
                       onClick={() => {
                         void handleCloseTerminal(terminalId);
                       }}
@@ -387,7 +405,7 @@ export function ProjectTerminalPane({ cwd }: { cwd: string | null }) {
                   onClick={() => {
                     void handleCreateTerminal();
                   }}
-                  disabled={isCreating}
+                  disabled={isCreating || projectLocked}
                 >
                   Create terminal
                 </Button>
