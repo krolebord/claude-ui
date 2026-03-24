@@ -233,6 +233,7 @@ describe("DesktopIntegrationManager macOS dock", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers();
     originalPlatform = process.platform;
     setPlatform("darwin");
     powerSaveBlockerMock.start.mockReturnValue(100);
@@ -241,6 +242,7 @@ describe("DesktopIntegrationManager macOS dock", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     setPlatform(originalPlatform);
   });
 
@@ -331,6 +333,10 @@ describe("DesktopIntegrationManager macOS dock", () => {
       state["session-1"].status = "awaiting_user_response";
     });
 
+    expect(appMock.dock.bounce).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(2000);
+
     expect(appMock.dock.bounce).toHaveBeenCalledTimes(1);
     expect(appMock.dock.bounce).toHaveBeenCalledWith("informational");
 
@@ -360,6 +366,8 @@ describe("DesktopIntegrationManager macOS dock", () => {
       state["session-1"].status = "awaiting_user_response";
     });
 
+    vi.advanceTimersByTime(2000);
+
     expect(appMock.dock.bounce).not.toHaveBeenCalled();
 
     manager.dispose();
@@ -383,9 +391,66 @@ describe("DesktopIntegrationManager macOS dock", () => {
       state["session-1"].status = "awaiting_user_response";
     });
 
+    vi.advanceTimersByTime(2000);
+
     expect(appMock.dock.bounce).not.toHaveBeenCalled();
 
     manager.dispose();
+  });
+
+  it("does not bounce if attention clears before the delay elapses", () => {
+    const sessionsState = defineSessionServiceState();
+    const appSettingsState = defineAppSettingsState();
+    appSettingsState.updateState((s) => {
+      s.dockBounceOnAttention = true;
+    });
+    const manager = new DesktopIntegrationManager(
+      sessionsState,
+      appSettingsState,
+    );
+
+    sessionsState.updateState((state) => {
+      state["session-1"] = makeLocalTerminalSession("session-1", "idle");
+    });
+    sessionsState.updateState((state) => {
+      state["session-1"].status = "awaiting_user_response";
+    });
+
+    vi.advanceTimersByTime(1999);
+    sessionsState.updateState((state) => {
+      state["session-1"].status = "idle";
+    });
+
+    vi.advanceTimersByTime(10_000);
+
+    expect(appMock.dock.bounce).not.toHaveBeenCalled();
+
+    manager.dispose();
+  });
+
+  it("does not bounce after dispose while the delay is pending", () => {
+    const sessionsState = defineSessionServiceState();
+    const appSettingsState = defineAppSettingsState();
+    appSettingsState.updateState((s) => {
+      s.dockBounceOnAttention = true;
+    });
+    const manager = new DesktopIntegrationManager(
+      sessionsState,
+      appSettingsState,
+    );
+
+    sessionsState.updateState((state) => {
+      state["session-1"] = makeLocalTerminalSession("session-1", "idle");
+    });
+    sessionsState.updateState((state) => {
+      state["session-1"].status = "awaiting_user_response";
+    });
+
+    vi.advanceTimersByTime(500);
+    manager.dispose();
+    vi.advanceTimersByTime(2000);
+
+    expect(appMock.dock.bounce).not.toHaveBeenCalled();
   });
 
   it("clears dock badge on dispose", () => {

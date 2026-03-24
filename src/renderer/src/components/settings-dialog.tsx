@@ -245,8 +245,8 @@ function DockBounceOnAttentionToggle() {
       <div className="space-y-0.5">
         <div className="text-sm font-medium">Dock bounce on attention</div>
         <div className="text-xs text-muted-foreground">
-          Bounce the Dock icon when a session needs input and the app is not
-          focused
+          After 2 seconds, bounce the Dock if the session still needs input and
+          the app is not focused
         </div>
       </div>
       <Switch

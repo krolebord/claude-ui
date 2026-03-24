@@ -11,10 +11,16 @@ const ATTENTION_STATUSES = new Set<SessionStatus>([
   "awaiting_approval",
 ]);
 
+const DOCK_BOUNCE_DELAY_MS = 2000;
+
 export class DesktopIntegrationManager {
   private blockerId: number | null = null;
   private isDisposed = false;
   private sessionStatusSnapshot: Map<string, SessionStatus> | null = null;
+  private pendingDockBounces = new Map<
+    string,
+    { timeoutId: ReturnType<typeof setTimeout>; expectedStatus: SessionStatus }
+  >();
 
   constructor(
     private readonly sessionsState: SessionServiceState,
@@ -46,6 +52,7 @@ export class DesktopIntegrationManager {
       this.handleStateUpdate,
     );
     this.stopBlockerIfNeeded();
+    this.clearAllPendingDockBounces();
     this.clearDockBadge();
   }
 
@@ -84,6 +91,17 @@ export class DesktopIntegrationManager {
       current.set(id, session.status);
     }
 
+    for (const [sessionId, pending] of [...this.pendingDockBounces.entries()]) {
+      if (current.get(sessionId) !== pending.expectedStatus) {
+        clearTimeout(pending.timeoutId);
+        this.pendingDockBounces.delete(sessionId);
+      }
+    }
+
+    if (!this.appSettingsState.state.dockBounceOnAttention) {
+      this.clearAllPendingDockBounces();
+    }
+
     try {
       if (this.appSettingsState.state.dockBadgeForAttention) {
         const n = [...current.values()].filter((s) =>
@@ -98,30 +116,62 @@ export class DesktopIntegrationManager {
     }
 
     const bounceEnabled = this.appSettingsState.state.dockBounceOnAttention;
-    const appHasFocusedWindow = BrowserWindow.getFocusedWindow() != null;
 
-    if (
-      this.sessionStatusSnapshot !== null &&
-      bounceEnabled &&
-      !appHasFocusedWindow
-    ) {
+    if (this.sessionStatusSnapshot !== null && bounceEnabled) {
       for (const [sessionId, newStatus] of current) {
         const oldStatus = this.sessionStatusSnapshot.get(sessionId);
         const wasAttention =
           oldStatus !== undefined && ATTENTION_STATUSES.has(oldStatus);
         const isAttention = ATTENTION_STATUSES.has(newStatus);
         if (!wasAttention && isAttention) {
-          try {
-            app.dock?.bounce("informational");
-          } catch (error) {
-            log.error("Failed to bounce dock", { error });
-          }
+          this.scheduleDeferredDockBounce(sessionId, newStatus);
           break;
         }
       }
     }
 
     this.sessionStatusSnapshot = new Map(current);
+  }
+
+  private scheduleDeferredDockBounce(
+    sessionId: string,
+    expectedStatus: SessionStatus,
+  ) {
+    const existing = this.pendingDockBounces.get(sessionId);
+    if (existing) {
+      clearTimeout(existing.timeoutId);
+    }
+
+    const timeoutId = setTimeout(() => {
+      this.pendingDockBounces.delete(sessionId);
+      if (this.isDisposed || process.platform !== "darwin") {
+        return;
+      }
+      if (!this.appSettingsState.state.dockBounceOnAttention) {
+        return;
+      }
+      if (BrowserWindow.getFocusedWindow() != null) {
+        return;
+      }
+      const session = this.sessionsState.state[sessionId];
+      if (!session || session.status !== expectedStatus) {
+        return;
+      }
+      try {
+        app.dock?.bounce("informational");
+      } catch (error) {
+        log.error("Failed to bounce dock", { error });
+      }
+    }, DOCK_BOUNCE_DELAY_MS);
+
+    this.pendingDockBounces.set(sessionId, { timeoutId, expectedStatus });
+  }
+
+  private clearAllPendingDockBounces() {
+    for (const pending of this.pendingDockBounces.values()) {
+      clearTimeout(pending.timeoutId);
+    }
+    this.pendingDockBounces.clear();
   }
 
   private clearDockBadge() {
