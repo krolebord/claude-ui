@@ -9,6 +9,13 @@ import type {
 } from "@pierre/diffs/react";
 import { EditProvider, FileDiff } from "@pierre/diffs/react";
 import { useConfirmDialogStore } from "@renderer/components/confirm-dialog";
+import {
+  AddCommentGutterButton,
+  DiffCommentAnnotation,
+  type DiffReviewAnnotationMetadata,
+  getCommentDraftLineAnnotations,
+  useDiffCommentStore,
+} from "@renderer/components/diff-comment";
 import { COMPACT_FILE_DIFF_OPTIONS } from "@renderer/components/diff-pane-styles";
 import { useDiffReviewCommitDialogStore } from "@renderer/components/diff-review-commit-dialog";
 import {
@@ -29,16 +36,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
-import { useCopyToClipboard } from "@renderer/hooks/use-copy-to-clipboard";
 import { useIsMobile } from "@renderer/hooks/use-is-mobile";
-import { shouldAutoFocus } from "@renderer/lib/autofocus";
 import { cn } from "@renderer/lib/utils";
 import { orpc } from "@renderer/orpc-client";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
-  Check,
   ChevronDown,
   ChevronUp,
   Copy,
@@ -48,10 +52,7 @@ import {
   FileText,
   GitCommitHorizontal,
   LoaderCircle,
-  MessageSquare,
-  MessageSquarePlus,
   MoreHorizontal,
-  Pencil,
   RefreshCw,
   RotateCcw,
   Save,
@@ -78,41 +79,8 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "./ui/resizable";
-import { Textarea } from "./ui/textarea";
 
 export type BottomPaneView = "terminals" | "diff" | "history";
-
-type DiffReviewComment = {
-  id: string;
-  filePath: string;
-  side: AnnotationSide;
-  lineNumber: number;
-  fileSignature: string;
-  body: string;
-  createdAt: number;
-  stale: boolean;
-};
-
-type DiffReviewCommentDraft = {
-  filePath: string;
-  side: AnnotationSide;
-  lineNumber: number;
-  body: string;
-};
-
-type DiffReviewCommentEditDraft = {
-  commentId: string;
-  body: string;
-};
-
-type DiffReviewAnnotationMetadata =
-  | {
-      type: "comment";
-      commentId: string;
-    }
-  | {
-      type: "draft";
-    };
 
 type EditableDiffDraft = {
   sourceSignature: string;
@@ -126,24 +94,11 @@ type EditableDiffDraft = {
   error: string | null;
 };
 
-function createCommentId() {
-  return `comment-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-const EMPTY_COMMENTS: DiffReviewComment[] = [];
-
 function getBottomPaneViewForProject(
   viewsByProject: Record<string, BottomPaneView>,
   projectPath: string,
 ): BottomPaneView {
   return viewsByProject[projectPath] ?? "terminals";
-}
-
-function getCommentsForProject(
-  commentsByProject: Record<string, DiffReviewComment[]>,
-  projectPath: string,
-) {
-  return commentsByProject[projectPath] ?? EMPTY_COMMENTS;
 }
 
 function getFileDiffSignature(file: FileDiffMetadata) {
@@ -153,42 +108,10 @@ function getFileDiffSignature(file: FileDiffMetadata) {
   return file.hunks.map((hunk) => hunk.hunkSpecs ?? "").join("\n");
 }
 
-function formatReviewCommentForCopy(
-  comment: Pick<
-    DiffReviewComment,
-    "filePath" | "side" | "lineNumber" | "body" | "stale"
-  >,
-) {
-  const sideLabel = comment.side === "additions" ? "New" : "Old";
-  const staleLabel = comment.stale ? " (outdated)" : "";
-  return `- ${comment.filePath} (${sideLabel} line ${comment.lineNumber})${staleLabel}\n${comment.body}`;
-}
-
-function formatReviewCommentsForCopy(comments: DiffReviewComment[]) {
-  return [...comments]
-    .sort((a, b) => {
-      const pathCompare = a.filePath.localeCompare(b.filePath);
-      if (pathCompare !== 0) return pathCompare;
-      if (a.lineNumber !== b.lineNumber) return a.lineNumber - b.lineNumber;
-      return a.createdAt - b.createdAt;
-    })
-    .map((comment) => formatReviewCommentForCopy(comment))
-    .join("\n\n");
-}
-
 export const useDiffReviewStore = create(
   combine(
     {
       bottomPaneViewByProject: {} as Record<string, BottomPaneView>,
-      commentsByProject: {} as Record<string, DiffReviewComment[]>,
-      commentDraftByProject: {} as Record<
-        string,
-        DiffReviewCommentDraft | null
-      >,
-      editingCommentByProject: {} as Record<
-        string,
-        DiffReviewCommentEditDraft | null
-      >,
     },
     (set, get) => ({
       setBottomPaneView: (
@@ -233,253 +156,6 @@ export const useDiffReviewStore = create(
           bottomPaneViewByProject: {
             ...state.bottomPaneViewByProject,
             [projectPath]: nextView,
-          },
-        }));
-      },
-      startCommentDraft: (
-        projectPath: string,
-        filePath: string,
-        side: AnnotationSide,
-        lineNumber: number,
-      ) => {
-        const current = get().commentDraftByProject[projectPath];
-        set((state) => ({
-          editingCommentByProject: {
-            ...state.editingCommentByProject,
-            [projectPath]: null,
-          },
-          commentDraftByProject: {
-            ...state.commentDraftByProject,
-            [projectPath]:
-              current &&
-              current.filePath === filePath &&
-              current.side === side &&
-              current.lineNumber === lineNumber
-                ? current
-                : { filePath, side, lineNumber, body: "" },
-          },
-        }));
-      },
-      updateCommentDraft: (projectPath: string, body: string) => {
-        set((state) => {
-          const draft = state.commentDraftByProject[projectPath];
-          return {
-            commentDraftByProject: {
-              ...state.commentDraftByProject,
-              [projectPath]: draft ? { ...draft, body } : draft,
-            },
-          };
-        });
-      },
-      cancelCommentDraft: (projectPath: string) => {
-        set((state) => ({
-          commentDraftByProject: {
-            ...state.commentDraftByProject,
-            [projectPath]: null,
-          },
-        }));
-      },
-      submitCommentDraft: (projectPath: string, fileSignature: string) => {
-        const draft = get().commentDraftByProject[projectPath];
-        const body = draft?.body.trim();
-        if (!draft || !body) return;
-        set((state) => ({
-          commentsByProject: {
-            ...state.commentsByProject,
-            [projectPath]: [
-              ...getCommentsForProject(state.commentsByProject, projectPath),
-              {
-                id: createCommentId(),
-                filePath: draft.filePath,
-                side: draft.side,
-                lineNumber: draft.lineNumber,
-                fileSignature,
-                body,
-                createdAt: Date.now(),
-                stale: false,
-              },
-            ],
-          },
-          commentDraftByProject: {
-            ...state.commentDraftByProject,
-            [projectPath]: null,
-          },
-        }));
-      },
-      startEditComment: (projectPath: string, commentId: string) => {
-        const comment = getCommentsForProject(
-          get().commentsByProject,
-          projectPath,
-        ).find((item) => item.id === commentId);
-        if (!comment) return;
-        set((state) => ({
-          commentDraftByProject: {
-            ...state.commentDraftByProject,
-            [projectPath]: null,
-          },
-          editingCommentByProject: {
-            ...state.editingCommentByProject,
-            [projectPath]: {
-              commentId,
-              body: comment.body,
-            },
-          },
-        }));
-      },
-      updateEditCommentDraft: (projectPath: string, body: string) => {
-        set((state) => {
-          const edit = state.editingCommentByProject[projectPath];
-          return {
-            editingCommentByProject: {
-              ...state.editingCommentByProject,
-              [projectPath]: edit ? { ...edit, body } : edit,
-            },
-          };
-        });
-      },
-      cancelEditComment: (projectPath: string) => {
-        set((state) => ({
-          editingCommentByProject: {
-            ...state.editingCommentByProject,
-            [projectPath]: null,
-          },
-        }));
-      },
-      submitEditComment: (projectPath: string) => {
-        const edit = get().editingCommentByProject[projectPath];
-        const body = edit?.body.trim();
-        if (!edit || !body) return;
-        set((state) => ({
-          commentsByProject: {
-            ...state.commentsByProject,
-            [projectPath]: getCommentsForProject(
-              state.commentsByProject,
-              projectPath,
-            ).map((comment) =>
-              comment.id === edit.commentId ? { ...comment, body } : comment,
-            ),
-          },
-          editingCommentByProject: {
-            ...state.editingCommentByProject,
-            [projectPath]: null,
-          },
-        }));
-      },
-      deleteComment: (projectPath: string, commentId: string) => {
-        set((state) => ({
-          commentsByProject: {
-            ...state.commentsByProject,
-            [projectPath]: getCommentsForProject(
-              state.commentsByProject,
-              projectPath,
-            ).filter((comment) => comment.id !== commentId),
-          },
-          editingCommentByProject: {
-            ...state.editingCommentByProject,
-            [projectPath]:
-              state.editingCommentByProject[projectPath]?.commentId ===
-              commentId
-                ? null
-                : state.editingCommentByProject[projectPath],
-          },
-        }));
-      },
-      refreshStaleComments: (
-        projectPath: string,
-        files: FileDiffMetadata[],
-      ) => {
-        const signatureByPath = new Map(
-          files.map((file) => [file.name, getFileDiffSignature(file)]),
-        );
-        const comments = getCommentsForProject(
-          get().commentsByProject,
-          projectPath,
-        );
-        const nextComments = comments.map((comment) => {
-          const fileSignature = signatureByPath.get(comment.filePath);
-          const stale =
-            !fileSignature || fileSignature !== comment.fileSignature;
-          return comment.stale === stale ? comment : { ...comment, stale };
-        });
-        if (
-          nextComments.every((comment, index) => comment === comments[index])
-        ) {
-          return;
-        }
-
-        set((state) => ({
-          commentsByProject: {
-            ...state.commentsByProject,
-            [projectPath]: nextComments,
-          },
-        }));
-      },
-      applyEditedAnnotationPositions: (
-        projectPath: string,
-        filePath: string,
-        annotations: DiffLineAnnotation<DiffReviewAnnotationMetadata>[],
-        fileSignature: string | null,
-      ) => {
-        const positionsByCommentId = new Map(
-          annotations.flatMap((annotation) =>
-            annotation.metadata.type === "comment"
-              ? [[annotation.metadata.commentId, annotation] as const]
-              : [],
-          ),
-        );
-        const draftPosition = annotations.find(
-          (annotation) => annotation.metadata.type === "draft",
-        );
-        set((state) => {
-          const commentDraft = state.commentDraftByProject[projectPath];
-          return {
-            commentsByProject: {
-              ...state.commentsByProject,
-              [projectPath]: getCommentsForProject(
-                state.commentsByProject,
-                projectPath,
-              ).map((comment) => {
-                if (comment.filePath !== filePath) return comment;
-                const position = positionsByCommentId.get(comment.id);
-                if (!position || !fileSignature) {
-                  return { ...comment, stale: true };
-                }
-                return {
-                  ...comment,
-                  side: position.side,
-                  lineNumber: position.lineNumber,
-                  fileSignature,
-                  stale: false,
-                };
-              }),
-            },
-            commentDraftByProject: {
-              ...state.commentDraftByProject,
-              [projectPath]:
-                commentDraft?.filePath === filePath && draftPosition
-                  ? {
-                      ...commentDraft,
-                      side: draftPosition.side,
-                      lineNumber: draftPosition.lineNumber,
-                    }
-                  : commentDraft,
-            },
-          };
-        });
-      },
-      discardReview: (projectPath: string) => {
-        set((state) => ({
-          commentsByProject: {
-            ...state.commentsByProject,
-            [projectPath]: [],
-          },
-          commentDraftByProject: {
-            ...state.commentDraftByProject,
-            [projectPath]: null,
-          },
-          editingCommentByProject: {
-            ...state.editingCommentByProject,
-            [projectPath]: null,
           },
         }));
       },
@@ -714,14 +390,9 @@ function mergeEditableAnnotations(
   current: DiffLineAnnotation<DiffReviewAnnotationMetadata>[],
 ) {
   return current.map((annotation) => {
-    const match = edited.find((candidate) => {
-      if (candidate.metadata.type !== annotation.metadata.type) return false;
-      if (candidate.metadata.type === "draft") return true;
-      return (
-        annotation.metadata.type === "comment" &&
-        candidate.metadata.commentId === annotation.metadata.commentId
-      );
-    });
+    const match = edited.find(
+      (candidate) => candidate.metadata.type === annotation.metadata.type,
+    );
     return match
       ? { ...annotation, side: match.side, lineNumber: match.lineNumber }
       : annotation;
@@ -961,13 +632,11 @@ function FileDiscardDropdownItems({
 function FileListItem({
   file,
   selected,
-  commentCount,
   showMobileMenu = false,
   onOpenFile,
 }: {
   file: FileDiffMetadata;
   selected: boolean;
-  commentCount: number;
   showMobileMenu?: boolean;
   onOpenFile?: () => void;
 }) {
@@ -1097,15 +766,6 @@ function FileListItem({
               </span>
             )}
           </span>
-          {commentCount > 0 ? (
-            <span
-              className="flex h-4 shrink-0 items-center gap-0.5 rounded-sm bg-sky-500/15 px-1 text-[10px] text-sky-300"
-              title={`${commentCount} comment${commentCount === 1 ? "" : "s"}`}
-            >
-              <MessageSquare className="size-2.5" />
-              {commentCount}
-            </span>
-          ) : null}
           {showMobileMenu ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -1163,361 +823,6 @@ function FileListItem({
   );
 }
 
-function CommentDraftForm({
-  body,
-  onBodyChange,
-  onCancel,
-  onSubmit,
-  submitLabel,
-  placeholder,
-  filePath,
-  side,
-  lineNumber,
-  stale = false,
-}: {
-  body: string;
-  onBodyChange: (body: string) => void;
-  onCancel: () => void;
-  onSubmit: () => void;
-  submitLabel: string;
-  placeholder: string;
-  filePath: string;
-  side: AnnotationSide;
-  lineNumber: number;
-  stale?: boolean;
-}) {
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const initialSelectionEndRef = useRef(body.length);
-  const { copied, copy } = useCopyToClipboard();
-  const trimmedBody = body.trim();
-
-  useEffect(() => {
-    if (!shouldAutoFocus()) {
-      return;
-    }
-    const handle = window.requestAnimationFrame(() => {
-      textareaRef.current?.focus();
-      textareaRef.current?.setSelectionRange(
-        initialSelectionEndRef.current,
-        initialSelectionEndRef.current,
-      );
-    });
-    return () => window.cancelAnimationFrame(handle);
-  }, []);
-
-  return (
-    <form
-      className="mx-2 my-1 max-w-3xl rounded-md border border-sky-500/40 bg-zinc-950/95 p-2 shadow-lg"
-      onSubmit={(event) => {
-        event.preventDefault();
-        onSubmit();
-      }}
-    >
-      <Textarea
-        ref={textareaRef}
-        value={body}
-        onChange={(event) => onBodyChange(event.currentTarget.value)}
-        placeholder={placeholder}
-        className="min-h-20 resize-y border-zinc-700 bg-zinc-900/80 text-xs"
-        onKeyDown={(event) => {
-          event.stopPropagation();
-          if (event.key === "Escape") {
-            event.preventDefault();
-            onCancel();
-            return;
-          }
-          if (event.key === "Enter" && !event.shiftKey) {
-            event.preventDefault();
-            onSubmit();
-          }
-        }}
-      />
-      <div className="mt-2 flex justify-end gap-1.5">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-7 px-2 text-xs"
-          onClick={onCancel}
-        >
-          Cancel
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className={cn(
-            "h-7 px-2 text-xs",
-            copied && "text-emerald-400 hover:text-emerald-300",
-          )}
-          disabled={!trimmedBody}
-          onClick={() => {
-            void copy(
-              formatReviewCommentForCopy({
-                filePath,
-                side,
-                lineNumber,
-                body: trimmedBody,
-                stale,
-              }),
-            );
-          }}
-        >
-          {copied ? (
-            <>
-              <Check className="size-3" />
-              Copied
-            </>
-          ) : (
-            <>
-              <Copy className="size-3" />
-              Copy
-            </>
-          )}
-        </Button>
-        <Button
-          type="submit"
-          size="sm"
-          className="h-7 px-2 text-xs"
-          disabled={!trimmedBody}
-        >
-          {submitLabel}
-        </Button>
-      </div>
-    </form>
-  );
-}
-
-function CommentActions({
-  projectPath,
-  comment,
-}: {
-  projectPath: string;
-  comment: DiffReviewComment;
-}) {
-  const startEditComment = useDiffReviewStore(
-    (state) => state.startEditComment,
-  );
-  const deleteComment = useDiffReviewStore((state) => state.deleteComment);
-  const { copied, copy } = useCopyToClipboard();
-
-  return (
-    <div className="flex shrink-0 items-center gap-0.5">
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="size-6 text-zinc-500 hover:text-zinc-100"
-        onClick={() => startEditComment(projectPath, comment.id)}
-        aria-label="Edit comment"
-      >
-        <Pencil className="size-3" />
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className={cn(
-          "size-6",
-          copied
-            ? "text-emerald-400 hover:text-emerald-300"
-            : "text-zinc-500 hover:text-zinc-100",
-        )}
-        onClick={() => {
-          void copy(formatReviewCommentForCopy(comment));
-        }}
-        aria-label={copied ? "Copied" : "Copy comment"}
-      >
-        {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="size-6 text-zinc-500 hover:text-rose-300"
-        onClick={() => deleteComment(projectPath, comment.id)}
-        aria-label="Delete comment"
-      >
-        <Trash2 className="size-3" />
-      </Button>
-    </div>
-  );
-}
-
-function CommentAnnotation({
-  annotation,
-  selectedFile,
-}: {
-  annotation: DiffLineAnnotation<DiffReviewAnnotationMetadata>;
-  selectedFile: FileDiffMetadata;
-}) {
-  const metadata = annotation.metadata;
-  const projectPath = useProjectDiffStore((state) => state.projectPath);
-  const comments = useDiffReviewStore((state) =>
-    getCommentsForProject(state.commentsByProject, projectPath),
-  );
-  const draft = useDiffReviewStore(
-    (state) => state.commentDraftByProject[projectPath] ?? null,
-  );
-  const editingComment = useDiffReviewStore(
-    (state) => state.editingCommentByProject[projectPath] ?? null,
-  );
-  const updateCommentDraft = useDiffReviewStore(
-    (state) => state.updateCommentDraft,
-  );
-  const cancelCommentDraft = useDiffReviewStore(
-    (state) => state.cancelCommentDraft,
-  );
-  const submitCommentDraft = useDiffReviewStore(
-    (state) => state.submitCommentDraft,
-  );
-  const updateEditCommentDraft = useDiffReviewStore(
-    (state) => state.updateEditCommentDraft,
-  );
-  const cancelEditComment = useDiffReviewStore(
-    (state) => state.cancelEditComment,
-  );
-  const submitEditComment = useDiffReviewStore(
-    (state) => state.submitEditComment,
-  );
-
-  if (metadata.type === "draft") {
-    if (!draft) return null;
-    const submitDraft = () => {
-      submitCommentDraft(projectPath, getFileDiffSignature(selectedFile));
-    };
-    return (
-      <CommentDraftForm
-        body={draft.body}
-        onBodyChange={(body) => updateCommentDraft(projectPath, body)}
-        onCancel={() => cancelCommentDraft(projectPath)}
-        onSubmit={submitDraft}
-        submitLabel="Comment"
-        placeholder="Leave a comment"
-        filePath={draft.filePath}
-        side={draft.side}
-        lineNumber={draft.lineNumber}
-      />
-    );
-  }
-
-  const comment = comments.find((item) => item.id === metadata.commentId);
-  if (!comment) return null;
-
-  if (editingComment?.commentId === comment.id) {
-    return (
-      <CommentDraftForm
-        body={editingComment.body}
-        onBodyChange={(body) => updateEditCommentDraft(projectPath, body)}
-        onCancel={() => cancelEditComment(projectPath)}
-        onSubmit={() => submitEditComment(projectPath)}
-        submitLabel="Save"
-        placeholder="Edit comment"
-        filePath={comment.filePath}
-        side={comment.side}
-        lineNumber={comment.lineNumber}
-        stale={comment.stale}
-      />
-    );
-  }
-
-  return (
-    <div className="mx-2 my-1 max-w-3xl rounded-md border border-border/80 bg-zinc-950/95 p-2 shadow-lg">
-      <div className="mb-1 flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-zinc-400">
-          <MessageSquare className="size-3 text-sky-300" />
-          <span className="truncate">
-            {comment.side === "additions" ? "New" : "Old"} line{" "}
-            {comment.lineNumber}
-          </span>
-        </div>
-        <CommentActions projectPath={projectPath} comment={comment} />
-      </div>
-      <p className="whitespace-pre-wrap text-xs leading-5 text-zinc-100">
-        {comment.body}
-      </p>
-    </div>
-  );
-}
-
-function StaleCommentsSection({ comments }: { comments: DiffReviewComment[] }) {
-  const projectPath = useProjectDiffStore((state) => state.projectPath);
-  const editingComment = useDiffReviewStore(
-    (state) => state.editingCommentByProject[projectPath] ?? null,
-  );
-  const updateEditCommentDraft = useDiffReviewStore(
-    (state) => state.updateEditCommentDraft,
-  );
-  const cancelEditComment = useDiffReviewStore(
-    (state) => state.cancelEditComment,
-  );
-  const submitEditComment = useDiffReviewStore(
-    (state) => state.submitEditComment,
-  );
-
-  if (comments.length === 0) return null;
-
-  return (
-    <section className="border-b border-border/70 bg-zinc-950/80 px-3 py-2">
-      <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-zinc-400">
-        <MessageSquare className="size-3 text-zinc-500" />
-        Outdated comments
-      </div>
-      <div className="space-y-1.5">
-        {comments.map((comment) =>
-          editingComment?.commentId === comment.id ? (
-            <CommentDraftForm
-              key={comment.id}
-              body={editingComment.body}
-              onBodyChange={(body) => updateEditCommentDraft(projectPath, body)}
-              onCancel={() => cancelEditComment(projectPath)}
-              onSubmit={() => submitEditComment(projectPath)}
-              submitLabel="Save"
-              placeholder="Edit comment"
-              filePath={comment.filePath}
-              side={comment.side}
-              lineNumber={comment.lineNumber}
-              stale={comment.stale}
-            />
-          ) : (
-            <div
-              key={comment.id}
-              className="rounded-md border border-zinc-800 bg-zinc-950/95 p-2"
-            >
-              <div className="mb-1 flex items-center justify-between gap-2">
-                <div className="min-w-0 text-[11px] text-zinc-500">
-                  <span className="truncate">
-                    {comment.side === "additions" ? "New" : "Old"} line{" "}
-                    {comment.lineNumber}
-                  </span>
-                </div>
-                <CommentActions projectPath={projectPath} comment={comment} />
-              </div>
-              <p className="whitespace-pre-wrap text-xs leading-5 text-zinc-200">
-                {comment.body}
-              </p>
-            </div>
-          ),
-        )}
-      </div>
-    </section>
-  );
-}
-
-function AddCommentGutterButton({ onClick }: { onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      className="relative z-20 ml-6 flex size-5 items-center justify-center rounded-sm border border-sky-300/70 bg-sky-600 text-white shadow-lg ring-1 ring-black/70 hover:bg-sky-500"
-      aria-label="Add comment"
-      title="Add comment"
-      onClick={onClick}
-    >
-      <MessageSquarePlus className="size-3" />
-    </button>
-  );
-}
-
 type DiffViewerPanelProps = {
   isLoading: boolean;
   selectedFile: FileDiffMetadata | null;
@@ -1525,7 +830,6 @@ type DiffViewerPanelProps = {
   diffOptions: FileDiffProps<DiffReviewAnnotationMetadata>["options"];
   editorOptions: EditorOptions<DiffReviewAnnotationMetadata>;
   lineAnnotations: DiffLineAnnotation<DiffReviewAnnotationMetadata>[];
-  staleCommentsForSelectedFile: DiffReviewComment[];
   editDraft: EditableDiffDraft | null;
   editUnavailableReason: string | null;
   isPreparingEditor: boolean;
@@ -1535,12 +839,13 @@ type DiffViewerPanelProps = {
   onSaveEdit: () => void;
   onReloadEdit: () => void;
   onCopyEdit: () => void;
-  startCommentDraft: (
-    projectPath: string,
-    filePath: string,
-    side: AnnotationSide,
-    lineNumber: number,
-  ) => void;
+  startCommentDraft: (args: {
+    projectPath: string;
+    filePath: string;
+    side: AnnotationSide;
+    lineNumber: number;
+    commitHash?: string;
+  }) => void;
 };
 
 type DiffEditHeaderControlsProps = {
@@ -1669,7 +974,6 @@ function DiffViewerPanel({
   diffOptions,
   editorOptions,
   lineAnnotations,
-  staleCommentsForSelectedFile,
   editDraft,
   editUnavailableReason,
   isPreparingEditor,
@@ -1688,53 +992,45 @@ function DiffViewerPanel({
           <LoaderCircle className="text-muted-foreground size-6 animate-spin" />
         </div>
       ) : selectedFile ? (
-        <>
-          <StaleCommentsSection comments={staleCommentsForSelectedFile} />
-          <FileDiff<DiffReviewAnnotationMetadata>
-            key={editDraft?.revision ?? getFileDiffSignature(selectedFile)}
-            fileDiff={renderedFile ?? selectedFile}
-            options={diffOptions}
-            edit={Boolean(editDraft)}
-            editorOptions={editorOptions}
-            lineAnnotations={lineAnnotations}
-            renderHeaderMetadata={() =>
-              supportsDiffEditing(selectedFile) ? (
-                <DiffEditHeaderControls
-                  editDraft={editDraft}
-                  editUnavailableReason={editUnavailableReason}
-                  isPreparingEditor={isPreparingEditor}
-                  isSavingEdit={isSavingEdit}
-                  onSaveEdit={onSaveEdit}
-                  onReloadEdit={onReloadEdit}
-                  onCopyEdit={onCopyEdit}
-                />
-              ) : null
-            }
-            renderAnnotation={(annotation) => (
-              <CommentAnnotation
-                annotation={
-                  annotation as DiffLineAnnotation<DiffReviewAnnotationMetadata>
-                }
-                selectedFile={selectedFile}
+        <FileDiff<DiffReviewAnnotationMetadata>
+          key={editDraft?.revision ?? getFileDiffSignature(selectedFile)}
+          fileDiff={renderedFile ?? selectedFile}
+          options={diffOptions}
+          edit={Boolean(editDraft)}
+          editorOptions={editorOptions}
+          lineAnnotations={lineAnnotations}
+          renderHeaderMetadata={() =>
+            supportsDiffEditing(selectedFile) ? (
+              <DiffEditHeaderControls
+                editDraft={editDraft}
+                editUnavailableReason={editUnavailableReason}
+                isPreparingEditor={isPreparingEditor}
+                isSavingEdit={isSavingEdit}
+                onSaveEdit={onSaveEdit}
+                onReloadEdit={onReloadEdit}
+                onCopyEdit={onCopyEdit}
               />
-            )}
-            renderGutterUtility={(getHoveredLine) => (
-              <AddCommentGutterButton
-                onClick={() => {
-                  const hoveredLine = getHoveredLine();
-                  if (!selectedFile || !hoveredLine) return;
-                  selectFile(selectedFile.name);
-                  startCommentDraft(
-                    projectPath,
-                    selectedFile.name,
-                    hoveredLine.side,
-                    hoveredLine.lineNumber,
-                  );
-                }}
-              />
-            )}
-          />
-        </>
+            ) : null
+          }
+          renderAnnotation={() => (
+            <DiffCommentAnnotation projectPath={projectPath} />
+          )}
+          renderGutterUtility={(getHoveredLine) => (
+            <AddCommentGutterButton
+              onClick={() => {
+                const hoveredLine = getHoveredLine();
+                if (!selectedFile || !hoveredLine) return;
+                selectFile(selectedFile.name);
+                startCommentDraft({
+                  projectPath,
+                  filePath: selectedFile.name,
+                  side: hoveredLine.side,
+                  lineNumber: hoveredLine.lineNumber,
+                });
+              }}
+            />
+          )}
+        />
       ) : (
         <div className="flex h-full items-center justify-center">
           <p className="text-muted-foreground text-sm">
@@ -1752,12 +1048,9 @@ type DiffFilesSidebarProps = {
   selectedFile: FileDiffMetadata | null;
   allFilesConfirmed: boolean;
   someFilesConfirmed: boolean;
-  commentCountsByFile: Record<string, number>;
   isRefreshing: boolean;
   /** Set when a refresh failed but a previously loaded diff is still shown. */
   refreshErrorMessage: string | null;
-  hasReviewComments: boolean;
-  reviewCopied: boolean;
   canCommit: boolean;
   hasUnsavedEdits: boolean;
   showDiffViewModeToggle: boolean;
@@ -1766,8 +1059,6 @@ type DiffFilesSidebarProps = {
   isDiscardAllPending: boolean;
   onRefresh: () => void;
   onToggleAllFilesConfirmation: () => void;
-  onDiscardReview: () => void;
-  onCopyReview: () => void;
   onCommit: () => void;
   onOpenFile?: () => void;
   containerClassName?: string;
@@ -1780,11 +1071,8 @@ function DiffFilesSidebar({
   selectedFile,
   allFilesConfirmed,
   someFilesConfirmed,
-  commentCountsByFile,
   isRefreshing,
   refreshErrorMessage,
-  hasReviewComments,
-  reviewCopied,
   canCommit,
   hasUnsavedEdits,
   showDiffViewModeToggle,
@@ -1793,8 +1081,6 @@ function DiffFilesSidebar({
   isDiscardAllPending,
   onRefresh,
   onToggleAllFilesConfirmation,
-  onDiscardReview,
-  onCopyReview,
   onCommit,
   onOpenFile,
   containerClassName,
@@ -1909,7 +1195,6 @@ function DiffFilesSidebar({
                     key={file.name}
                     file={file}
                     selected={!!selectedFile && selectedFile.name === file.name}
-                    commentCount={commentCountsByFile[file.name] ?? 0}
                     showMobileMenu={showMobileMenu}
                     onOpenFile={onOpenFile}
                   />
@@ -1933,37 +1218,6 @@ function DiffFilesSidebar({
       </ContextMenu>
 
       <div className="shrink-0 space-y-1 border-t border-border/70 p-1.5 pointer-coarse:p-2">
-        {hasReviewComments ? (
-          <div className="flex flex-wrap gap-1">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-auto min-h-6 min-w-0 flex-1 basis-[calc(50%-0.125rem)] gap-1 px-1 py-1 text-[11px] whitespace-normal pointer-coarse:min-h-11 pointer-coarse:text-xs"
-              onClick={onDiscardReview}
-            >
-              <Trash2 className="size-2.5 shrink-0" />
-              Discard review
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className={cn(
-                "h-auto min-h-6 min-w-0 flex-1 basis-[calc(50%-0.125rem)] gap-1 px-1 py-1 text-[11px] whitespace-normal pointer-coarse:min-h-11 pointer-coarse:text-xs",
-                reviewCopied && "border-emerald-500/40 text-emerald-400",
-              )}
-              onClick={onCopyReview}
-            >
-              {reviewCopied ? (
-                <Check className="size-2.5 shrink-0" />
-              ) : (
-                <Copy className="size-2.5 shrink-0" />
-              )}
-              Copy review
-            </Button>
-          </div>
-        ) : null}
         <Button
           type="button"
           variant="default"
@@ -2149,26 +1403,18 @@ function ProjectDiffPaneContent() {
   const setEditorFocusedFilePath = useProjectDiffStore(
     (state) => state.setEditorFocusedFilePath,
   );
-  const comments = useDiffReviewStore((state) =>
-    getCommentsForProject(state.commentsByProject, projectPath),
-  );
-  const commentDraft = useDiffReviewStore(
+  const commentDraft = useDiffCommentStore(
     (state) => state.commentDraftByProject[projectPath] ?? null,
   );
-  const editingComment = useDiffReviewStore(
-    (state) => state.editingCommentByProject[projectPath] ?? null,
-  );
-  const startCommentDraft = useDiffReviewStore(
+  const startCommentDraft = useDiffCommentStore(
     (state) => state.startCommentDraft,
   );
-  const refreshStaleComments = useDiffReviewStore(
-    (state) => state.refreshStaleComments,
+  const cancelCommentDraft = useDiffCommentStore(
+    (state) => state.cancelCommentDraft,
   );
-  const applyEditedAnnotationPositions = useDiffReviewStore(
+  const applyEditedAnnotationPositions = useDiffCommentStore(
     (state) => state.applyEditedAnnotationPositions,
   );
-  const discardReview = useDiffReviewStore((state) => state.discardReview);
-  const { copied: reviewCopied, copy: copyReview } = useCopyToClipboard();
   const openCommitDialog = useDiffReviewCommitDialogStore((s) => s.open);
   const commitDialogOpen = useDiffReviewCommitDialogStore(
     (s) => s.payload !== null,
@@ -2216,48 +1462,18 @@ function ProjectDiffPaneContent() {
     [files, confirmedFiles],
   );
   const canCommit = pathsToCommit.length > 0 && !hasUnsavedEdits;
-  const hasReviewComments = comments.length > 0;
   const selectedFileCount = useMemo(
     () => files?.filter((f) => confirmedFiles.includes(f.name)).length ?? 0,
     [files, confirmedFiles],
   );
-  const commentCountsByFile = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const comment of comments) {
-      counts[comment.filePath] = (counts[comment.filePath] ?? 0) + 1;
-    }
-    return counts;
-  }, [comments]);
-  const lineAnnotations = useMemo(() => {
-    if (!selectedFile) return [];
-    const annotations: DiffLineAnnotation<DiffReviewAnnotationMetadata>[] =
-      comments
-        .filter(
-          (comment) => comment.filePath === selectedFile.name && !comment.stale,
-        )
-        .map((comment) => ({
-          side: comment.side,
-          lineNumber: comment.lineNumber,
-          metadata: { type: "comment", commentId: comment.id },
-        }));
-
-    if (commentDraft?.filePath === selectedFile.name) {
-      annotations.push({
-        side: commentDraft.side,
-        lineNumber: commentDraft.lineNumber,
-        metadata: { type: "draft" },
-      });
-    }
-
-    return annotations;
-  }, [comments, commentDraft, selectedFile]);
-  const staleCommentsForSelectedFile = useMemo(() => {
-    if (!selectedFile) return [];
-    return comments.filter(
-      (comment) => comment.filePath === selectedFile.name && comment.stale,
-    );
-  }, [comments, selectedFile]);
-  const commentEditorOpen = Boolean(commentDraft || editingComment);
+  const lineAnnotations = useMemo(
+    () =>
+      selectedFile
+        ? getCommentDraftLineAnnotations(commentDraft, selectedFile.name)
+        : [],
+    [commentDraft, selectedFile],
+  );
+  const commentEditorOpen = Boolean(commentDraft && !commentDraft.commitHash);
   const selectedFileSourceSignature = selectedFile
     ? getFileDiffSignature(selectedFile)
     : null;
@@ -2374,7 +1590,6 @@ function ProjectDiffPaneContent() {
             projectPath,
             selectedFile.name,
             effectiveLineAnnotations,
-            result.fileDiff ? getFileDiffSignature(result.fileDiff) : null,
           );
           removeEditableDraft(selectedFile.name);
           setEditorFocusedFilePath(null);
@@ -2453,7 +1668,7 @@ function ProjectDiffPaneContent() {
         await discardAllMutation.mutateAsync({ path: projectPath, filePaths });
         clearConfirmations();
         removeEditableDrafts();
-        discardReview(projectPath);
+        cancelCommentDraft(projectPath);
         await queryClient.invalidateQueries({
           queryKey: orpc.projects.getUncommittedDiff.queryKey({
             input: { path: projectPath },
@@ -2478,21 +1693,16 @@ function ProjectDiffPaneContent() {
       }) => {
         if (!selectedFile) return;
         selectFile(selectedFile.name);
-        startCommentDraft(
+        startCommentDraft({
           projectPath,
-          selectedFile.name,
-          annotationSide,
+          filePath: selectedFile.name,
+          side: annotationSide,
           lineNumber,
-        );
+        });
       },
     }),
     [diffViewMode, projectPath, selectFile, selectedFile, startCommentDraft],
   );
-
-  useEffect(() => {
-    if (isLoading || !files) return;
-    refreshStaleComments(projectPath, files);
-  }, [files, isLoading, projectPath, refreshStaleComments]);
 
   useEffect(() => {
     if (!isMobile) {
@@ -2587,11 +1797,8 @@ function ProjectDiffPaneContent() {
     selectedFile,
     allFilesConfirmed,
     someFilesConfirmed,
-    commentCountsByFile,
     isRefreshing,
     refreshErrorMessage: isError ? getDiffErrorMessage(error) : null,
-    hasReviewComments,
-    reviewCopied,
     canCommit,
     hasUnsavedEdits,
     requestDiscardAll,
@@ -2599,10 +1806,6 @@ function ProjectDiffPaneContent() {
     onRefresh: refreshProjectDiff,
     onToggleAllFilesConfirmation: () =>
       toggleAllFilesConfirmation(files.map((file) => file.name)),
-    onDiscardReview: () => discardReview(projectPath),
-    onCopyReview: () => {
-      void copyReview(formatReviewCommentsForCopy(comments));
-    },
     onCommit: () =>
       openCommitDialog({
         projectPath,
@@ -2619,7 +1822,6 @@ function ProjectDiffPaneContent() {
     diffOptions,
     editorOptions,
     lineAnnotations: effectiveLineAnnotations,
-    staleCommentsForSelectedFile,
     editDraft,
     editUnavailableReason,
     isPreparingEditor,

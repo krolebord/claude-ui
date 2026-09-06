@@ -1,5 +1,12 @@
-import type { FileDiffMetadata } from "@pierre/diffs/react";
+import type { AnnotationSide, FileDiffMetadata } from "@pierre/diffs/react";
 import { FileDiff } from "@pierre/diffs/react";
+import {
+  AddCommentGutterButton,
+  DiffCommentAnnotation,
+  type DiffReviewAnnotationMetadata,
+  getCommentDraftLineAnnotations,
+  useDiffCommentStore,
+} from "@renderer/components/diff-comment";
 import { COMPACT_FILE_DIFF_OPTIONS } from "@renderer/components/diff-pane-styles";
 import {
   DiffViewModeToggle,
@@ -695,13 +702,62 @@ function ProjectGitHistoryPaneContent() {
     return foundIndex >= 0 ? foundIndex : 0;
   }, [files, selectedFilePath]);
 
+  const commentDraft = useDiffCommentStore(
+    (state) => state.commentDraftByProject[projectPath] ?? null,
+  );
+  const startCommentDraft = useDiffCommentStore(
+    (state) => state.startCommentDraft,
+  );
+  const lineAnnotations = useMemo(
+    () =>
+      selectedFile
+        ? getCommentDraftLineAnnotations(
+            commentDraft,
+            selectedFile.name,
+            selectedCommit?.hash,
+          )
+        : [],
+    [commentDraft, selectedCommit?.hash, selectedFile],
+  );
+  const commentEditorOpen = Boolean(
+    commentDraft &&
+      selectedCommit &&
+      commentDraft.commitHash === selectedCommit.hash,
+  );
+
   const diffViewMode = useDiffViewMode();
   const diffOptions = useMemo(
     () => ({
       ...COMPACT_FILE_DIFF_OPTIONS,
       diffStyle: diffViewMode,
+      enableGutterUtility: true,
+      lineHoverHighlight: "both" as const,
+      onLineNumberClick: ({
+        annotationSide,
+        lineNumber,
+      }: {
+        annotationSide: AnnotationSide;
+        lineNumber: number;
+      }) => {
+        if (!selectedFile || !selectedCommit) return;
+        selectFile(selectedFile.name);
+        startCommentDraft({
+          projectPath,
+          filePath: selectedFile.name,
+          side: annotationSide,
+          lineNumber,
+          commitHash: selectedCommit.hash,
+        });
+      },
     }),
-    [diffViewMode],
+    [
+      diffViewMode,
+      projectPath,
+      selectFile,
+      selectedCommit,
+      selectedFile,
+      startCommentDraft,
+    ],
   );
 
   useHotkey(
@@ -711,7 +767,7 @@ function ProjectGitHistoryPaneContent() {
       const newIndex = (selectedFileIndex - 1 + files.length) % files.length;
       selectFile(files[newIndex].name);
     },
-    { enabled: Boolean(files?.length) },
+    { enabled: Boolean(files?.length) && !commentEditorOpen },
   );
   useHotkey(
     "ArrowDown",
@@ -720,7 +776,7 @@ function ProjectGitHistoryPaneContent() {
       const newIndex = (selectedFileIndex + 1) % files.length;
       selectFile(files[newIndex].name);
     },
-    { enabled: Boolean(files?.length) },
+    { enabled: Boolean(files?.length) && !commentEditorOpen },
   );
 
   const isMobile = useIsMobile();
@@ -903,7 +959,31 @@ function ProjectGitHistoryPaneContent() {
                 <LoaderCircle className="text-muted-foreground size-6 animate-spin" />
               </div>
             ) : selectedFile ? (
-              <FileDiff fileDiff={selectedFile} options={diffOptions} />
+              <FileDiff<DiffReviewAnnotationMetadata>
+                key={`${selectedCommit.hash}:${selectedFile.name}`}
+                fileDiff={selectedFile}
+                options={diffOptions}
+                lineAnnotations={lineAnnotations}
+                renderAnnotation={() => (
+                  <DiffCommentAnnotation projectPath={projectPath} />
+                )}
+                renderGutterUtility={(getHoveredLine) => (
+                  <AddCommentGutterButton
+                    onClick={() => {
+                      const hoveredLine = getHoveredLine();
+                      if (!hoveredLine) return;
+                      selectFile(selectedFile.name);
+                      startCommentDraft({
+                        projectPath,
+                        filePath: selectedFile.name,
+                        side: hoveredLine.side,
+                        lineNumber: hoveredLine.lineNumber,
+                        commitHash: selectedCommit.hash,
+                      });
+                    }}
+                  />
+                )}
+              />
             ) : (
               <div className="flex h-full items-center justify-center">
                 <p className="text-muted-foreground text-sm">
