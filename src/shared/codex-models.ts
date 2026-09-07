@@ -15,6 +15,20 @@ export interface CodexModel {
 
 export const codexModels: CodexModel[] = [
   {
+    label: "GPT-6-Astra",
+    value: "gpt-6-astra",
+    defaultReasoningEffort: "low",
+    supportedReasoningEfforts: [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+      "ultra",
+    ],
+    supportsFastMode: true,
+  },
+  {
     label: "GPT-5.6-Sol",
     value: "gpt-5.6-sol",
     defaultReasoningEffort: "medium",
@@ -55,14 +69,6 @@ export const codexModels: CodexModel[] = [
     defaultReasoningEffort: "xhigh",
     supportedReasoningEfforts: ["low", "medium", "high", "xhigh"],
     supportsFastMode: true,
-  },
-  {
-    label: "GPT-5.4",
-    value: "gpt-5.4",
-    defaultReasoningEffort: "medium",
-    supportedReasoningEfforts: ["low", "medium", "high", "xhigh"],
-    supportsFastMode: true,
-    upgradeTo: "gpt-5.6-terra",
   },
   {
     label: "GPT-5.4-Mini",

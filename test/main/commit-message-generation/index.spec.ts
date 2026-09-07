@@ -55,13 +55,13 @@ Cover commit message parsing.`);
 
     await generateCommitMessage(
       { provider: "codex", model: "gpt-5.6-luna" },
-      `diff --git a/foo.ts b/foo.ts\n${"x".repeat(20_000)}`,
+      `diff --git a/foo.ts b/foo.ts\n${"x".repeat(40_000)}`,
       { workingDirectory: "/var/tmp/agent-ui-text-generation-test" },
     );
 
     const prompt = completeMock.mock.calls[0]?.[0] ?? "";
     expect(prompt).toContain("... (diff truncated)");
-    expect(prompt.length).toBeLessThan(20_000);
+    expect(prompt.length).toBeLessThan(40_000);
   });
 
   it("returns null for empty diff", async () => {

@@ -22,7 +22,7 @@ export interface SearchableModelOption {
   value: string;
 }
 
-const MAX_RECENT_MODELS = 8;
+const MAX_RECENT_MODELS = 3;
 const MODEL_FILTER_SCORE_THRESHOLD = 0.2;
 
 interface SearchableModelPickerProps {
@@ -50,7 +50,7 @@ export function addRecentModel(
   );
 
   if (!model || excluded.has(model)) {
-    return eligibleRecentModels;
+    return uniqueModels(eligibleRecentModels).slice(0, MAX_RECENT_MODELS);
   }
 
   return uniqueModels([model, ...eligibleRecentModels]).slice(
@@ -78,7 +78,8 @@ export function SearchableModelPicker({
     );
     const recentOptions = recentValues
       .map((modelValue) => modelsByValue.get(modelValue))
-      .filter((model): model is SearchableModelOption => Boolean(model));
+      .filter((model): model is SearchableModelOption => Boolean(model))
+      .slice(0, MAX_RECENT_MODELS);
     const recentValueSet = new Set(recentOptions.map((model) => model.value));
 
     return {
