@@ -109,9 +109,9 @@ export function SettingsDialog() {
             </AccordionContent>
           </AccordionItem>
 
-          <AccordionItem value="claude-accounts">
+          <AccordionItem value="accounts">
             <SettingsSectionTrigger icon={Users}>
-              Claude accounts
+              Accounts
             </SettingsSectionTrigger>
             <AccordionContent>
               <AccountsSettingsItem onNavigate={closeSettingsDialog} />

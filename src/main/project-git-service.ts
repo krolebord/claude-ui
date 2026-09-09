@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { copyFile, cp, readdir, rm, writeFile } from "node:fs/promises";
+import { copyFile, cp, lstat, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type {
   ClaudeProject,
@@ -573,6 +573,48 @@ async function resolveUpstreamDiffStats(
   }
 }
 
+async function getPathsToStage({
+  git,
+  projectPath,
+  paths,
+}: {
+  git: ReturnType<typeof simpleGit>;
+  projectPath: string;
+  paths: string[];
+}): Promise<string[]> {
+  const deleted = new Set(
+    (
+      await git.raw([
+        "diff",
+        "--cached",
+        "--name-only",
+        "--diff-filter=D",
+        "--no-renames",
+        "-z",
+      ])
+    ).split("\0"),
+  );
+  const stageable = await Promise.all(
+    paths.map(async (filePath) => {
+      if (!deleted.has(filePath)) return true;
+      try {
+        await lstat(path.resolve(projectPath, filePath));
+        return true;
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          "code" in error &&
+          error.code === "ENOENT"
+        ) {
+          return false;
+        }
+        throw error;
+      }
+    }),
+  );
+  return paths.filter((_, index) => stageable[index]);
+}
+
 async function withTemporaryIndex<T>(
   git: ReturnType<typeof simpleGit>,
   projectPath: string,
@@ -965,7 +1007,14 @@ export class ProjectGitService {
         projectPath,
         async (tempGit) => {
           if (paths) {
-            await tempGit.raw(["add", "-A", "--", ...paths]);
+            const pathsToStage = await getPathsToStage({
+              git: tempGit,
+              projectPath,
+              paths,
+            });
+            if (pathsToStage.length > 0) {
+              await tempGit.raw(["add", "-A", "--", ...pathsToStage]);
+            }
             return await tempGit.raw([
               "diff",
               "--cached",
@@ -1023,7 +1072,10 @@ export class ProjectGitService {
     const message = description ? [subject, description] : subject;
 
     try {
-      await git.add(paths);
+      const pathsToStage = await getPathsToStage({ git, projectPath, paths });
+      if (pathsToStage.length > 0) {
+        await git.add(pathsToStage);
+      }
       await git.commit(message, paths);
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Git commit failed.";

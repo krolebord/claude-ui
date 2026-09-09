@@ -58,6 +58,7 @@ import {
   TerminalSquare,
   TrashIcon,
   TriangleAlert,
+  Users,
 } from "lucide-react";
 import { forwardRef, useCallback } from "react";
 import { toast } from "sonner";
@@ -227,9 +228,76 @@ function getSessionInitialPrompt(session: Session): string | undefined {
  * tree and inbox so those extras cannot drift between views. Accepts undefined
  * so callers can keep a "session missing" guard below the hook calls.
  */
+function useSwitchCodexAccountActions(
+  session: Session | undefined,
+): SessionMenuAction[] {
+  const codexAccounts = useAppState((s) => s.codexAccounts.accounts);
+  const switchAccountMutation = useMutation({
+    mutationFn: (input: { sessionId: string; accountId?: string }) =>
+      orpc.sessions.codex.setAccount.call(input),
+    onSuccess: ({ appliedToLiveSession }) => {
+      toast.success(
+        appliedToLiveSession
+          ? "Switched account for this session"
+          : "Account switched; applies on next start",
+      );
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to switch account",
+      );
+    },
+  });
+
+  if (session?.type !== "codex-local-terminal" || codexAccounts.length === 0) {
+    return [];
+  }
+
+  const currentAccountId = session.startupConfig.accountId;
+  const switchTo = (accountId?: string) => {
+    switchAccountMutation.mutate({ sessionId: session.sessionId, accountId });
+  };
+
+  return [
+    {
+      type: "submenu",
+      key: "switch-codex-account",
+      label: "Switch account",
+      icon: Users,
+      items: [
+        {
+          type: "item",
+          key: "switch-codex-account:default",
+          label: "Default account",
+          trailingLabel: currentAccountId ? undefined : "Current",
+          disabled: !currentAccountId || switchAccountMutation.isPending,
+          onSelect: () => switchTo(undefined),
+        },
+        ...codexAccounts.map<SessionMenuActionItem>((account) => ({
+          type: "item",
+          key: `switch-codex-account:${account.id}`,
+          label: account.label,
+          trailingLabel:
+            account.id === currentAccountId
+              ? "Current"
+              : account.status === "needs-relogin"
+                ? "Needs re-login"
+                : undefined,
+          disabled:
+            account.id === currentAccountId ||
+            account.status === "needs-relogin" ||
+            switchAccountMutation.isPending,
+          onSelect: () => switchTo(account.id),
+        })),
+      ],
+    },
+  ];
+}
+
 export function useTypeSpecificSessionMenuActions(
   session: Session | undefined,
 ): SessionMenuAction[] {
+  const switchCodexAccountActions = useSwitchCodexAccountActions(session);
   const forkClaudeMutation = useMutation({
     mutationFn: async (sessionId: string) => {
       const { cols, rows } = getTerminalSize();
@@ -336,6 +404,7 @@ export function useTypeSpecificSessionMenuActions(
         onSelect: () => forkCodexMutation.mutate(session.sessionId),
         disabled: forkCodexMutation.isPending || !session.codexSessionId,
       },
+      ...switchCodexAccountActions,
     ];
   }
 

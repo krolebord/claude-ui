@@ -8,6 +8,7 @@ import { z } from "zod";
 import { appSettingsRouter } from "./app-settings";
 import { artifactsRouter } from "./artifacts-service";
 import { claudeAccountsRouter } from "./claude-accounts";
+import { codexAccountsRouter } from "./codex-accounts";
 import { fsRouter } from "./fs.router";
 import { globalInstructionsRouter } from "./global-instructions-service";
 import { moveStoppedSessionToProject } from "./move-stopped-session-to-project";
@@ -326,6 +327,7 @@ export const orpcRouter = {
   artifacts: artifactsRouter,
   appSettings: appSettingsRouter,
   claudeAccounts: claudeAccountsRouter,
+  codexAccounts: codexAccountsRouter,
   projects: projectsRouter,
   projectTerminals: projectTerminalsRouter,
   terminals: terminalsRouter,

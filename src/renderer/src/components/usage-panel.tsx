@@ -222,8 +222,22 @@ export function UsagePanel() {
     }),
   );
 
+  const codexAccountId =
+    activeSession?.type === "codex-local-terminal"
+      ? activeSession.startupConfig.accountId
+      : undefined;
+  const codexAccount = useAppState((x) =>
+    codexAccountId
+      ? (x.codexAccounts.accounts.find(
+          (account) => account.id === codexAccountId,
+        ) ?? null)
+      : null,
+  );
+  const codexAccountLabel = codexAccount?.label ?? null;
+
   const codexQuery = useQuery(
     orpc.sessions.codex.getUsage.queryOptions({
+      input: { accountId: codexAccountId },
       retry: false,
       refetchInterval: 5 * 60_000,
       staleTime: 5 * 60_000,
@@ -420,6 +434,11 @@ export function UsagePanel() {
       return (
         <div className="border-t border-border/70 p-2">
           <div className="space-y-1.5">
+            {codexAccountLabel ? (
+              <div className="text-[10px] text-zinc-500">
+                {codexAccountLabel}
+              </div>
+            ) : null}
             {planType ? (
               <div className="flex items-center justify-between text-[10px]">
                 <span className="text-zinc-400">Plan</span>

@@ -20,6 +20,13 @@ import {
 } from "./claude-accounts";
 import type { ClaudeAccountAuth } from "./claude-cli";
 import { ensureManagedClaudeStatePlugin } from "./claude-state-plugin";
+import { CodexAccountLoginService } from "./codex-account-login";
+import {
+  CodexAccountsService,
+  defineCodexAccountsInternalState,
+  defineCodexAccountsPersistence,
+  defineCodexAccountsPublicState,
+} from "./codex-accounts";
 import type { CursorAgentMode, CursorAgentPermissionMode } from "./cursor-cli";
 import { CursorSessionLogFileManager } from "./cursor-session-log-file-manager";
 import { ensureManagedCursorStateHooks } from "./cursor-state-hooks";
@@ -239,6 +246,21 @@ export async function createServices(options: CreateServicesOptions) {
     return { type: "managed", token };
   };
 
+  const codexAccountsInternalState = defineCodexAccountsInternalState();
+  persistenceService.registerAndHydrate(
+    defineCodexAccountsPersistence(codexAccountsInternalState),
+  );
+  const codexAccountsPublicState = defineCodexAccountsPublicState();
+  const codexAccountsService = new CodexAccountsService({
+    internalState: codexAccountsInternalState,
+    publicState: codexAccountsPublicState,
+  });
+
+  // Codex keeps the access token in memory for the life of the app-server, and
+  // asks us for a new one on 401, so a short margin is enough here.
+  const getCodexExternalAuth = async (accountId: string) =>
+    await codexAccountsService.getExternalAuth(accountId);
+
   const titleGenerationService = new TitleGenerationService({
     getSettings: () => appSettingsState.state.titleGeneration,
     workingDirectory: textGenerationWorkingDirectory,
@@ -327,6 +349,12 @@ export async function createServices(options: CreateServicesOptions) {
     accounts: claudeAccountsService,
   });
 
+  const codexAccountLogin = new CodexAccountLoginService({
+    userDataPath,
+    terminalManager,
+    accounts: codexAccountsService,
+  });
+
   const localTerminalSessionsManager = new LocalTerminalSessionsManager(
     sessionsState,
     terminalManager,
@@ -346,6 +374,7 @@ export async function createServices(options: CreateServicesOptions) {
     titleGeneration: titleGenerationService,
     getMcpServerUrl,
     sessionBuffers,
+    getExternalAuth: getCodexExternalAuth,
   });
   const cursorAgentSessionsManager = new CursorAgentSessionsManager({
     state: sessionsState,
@@ -398,6 +427,7 @@ export async function createServices(options: CreateServicesOptions) {
             configOverrides: input.configOverrides,
             mcpEnabled: input.mcpEnabled,
             mcpCanScheduleSessions,
+            accountId: input.accountId,
             cols: SCHEDULED_SESSION_COLS,
             rows: SCHEDULED_SESSION_ROWS,
           });
@@ -438,6 +468,7 @@ export async function createServices(options: CreateServicesOptions) {
     serviceStates: {
       appSettings: appSettingsState,
       claudeAccounts: claudeAccountsPublicState,
+      codexAccounts: codexAccountsPublicState,
       projects: projectsState,
       projectTerminals: projectTerminalsState,
       sessions: sessionsState,
@@ -457,6 +488,9 @@ export async function createServices(options: CreateServicesOptions) {
 
   shutdownDisposable.addDisposable(
     async () => await claudeAccountLogin.dispose(),
+  );
+  shutdownDisposable.addDisposable(
+    async () => await codexAccountLogin.dispose(),
   );
   shutdownDisposable.addDisposable(async () => await sessionsService.dispose());
   shutdownDisposable.addDisposable(async () => await terminalManager.dispose());
@@ -495,6 +529,8 @@ export async function createServices(options: CreateServicesOptions) {
     artifactsService,
     claudeAccounts: claudeAccountsService,
     claudeAccountLogin,
+    codexAccounts: codexAccountsService,
+    codexAccountLogin,
     machineStatsState,
     projectsState,
     projectTerminalsState,

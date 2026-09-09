@@ -63,11 +63,17 @@ const trackerSpies = vi.hoisted(() => {
       start: ReturnType<typeof vi.fn>;
       stop: ReturnType<typeof vi.fn>;
       readThreadPrompt: ReturnType<typeof vi.fn>;
+      loginWithExternalAuth: ReturnType<typeof vi.fn>;
       callbacks: {
         onThreadId?: (threadId: string) => void;
         onStatusChange?: (status: TrackerState) => void;
         onSubagentUpdate?: (update: CodexAppServerSubagentUpdate) => void;
         onError?: (errorMessage: string) => void;
+        onChatgptAuthTokensRefresh?: () => Promise<{
+          accessToken: string;
+          chatgptAccountId: string;
+          chatgptPlanType?: string;
+        }>;
       };
     }>,
   };
@@ -124,11 +130,13 @@ vi.mock("../../src/main/codex-app-server-tracker", () => ({
       start: vi.fn().mockResolvedValue(undefined),
       stop: vi.fn().mockResolvedValue(undefined),
       readThreadPrompt: vi.fn().mockResolvedValue(undefined),
+      loginWithExternalAuth: vi.fn().mockResolvedValue(undefined),
       callbacks: {
         onThreadId: options.onThreadId,
         onStatusChange: options.onStatusChange,
         onSubagentUpdate: options.onSubagentUpdate,
         onError: options.onError,
+        onChatgptAuthTokensRefresh: options.onChatgptAuthTokensRefresh,
       },
     };
     trackerSpies.instances.push(instance);
@@ -152,13 +160,28 @@ function createManager(opts?: {
   initialPrompt?: string;
   titleGeneration?: TitleGenerationService;
   title?: string;
+  accountId?: string;
+  getExternalAuth?: (accountId: string) => Promise<{
+    accessToken: string;
+    chatgptAccountId: string;
+    chatgptPlanType?: string;
+  }>;
 }) {
   const { state, sessionsState } = createSessionsState();
   const sessionBuffers = createInMemorySessionBufferStore();
+  const getExternalAuth = vi.fn(
+    opts?.getExternalAuth ??
+      (async (accountId: string) => ({
+        accessToken: `token-for-${accountId}`,
+        chatgptAccountId: `workspace-for-${accountId}`,
+        chatgptPlanType: "team",
+      })),
+  );
   const manager = new CodexSessionsManager({
     state: sessionsState,
     titleGeneration: opts?.titleGeneration,
     sessionBuffers,
+    getExternalAuth,
   });
   const sessionId = "session-codex-1";
   const startupConfig: CodexLocalTerminalSessionData["startupConfig"] = {
@@ -169,6 +192,7 @@ function createManager(opts?: {
     initialPrompt: opts?.initialPrompt ?? "/plan summarize recent commits",
     model: undefined,
     configOverrides: undefined,
+    accountId: opts?.accountId,
   };
 
   state[sessionId] = {
@@ -182,7 +206,7 @@ function createManager(opts?: {
     startupConfig,
   };
 
-  return { manager, sessionId, state, sessionBuffers };
+  return { manager, sessionId, state, sessionBuffers, getExternalAuth };
 }
 
 describe("CodexSessionsManager", () => {
@@ -824,5 +848,165 @@ describe("CodexSessionsManager", () => {
         sessionId: "source-session",
       }),
     ).rejects.toThrow("Codex session is not ready to fork yet.");
+  });
+});
+
+describe("CodexSessionsManager account selection", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    terminalSessionSpies.status = "stopped";
+    terminalSessionSpies.callbacks = [];
+    appServerSpies.instances = [];
+    trackerSpies.instances = [];
+  });
+
+  const start = async (
+    manager: CodexSessionsManager,
+    sessionId: string,
+    accountId?: string,
+  ) =>
+    await manager.startLiveSession({
+      sessionId,
+      cwd: "/tmp",
+      modelReasoningEffort: "high",
+      fastMode: "off",
+      permissionMode: "default",
+      accountId,
+    });
+
+  it("injects external auth before the TUI is spawned", async () => {
+    const { manager, sessionId, getExternalAuth } = createManager({
+      accountId: "account-a",
+    });
+
+    await start(manager, sessionId, "account-a");
+
+    expect(getExternalAuth).toHaveBeenCalledWith("account-a");
+    const tracker = trackerSpies.instances[0];
+    expect(tracker.loginWithExternalAuth).toHaveBeenCalledWith({
+      accessToken: "token-for-account-a",
+      chatgptAccountId: "workspace-for-account-a",
+      chatgptPlanType: "team",
+    });
+    // The TUI must not exist before the app-server knows which account to use.
+    expect(
+      tracker.loginWithExternalAuth.mock.invocationCallOrder[0],
+    ).toBeLessThan(terminalSessionSpies.start.mock.invocationCallOrder[0]);
+  });
+
+  it("leaves the app-server on the default login when no account is set", async () => {
+    const { manager, sessionId, getExternalAuth } = createManager();
+
+    await start(manager, sessionId);
+
+    expect(getExternalAuth).not.toHaveBeenCalled();
+    expect(
+      trackerSpies.instances[0].loginWithExternalAuth,
+    ).not.toHaveBeenCalled();
+  });
+
+  it("fails the start when the account cannot produce a token", async () => {
+    const { manager, sessionId, state } = createManager({
+      accountId: "account-dead",
+      getExternalAuth: vi
+        .fn()
+        .mockRejectedValue(new Error("Account needs a fresh Codex login")),
+    });
+
+    await expect(start(manager, sessionId, "account-dead")).rejects.toThrow(
+      "Account needs a fresh Codex login",
+    );
+    expect(state[sessionId]?.status).toBe("error");
+    expect(terminalSessionSpies.start).not.toHaveBeenCalled();
+  });
+
+  it("switches a live session onto another account without a restart", async () => {
+    const { manager, sessionId, state } = createManager({
+      accountId: "account-a",
+    });
+    await start(manager, sessionId, "account-a");
+    const tracker = trackerSpies.instances[0];
+
+    await expect(
+      manager.setSessionAccount({ sessionId, accountId: "account-b" }),
+    ).resolves.toEqual({ appliedToLiveSession: true });
+
+    expect(tracker.loginWithExternalAuth).toHaveBeenLastCalledWith({
+      accessToken: "token-for-account-b",
+      chatgptAccountId: "workspace-for-account-b",
+      chatgptPlanType: "team",
+    });
+    expect(state[sessionId]?.startupConfig.accountId).toBe("account-b");
+    expect(terminalSessionSpies.stop).not.toHaveBeenCalled();
+  });
+
+  it("records the account for a stopped session without touching an app-server", async () => {
+    const { manager, sessionId, state } = createManager();
+
+    await expect(
+      manager.setSessionAccount({ sessionId, accountId: "account-b" }),
+    ).resolves.toEqual({ appliedToLiveSession: false });
+
+    expect(state[sessionId]?.startupConfig.accountId).toBe("account-b");
+    expect(trackerSpies.instances).toHaveLength(0);
+  });
+
+  it("defers a switch back to the default account to the next start", async () => {
+    const { manager, sessionId, state } = createManager({
+      accountId: "account-a",
+    });
+    await start(manager, sessionId, "account-a");
+    const tracker = trackerSpies.instances[0];
+    tracker.loginWithExternalAuth.mockClear();
+
+    await expect(
+      manager.setSessionAccount({ sessionId, accountId: undefined }),
+    ).resolves.toEqual({ appliedToLiveSession: false });
+
+    expect(state[sessionId]?.startupConfig.accountId).toBeUndefined();
+    // Clearing external auth would need account/logout, which deletes the
+    // user's own auth.json from the shared CODEX_HOME.
+    expect(tracker.loginWithExternalAuth).not.toHaveBeenCalled();
+  });
+
+  it("keeps the working account when the new one cannot produce a token", async () => {
+    const getExternalAuth = vi.fn(async (accountId: string) => {
+      if (accountId === "account-dead") {
+        throw new Error("Account needs a fresh Codex login");
+      }
+      return {
+        accessToken: `token-for-${accountId}`,
+        chatgptAccountId: `workspace-for-${accountId}`,
+        chatgptPlanType: "team",
+      };
+    });
+    const { manager, sessionId, state } = createManager({
+      accountId: "account-a",
+      getExternalAuth,
+    });
+    await start(manager, sessionId, "account-a");
+
+    await expect(
+      manager.setSessionAccount({ sessionId, accountId: "account-dead" }),
+    ).rejects.toThrow("Account needs a fresh Codex login");
+
+    expect(state[sessionId]?.startupConfig.accountId).toBe("account-a");
+  });
+
+  it("refreshes the account the session was switched to, not the one it started on", async () => {
+    const { manager, sessionId, getExternalAuth } = createManager({
+      accountId: "account-a",
+    });
+    await start(manager, sessionId, "account-a");
+    const refresh =
+      trackerSpies.instances[0].callbacks.onChatgptAuthTokensRefresh;
+
+    await manager.setSessionAccount({ sessionId, accountId: "account-b" });
+    getExternalAuth.mockClear();
+
+    await expect(refresh?.()).resolves.toMatchObject({
+      accessToken: "token-for-account-b",
+    });
+    expect(getExternalAuth).toHaveBeenCalledWith("account-b");
   });
 });

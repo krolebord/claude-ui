@@ -3,16 +3,26 @@ import {
   type CodexAppServerSessionState,
   type CodexAppServerSubagentUpdate,
   CodexAppServerTracker,
+  type CodexExternalAuthTokens,
 } from "../../src/main/codex-app-server-tracker";
+
+vi.mock("../../src/main/logger", () => ({
+  default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
 
 type TrackerHarness = {
   handleNotification: (message: {
     method: string;
     params?: Record<string, unknown>;
   }) => void;
+  handleMessage: (rawMessage: string) => void;
+  ws: unknown;
 };
 
-function createTracker(options?: { initialThreadId?: string }) {
+function createTracker(options?: {
+  initialThreadId?: string;
+  onChatgptAuthTokensRefresh?: () => Promise<CodexExternalAuthTokens>;
+}) {
   const onStatusChange = vi.fn<(status: CodexAppServerSessionState) => void>();
   const onThreadId = vi.fn<(threadId: string) => void>();
   const onSubagentUpdate =
@@ -25,6 +35,7 @@ function createTracker(options?: { initialThreadId?: string }) {
     onStatusChange,
     onThreadId,
     onSubagentUpdate,
+    onChatgptAuthTokensRefresh: options?.onChatgptAuthTokensRefresh,
   });
 
   return { tracker, onStatusChange, onThreadId, onSubagentUpdate };
@@ -32,6 +43,24 @@ function createTracker(options?: { initialThreadId?: string }) {
 
 function asHarness(tracker: CodexAppServerTracker): TrackerHarness {
   return tracker as unknown as TrackerHarness;
+}
+
+/**
+ * Stands in for the app-server socket so messages can be driven both ways
+ * without a real connection.
+ */
+function attachFakeSocket(tracker: CodexAppServerTracker) {
+  const send = vi.fn<(data: string) => void>();
+  asHarness(tracker).ws = { send };
+  return {
+    send,
+    sent: () =>
+      send.mock.calls.map(
+        ([data]) => JSON.parse(data) as Record<string, unknown>,
+      ),
+    receive: (message: unknown) =>
+      asHarness(tracker).handleMessage(JSON.stringify(message)),
+  };
 }
 
 describe("CodexAppServerTracker mappings", () => {
@@ -200,5 +229,182 @@ describe("CodexAppServerTracker mappings", () => {
       collabStatus: "pendingInit",
       status: "starting",
     });
+  });
+});
+
+describe("CodexAppServerTracker external auth", () => {
+  it("answers a token refresh request without consuming our own pending call", async () => {
+    const onChatgptAuthTokensRefresh = vi.fn().mockResolvedValue({
+      accessToken: "access-1",
+      chatgptAccountId: "workspace-1",
+      chatgptPlanType: "team",
+    });
+    const { tracker } = createTracker({ onChatgptAuthTokensRefresh });
+    const socket = attachFakeSocket(tracker);
+
+    const pending = tracker.readAccountRateLimits();
+    let settled = false;
+    void pending.then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    // Deliberately reuses the id of our own in-flight call: server-initiated
+    // requests live in a separate id space.
+    expect(socket.sent()[0]).toMatchObject({ id: 1 });
+
+    socket.receive({
+      id: 1,
+      method: "account/chatgptAuthTokens/refresh",
+      params: {},
+    });
+
+    await vi.waitFor(() => {
+      expect(socket.send).toHaveBeenCalledTimes(2);
+    });
+    expect(socket.sent()[1]).toEqual({
+      id: 1,
+      result: {
+        accessToken: "access-1",
+        chatgptAccountId: "workspace-1",
+        chatgptPlanType: "team",
+      },
+    });
+    expect(settled).toBe(false);
+
+    socket.receive({ id: 1, result: { rateLimits: "ok" } });
+    await expect(pending).resolves.toEqual({ rateLimits: "ok" });
+  });
+
+  it("answers with a JSON-RPC error when the refresh handler rejects", async () => {
+    const onChatgptAuthTokensRefresh = vi
+      .fn()
+      .mockRejectedValue(new Error("Account needs a fresh Codex login"));
+    const { tracker } = createTracker({ onChatgptAuthTokensRefresh });
+    const socket = attachFakeSocket(tracker);
+
+    socket.receive({
+      id: 9,
+      method: "account/chatgptAuthTokens/refresh",
+      params: {},
+    });
+
+    await vi.waitFor(() => {
+      expect(socket.send).toHaveBeenCalledTimes(1);
+    });
+    expect(socket.sent()[0]).toEqual({
+      id: 9,
+      error: { code: -32603, message: "Account needs a fresh Codex login" },
+    });
+  });
+
+  it("answers unsupported server-initiated requests instead of leaving them hanging", async () => {
+    const { tracker } = createTracker();
+    const socket = attachFakeSocket(tracker);
+
+    socket.receive({ id: 4, method: "account/somethingNew", params: {} });
+
+    await vi.waitFor(() => {
+      expect(socket.send).toHaveBeenCalledTimes(1);
+    });
+    expect(socket.sent()[0]).toEqual({
+      id: 4,
+      error: {
+        code: -32601,
+        message: "Unsupported request account/somethingNew",
+      },
+    });
+  });
+
+  it("sends chatgptAuthTokens login on loginWithExternalAuth", async () => {
+    const { tracker } = createTracker();
+    const socket = attachFakeSocket(tracker);
+
+    const login = tracker.loginWithExternalAuth({
+      accessToken: "access-1",
+      chatgptAccountId: "workspace-1",
+    });
+
+    expect(socket.sent()[0]).toEqual({
+      id: 1,
+      method: "account/login/start",
+      params: {
+        type: "chatgptAuthTokens",
+        accessToken: "access-1",
+        chatgptAccountId: "workspace-1",
+        chatgptPlanType: null,
+      },
+    });
+
+    socket.receive({ id: 1, result: { type: "chatgptAuthTokens" } });
+    await expect(login).resolves.toBeUndefined();
+  });
+});
+
+describe("CodexAppServerTracker handshake", () => {
+  /**
+   * Drives `start()` against a stubbed global WebSocket and returns the
+   * `initialize` params the tracker sent.
+   */
+  async function readInitializeParams(tracker: CodexAppServerTracker) {
+    const send = vi.fn<(data: string) => void>();
+    const listeners = new Map<string, (event: unknown) => void>();
+
+    const originalWebSocket = globalThis.WebSocket;
+    globalThis.WebSocket = class {
+      readyState = 1;
+      send = send;
+      close = vi.fn();
+      addEventListener(type: string, listener: (event: unknown) => void) {
+        listeners.set(type, listener);
+      }
+    } as unknown as typeof WebSocket;
+    try {
+      const started = tracker.start();
+      await vi.waitFor(() => {
+        expect(listeners.has("open")).toBe(true);
+      });
+      listeners.get("open")?.({});
+
+      await vi.waitFor(() => {
+        expect(send).toHaveBeenCalled();
+      });
+      const initialize = JSON.parse(send.mock.calls[0][0]) as {
+        params: { capabilities: Record<string, unknown> };
+      };
+
+      listeners.get("message")?.({
+        data: JSON.stringify({ id: 1, result: {} }),
+      });
+      await started;
+      return initialize.params;
+    } finally {
+      globalThis.WebSocket = originalWebSocket;
+    }
+  }
+
+  it("opts into the experimental API when the session manages its own auth", async () => {
+    const { tracker } = createTracker({
+      onChatgptAuthTokensRefresh: async () => ({
+        accessToken: "access-1",
+        chatgptAccountId: "workspace-1",
+      }),
+    });
+
+    const params = await readInitializeParams(tracker);
+
+    // `account/login/start.chatgptAuthTokens` is rejected without this.
+    expect(params.capabilities.experimentalApi).toBe(true);
+  });
+
+  it("stays on the stable API for sessions using the default Codex login", async () => {
+    const { tracker } = createTracker();
+
+    const params = await readInitializeParams(tracker);
+
+    expect(params.capabilities.experimentalApi).toBe(false);
   });
 });

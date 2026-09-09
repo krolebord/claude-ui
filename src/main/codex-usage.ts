@@ -1,6 +1,9 @@
 import * as z from "zod";
 import { CodexAppServerProcess } from "./codex-app-server-runtime";
-import { CodexAppServerTracker } from "./codex-app-server-tracker";
+import {
+  CodexAppServerTracker,
+  type CodexExternalAuthTokens,
+} from "./codex-app-server-tracker";
 import log from "./logger";
 
 const usageWindowSchema = z.object({
@@ -143,7 +146,9 @@ function selectRateLimitsSnapshot(
   };
 }
 
-async function readRateLimitsFromAppServer(): Promise<unknown> {
+async function readRateLimitsFromAppServer(
+  externalAuth?: CodexExternalAuthTokens,
+): Promise<unknown> {
   const appServer = new CodexAppServerProcess({ sessionId: "usage" });
   let tracker: CodexAppServerTracker | null = null;
 
@@ -152,8 +157,14 @@ async function readRateLimitsFromAppServer(): Promise<unknown> {
     tracker = new CodexAppServerTracker({
       sessionId: "usage",
       wsUrl: appServer.wsUrl,
+      onChatgptAuthTokensRefresh: externalAuth
+        ? async () => externalAuth
+        : undefined,
     });
     await tracker.start();
+    if (externalAuth) {
+      await tracker.loginWithExternalAuth(externalAuth);
+    }
     return await tracker.readAccountRateLimits();
   } finally {
     await tracker?.stop();
@@ -161,10 +172,16 @@ async function readRateLimitsFromAppServer(): Promise<unknown> {
   }
 }
 
-export async function getCodexUsage() {
+/**
+ * Reads plan usage for a specific managed account when `externalAuth` is
+ * given, otherwise for the default `~/.codex` login.
+ */
+export async function getCodexUsage(
+  options: { externalAuth?: CodexExternalAuthTokens } = {},
+) {
   let responseJson: unknown;
   try {
-    responseJson = await readRateLimitsFromAppServer();
+    responseJson = await readRateLimitsFromAppServer(options.externalAuth);
   } catch (error) {
     const err = error as { message?: string };
     log.error("CodexUsage: app-server request failed", {

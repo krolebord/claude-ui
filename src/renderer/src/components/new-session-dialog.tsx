@@ -279,6 +279,7 @@ function codexConfigToOptions(
     permissionMode: config.permissionMode,
     configOverrides: config.configOverrides,
     mcpEnabled: config.mcpEnabled,
+    accountId: config.accountId,
   };
 }
 
@@ -344,7 +345,6 @@ export function NewSessionDialog() {
   const [cursorOptions, setCursorOptions] = useState<LastCursorSessionOptions>(
     resolveCursorSessionOptions(undefined),
   );
-
   const wasOpenRef = useRef(false);
   const isOpen = openProjectCwd !== null || editEntry !== null;
 
@@ -1167,6 +1167,13 @@ function CodexSessionForm({
     }),
   );
 
+  const codexAccounts = useAppState((s) => s.codexAccounts.accounts);
+  const selectedAccountId =
+    options.accountId &&
+    codexAccounts.some((account) => account.id === options.accountId)
+      ? options.accountId
+      : undefined;
+
   const buildSessionConfig = () => ({
     cwd: projectPath,
     sessionName: sessionName || undefined,
@@ -1177,6 +1184,7 @@ function CodexSessionForm({
     initialPrompt: initialPrompt || undefined,
     configOverrides: options.configOverrides || undefined,
     mcpEnabled: options.mcpEnabled,
+    accountId: selectedAccountId,
   });
 
   const ensureProject = useMutation(
@@ -1373,6 +1381,33 @@ function CodexSessionForm({
           </Select>
         </div>
       </div>
+
+      {codexAccounts.length > 0 && (
+        <div className="space-y-2">
+          <Label>Account</Label>
+          <Select
+            value={selectedAccountId ?? "default"}
+            onValueChange={(value) => {
+              setOptions((current) => ({
+                ...current,
+                accountId: value === "default" ? undefined : value,
+              }));
+            }}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="default">Default account</SelectItem>
+              {codexAccounts.map((account) => (
+                <SelectItem key={account.id} value={account.id}>
+                  {account.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       <div className="flex items-center justify-between gap-2">
         <div className="space-y-0.5">

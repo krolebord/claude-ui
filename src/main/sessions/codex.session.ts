@@ -14,6 +14,7 @@ import {
   type CodexAppServerSessionState,
   type CodexAppServerSubagentUpdate,
   CodexAppServerTracker,
+  type CodexExternalAuthTokens,
 } from "../codex-app-server-tracker";
 import { buildCodexArgs } from "../codex-cli";
 import { getCodexUsage } from "../codex-usage";
@@ -85,6 +86,8 @@ export const codexLocalTerminalSessionSchema = commonSessionSchema.extend({
     configOverrides: z.string().optional(),
     mcpEnabled: z.boolean().optional().catch(undefined),
     mcpCanScheduleSessions: z.boolean().optional().catch(undefined),
+    /** Managed Codex account this session runs under; default login if unset. */
+    accountId: z.string().optional().catch(undefined),
   }),
 });
 export type CodexLocalTerminalSessionData = z.infer<
@@ -110,6 +113,7 @@ export const startCodexSessionSchema = z.object({
   configOverrides: z.string().optional(),
   mcpEnabled: z.boolean().optional(),
   mcpCanScheduleSessions: z.boolean().optional(),
+  accountId: z.string().optional(),
 });
 
 const renameCodexSessionSchema = z.object({
@@ -171,6 +175,7 @@ export const codexSessionsRouter = {
         configOverrides: session.startupConfig.configOverrides,
         mcpEnabled: session.startupConfig.mcpEnabled,
         mcpCanScheduleSessions: session.startupConfig.mcpCanScheduleSessions,
+        accountId: session.startupConfig.accountId,
         cols: input.cols,
         rows: input.rows,
       });
@@ -203,7 +208,41 @@ export const codexSessionsRouter = {
     .handler(async ({ input, context }) => {
       context.sessions.codex.renameSession(input.sessionId, input.title);
     }),
-  getUsage: procedure.handler(getCodexUsage),
+  setAccount: procedure
+    .input(
+      z.object({
+        sessionId: z.string(),
+        accountId: z.string().optional(),
+      }),
+    )
+    .handler(async ({ input, context }) => {
+      return await context.sessions.codex.setSessionAccount(input);
+    }),
+  getUsage: procedure
+    .input(z.object({ accountId: z.string().optional() }).optional())
+    .handler(async ({ input, context }) => {
+      const accountId = input?.accountId;
+      if (!accountId) {
+        return await getCodexUsage();
+      }
+
+      // A dead refresh token should read as "usage unavailable" rather than
+      // failing the whole panel.
+      let externalAuth: CodexExternalAuthTokens;
+      try {
+        externalAuth = await context.codexAccounts.getExternalAuth(accountId);
+      } catch (error) {
+        return {
+          ok: false as const,
+          message:
+            error instanceof Error
+              ? error.message
+              : "Codex account is not available",
+        };
+      }
+
+      return await getCodexUsage({ externalAuth });
+    }),
   subscribeToSessionTerminal: procedure
     .input(z.object({ sessionId: z.string() }))
     .handler(async function* ({ input, context, signal }) {
@@ -255,6 +294,8 @@ interface CodexSessionsManagerOptions {
   titleGeneration?: TitleGenerationService;
   getMcpServerUrl?: (context: McpRequestContext) => string | null;
   sessionBuffers?: SessionBufferStore;
+  /** Resolves a managed account to a fresh external-auth payload. */
+  getExternalAuth?: (accountId: string) => Promise<CodexExternalAuthTokens>;
 }
 
 function getCodexSessionStatus(
@@ -431,6 +472,9 @@ export class CodexSessionsManager {
     | ((context: McpRequestContext) => string | null)
     | null;
   private readonly sessionBuffers: SessionBufferStore;
+  private readonly getExternalAuth:
+    | ((accountId: string) => Promise<CodexExternalAuthTokens>)
+    | null;
   private readonly subagentPruneTimers = new Map<
     string,
     ReturnType<typeof setTimeout>
@@ -443,6 +487,7 @@ export class CodexSessionsManager {
       this.titleGeneration = null;
       this.getMcpServerUrl = null;
       this.sessionBuffers = createInMemorySessionBufferStore();
+      this.getExternalAuth = null;
       for (const [sessionId, session] of Object.entries(
         this.sessionsState.state,
       )) {
@@ -461,6 +506,7 @@ export class CodexSessionsManager {
     this.getMcpServerUrl = options.getMcpServerUrl ?? null;
     this.sessionBuffers =
       options.sessionBuffers ?? createInMemorySessionBufferStore();
+    this.getExternalAuth = options.getExternalAuth ?? null;
     for (const [sessionId, session] of Object.entries(
       this.sessionsState.state,
     )) {
@@ -495,6 +541,7 @@ export class CodexSessionsManager {
         configOverrides: input.configOverrides,
         mcpEnabled: input.mcpEnabled,
         mcpCanScheduleSessions: input.mcpCanScheduleSessions,
+        accountId: input.accountId,
       },
     };
 
@@ -508,6 +555,78 @@ export class CodexSessionsManager {
     }
 
     return sessionId;
+  }
+
+  /**
+   * A managed account that cannot produce a token fails the session start
+   * rather than quietly falling back to the user's default `~/.codex` login.
+   */
+  private async resolveExternalAuth(
+    accountId: string,
+  ): Promise<CodexExternalAuthTokens> {
+    if (!this.getExternalAuth) {
+      throw new Error("Codex accounts are unavailable in this process.");
+    }
+    return await this.getExternalAuth(accountId);
+  }
+
+  /**
+   * Refreshes whichever account the session is on *now*, since it can be
+   * switched while the app-server is running. The spawn-time id is the
+   * fallback for a session switched back to the default account: external auth
+   * cannot be cleared from a running app-server, so it still holds that
+   * account's tokens and those are the ones to refresh.
+   */
+  private async resolveSessionExternalAuth(
+    sessionId: string,
+    spawnAccountId: string,
+  ): Promise<CodexExternalAuthTokens> {
+    const session = this.sessionsState.state[sessionId];
+    const accountId =
+      session?.type === "codex-local-terminal"
+        ? (session.startupConfig.accountId ?? spawnAccountId)
+        : spawnAccountId;
+    return await this.resolveExternalAuth(accountId);
+  }
+
+  /**
+   * Repoints a session at another account. Codex treats a repeat external
+   * login as the documented way to update auth, so a running session switches
+   * without a restart and its next turn bills the new account.
+   *
+   * Switching back to the default account only takes effect on the next start:
+   * clearing external auth needs `account/logout`, which would delete the
+   * user's own `auth.json` from the shared CODEX_HOME.
+   */
+  async setSessionAccount(input: {
+    sessionId: string;
+    accountId?: string;
+  }): Promise<{ appliedToLiveSession: boolean }> {
+    const { sessionId, accountId } = input;
+    this.getSessionState(sessionId);
+
+    const tracker = this.liveSessions.get(sessionId)?.tracker;
+    // Resolved before the state write so a dead account leaves the session
+    // pointing at the one that still works.
+    const auth =
+      tracker && accountId
+        ? await this.resolveExternalAuth(accountId)
+        : undefined;
+
+    this.sessionsState.updateState((state) => {
+      const session = state[sessionId];
+      if (session?.type !== "codex-local-terminal") {
+        return;
+      }
+      session.startupConfig.accountId = accountId;
+    });
+
+    if (!auth) {
+      return { appliedToLiveSession: false };
+    }
+
+    await tracker?.loginWithExternalAuth(auth);
+    return { appliedToLiveSession: true };
   }
 
   private getSessionState(sessionId: string): CodexLocalTerminalSessionData {
@@ -680,6 +799,7 @@ export class CodexSessionsManager {
     configOverrides,
     mcpEnabled,
     mcpCanScheduleSessions,
+    accountId,
     cols,
     rows,
   }: {
@@ -695,6 +815,7 @@ export class CodexSessionsManager {
     configOverrides?: string;
     mcpEnabled?: boolean;
     mcpCanScheduleSessions?: boolean;
+    accountId?: string;
     cols?: number;
     rows?: number;
   }): Promise<void> {
@@ -834,8 +955,20 @@ export class CodexSessionsManager {
           runtimeErrorMessage = errorMessage;
           setSessionErrorMessage(errorMessage);
         },
+        onChatgptAuthTokensRefresh: accountId
+          ? () => this.resolveSessionExternalAuth(sessionId, accountId)
+          : undefined,
       });
       await tracker.start();
+
+      // Before the TUI is spawned, so every thread this app-server runs is
+      // already on the right account. Codex keeps these tokens in memory, so
+      // the user's own `auth.json` is left alone.
+      if (accountId) {
+        await tracker.loginWithExternalAuth(
+          await this.resolveExternalAuth(accountId),
+        );
+      }
     } catch (error) {
       await tracker?.stop().catch(() => undefined);
       await appServer.stop().catch(() => undefined);
@@ -963,6 +1096,7 @@ export class CodexSessionsManager {
         mcpEnabled: sourceSession.startupConfig.mcpEnabled,
         mcpCanScheduleSessions:
           sourceSession.startupConfig.mcpCanScheduleSessions,
+        accountId: sourceSession.startupConfig.accountId,
       },
     };
 
@@ -983,6 +1117,7 @@ export class CodexSessionsManager {
       mcpEnabled: forkedSession.startupConfig.mcpEnabled,
       mcpCanScheduleSessions:
         forkedSession.startupConfig.mcpCanScheduleSessions,
+      accountId: forkedSession.startupConfig.accountId,
       cols: input.cols,
       rows: input.rows,
     });

@@ -43,6 +43,7 @@ export interface LastCodexSessionOptions {
   permissionMode: CodexPermissionMode;
   configOverrides?: string;
   mcpEnabled?: boolean;
+  accountId?: string;
 }
 
 export interface LastCursorSessionOptions {
@@ -91,6 +92,7 @@ export const lastCodexSessionOptionsSchema = z.object({
   permissionMode: codexPermissionModeSchema.catch("default"),
   configOverrides: z.string().optional().catch(undefined),
   mcpEnabled: z.boolean().optional().catch(undefined),
+  accountId: z.string().optional().catch(undefined),
 });
 
 export const lastCursorSessionOptionsSchema = z.object({
@@ -135,6 +137,7 @@ export function defaultCodexSessionOptions(): LastCodexSessionOptions {
     permissionMode: "default",
     configOverrides: undefined,
     mcpEnabled: undefined,
+    accountId: undefined,
   };
 }
 
