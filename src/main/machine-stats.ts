@@ -5,18 +5,20 @@ import log from "./logger";
 export interface MachineStatsState {
   updatedAt: number | null;
   cpuLoadPercent: number | null;
-  cpuTemperatureCelsius: number | null;
   memoryUsedBytes: number | null;
   memoryTotalBytes: number | null;
+  diskUsedBytes: number | null;
+  diskTotalBytes: number | null;
   error: string | null;
 }
 
 const machineStatsDefaults: MachineStatsState = {
   updatedAt: null,
   cpuLoadPercent: null,
-  cpuTemperatureCelsius: null,
   memoryUsedBytes: null,
   memoryTotalBytes: null,
+  diskUsedBytes: null,
+  diskTotalBytes: null,
   error: null,
 };
 
@@ -35,7 +37,7 @@ export class MachineStatsMonitor {
   private collectInFlight = false;
   private disposed = false;
   private started = false;
-  private lastTemperatureCollectedAt = 0;
+  private lastDiskCollectedAt = 0;
 
   constructor(
     private readonly state: MachineStatsServiceState,
@@ -96,13 +98,14 @@ export class MachineStatsMonitor {
   }
 
   private resetState(): void {
-    this.lastTemperatureCollectedAt = 0;
+    this.lastDiskCollectedAt = 0;
     this.state.updateState((state) => {
       state.updatedAt = null;
       state.cpuLoadPercent = null;
-      state.cpuTemperatureCelsius = null;
       state.memoryUsedBytes = null;
       state.memoryTotalBytes = null;
+      state.diskUsedBytes = null;
+      state.diskTotalBytes = null;
       state.error = null;
     });
   }
@@ -121,9 +124,9 @@ export class MachineStatsMonitor {
       const settings = this.appSettingsState.state.machineStats;
       if (!settings.enabled) return;
 
-      const [{ currentLoad, mem }, cpuTemperatureCelsius] = await Promise.all([
+      const [{ currentLoad, mem }, disk] = await Promise.all([
         collectSystemStats(),
-        this.collectTemperatureIfNeeded(settings),
+        this.collectDiskIfNeeded(settings),
       ]);
 
       if (this.disposed || !this.appSettingsState.state.machineStats.enabled) {
@@ -133,11 +136,12 @@ export class MachineStatsMonitor {
       this.state.updateState((state) => {
         state.updatedAt = Date.now();
         state.cpuLoadPercent = normalizeMetric(currentLoad.currentLoad);
-        if (cpuTemperatureCelsius !== undefined) {
-          state.cpuTemperatureCelsius = cpuTemperatureCelsius;
-        }
         state.memoryUsedBytes = normalizeMetric(mem.used);
         state.memoryTotalBytes = normalizeMetric(mem.total);
+        if (disk !== undefined) {
+          state.diskUsedBytes = disk?.usedBytes ?? null;
+          state.diskTotalBytes = disk?.totalBytes ?? null;
+        }
         state.error = null;
       });
     } catch (error) {
@@ -147,9 +151,10 @@ export class MachineStatsMonitor {
       this.state.updateState((state) => {
         state.updatedAt = Date.now();
         state.cpuLoadPercent = null;
-        state.cpuTemperatureCelsius = null;
         state.memoryUsedBytes = null;
         state.memoryTotalBytes = null;
+        state.diskUsedBytes = null;
+        state.diskTotalBytes = null;
         state.error =
           error instanceof Error ? error.message : "Failed to collect stats";
       });
@@ -159,20 +164,20 @@ export class MachineStatsMonitor {
     }
   }
 
-  private async collectTemperatureIfNeeded(
+  private async collectDiskIfNeeded(
     settings: MachineStatsSettings,
-  ): Promise<number | null | undefined> {
+  ): Promise<DiskUsage | null | undefined> {
     const now = Date.now();
-    const intervalMs = settings.temperaturePollIntervalSeconds * 1000;
+    const intervalMs = settings.diskPollIntervalSeconds * 1000;
     if (
-      this.lastTemperatureCollectedAt > 0 &&
-      now - this.lastTemperatureCollectedAt < intervalMs
+      this.lastDiskCollectedAt > 0 &&
+      now - this.lastDiskCollectedAt < intervalMs
     ) {
       return undefined;
     }
 
-    this.lastTemperatureCollectedAt = now;
-    return await collectCpuTemperatureCelsius();
+    this.lastDiskCollectedAt = now;
+    return await collectDiskUsage();
   }
 }
 
@@ -182,36 +187,60 @@ async function collectSystemStats() {
   return { currentLoad, mem };
 }
 
-export async function collectCpuTemperatureCelsius(): Promise<number | null> {
-  if (process.platform === "linux") {
-    try {
-      const si = await import("systeminformation");
-      const temperature = await si.cpuTemperature();
-      return (
-        normalizeMetric(temperature.main) ?? normalizeMetric(temperature.max)
-      );
-    } catch (error) {
-      log.debug("CPU temperature unavailable", error);
-      return null;
-    }
+export interface DiskUsage {
+  usedBytes: number;
+  totalBytes: number;
+}
+
+export async function collectDiskUsage(): Promise<DiskUsage | null> {
+  try {
+    const si = await import("systeminformation");
+    const filesystems = await si.fsSize();
+    const primary = pickPrimaryFilesystem(filesystems);
+    if (!primary) return null;
+
+    const usedBytes = normalizeMetric(primary.used);
+    const totalBytes = normalizeMetric(primary.size);
+    if (usedBytes === null || totalBytes === null) return null;
+
+    return { usedBytes, totalBytes };
+  } catch (error) {
+    log.debug("Disk usage unavailable", error);
+    return null;
+  }
+}
+
+interface FilesystemSize {
+  mount: string;
+  size: number;
+  used: number;
+}
+
+function pickPrimaryFilesystem<T extends FilesystemSize>(
+  filesystems: T[],
+): T | null {
+  const mounted = filesystems.filter((fs) => normalizeMetric(fs.size));
+  if (mounted.length === 0) return null;
+
+  // On macOS the writable data volume holds the real usage; "/" is the
+  // read-only system snapshot.
+  const preferredMounts =
+    process.platform === "darwin"
+      ? ["/System/Volumes/Data", "/"]
+      : process.platform === "win32"
+        ? [process.cwd().slice(0, 2).toUpperCase()]
+        : ["/"];
+
+  for (const mount of preferredMounts) {
+    const match = mounted.find(
+      (fs) => fs.mount.toUpperCase() === mount.toUpperCase(),
+    );
+    if (match) return match;
   }
 
-  if (process.platform === "darwin") {
-    try {
-      // macos-temperature-sensor is a darwin-only optional dependency that is
-      // absent on other platforms, so its types can't be resolved there. Using
-      // an indirect specifier keeps TypeScript from statically resolving the
-      // module; this branch only runs on macOS where it is installed.
-      const specifier = "macos-temperature-sensor";
-      const macosTemperatureSensor = await import(specifier);
-      return normalizeMetric(macosTemperatureSensor.temperature().cpu);
-    } catch (error) {
-      log.debug("CPU temperature unavailable", error);
-      return null;
-    }
-  }
-
-  return null;
+  return mounted.reduce((largest, fs) =>
+    fs.size > largest.size ? fs : largest,
+  );
 }
 
 function normalizeMetric(value: number | null | undefined): number | null {

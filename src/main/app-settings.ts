@@ -33,13 +33,13 @@ export type MachineStatsPollIntervalSeconds = z.infer<
 export interface MachineStatsSettings {
   enabled: boolean;
   cpuMemoryPollIntervalSeconds: MachineStatsPollIntervalSeconds;
-  temperaturePollIntervalSeconds: MachineStatsPollIntervalSeconds;
+  diskPollIntervalSeconds: MachineStatsPollIntervalSeconds;
 }
 
 export const defaultMachineStatsSettings: MachineStatsSettings = {
   enabled: true,
   cpuMemoryPollIntervalSeconds: 15,
-  temperaturePollIntervalSeconds: 30,
+  diskPollIntervalSeconds: 60,
 };
 
 export const machineStatsSettingsSchema = z
@@ -48,8 +48,8 @@ export const machineStatsSettingsSchema = z
     cpuMemoryPollIntervalSeconds: machineStatsPollIntervalSchema.catch(
       defaultMachineStatsSettings.cpuMemoryPollIntervalSeconds,
     ),
-    temperaturePollIntervalSeconds: machineStatsPollIntervalSchema.catch(
-      defaultMachineStatsSettings.temperaturePollIntervalSeconds,
+    diskPollIntervalSeconds: machineStatsPollIntervalSchema.catch(
+      defaultMachineStatsSettings.diskPollIntervalSeconds,
     ),
   })
   .catch(defaultMachineStatsSettings);

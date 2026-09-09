@@ -393,7 +393,7 @@ function MachineStatsSettings() {
         <div className="space-y-0.5">
           <div className="text-sm font-medium">Show sidebar status</div>
           <div className="text-xs text-muted-foreground">
-            Display CPU, temperature, and memory usage in the sidebar
+            Display CPU, memory, and disk usage in the sidebar
           </div>
         </div>
         <Switch
@@ -429,14 +429,14 @@ function MachineStatsSettings() {
           </Select>
         </div>
         <div className="space-y-2">
-          <Label className="text-sm font-medium">Temperature</Label>
+          <Label className="text-sm font-medium">Disk</Label>
           <Select
-            value={`${settings.temperaturePollIntervalSeconds}`}
+            value={`${settings.diskPollIntervalSeconds}`}
             disabled={!settings.enabled}
             onValueChange={(value) =>
               mutate({
                 ...settings,
-                temperaturePollIntervalSeconds: Number(
+                diskPollIntervalSeconds: Number(
                   value,
                 ) as MachineStatsIntervalSeconds,
               })

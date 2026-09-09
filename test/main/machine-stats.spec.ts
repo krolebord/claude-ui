@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const systemInformationMocks = vi.hoisted(() => ({
-  cpuTemperature: vi.fn(),
+  fsSize: vi.fn(),
 }));
 const loggerMocks = vi.hoisted(() => ({
   debug: vi.fn(),
@@ -13,36 +13,66 @@ vi.mock("../../src/main/logger", () => ({
   default: loggerMocks,
 }));
 
-import { collectCpuTemperatureCelsius } from "../../src/main/machine-stats";
+import { collectDiskUsage } from "../../src/main/machine-stats";
 
 const originalPlatform = process.platform;
 
-describe("MachineStatsMonitor on Linux", () => {
+function setPlatform(value: string) {
+  Object.defineProperty(process, "platform", { configurable: true, value });
+}
+
+describe("collectDiskUsage", () => {
   beforeEach(() => {
-    Object.defineProperty(process, "platform", {
-      configurable: true,
-      value: "linux",
-    });
-    systemInformationMocks.cpuTemperature.mockResolvedValue({
-      main: 54,
-      max: 61,
-      cores: [],
-    });
+    vi.clearAllMocks();
+    setPlatform("linux");
   });
 
   afterEach(() => {
-    Object.defineProperty(process, "platform", {
-      configurable: true,
-      value: originalPlatform,
+    setPlatform(originalPlatform);
+  });
+
+  it("reports usage for the root filesystem", async () => {
+    systemInformationMocks.fsSize.mockResolvedValue([
+      { mount: "/boot", size: 500, used: 100 },
+      { mount: "/", size: 1000, used: 400 },
+    ]);
+
+    await expect(collectDiskUsage()).resolves.toEqual({
+      usedBytes: 400,
+      totalBytes: 1000,
+    });
+    expect(loggerMocks.debug).not.toHaveBeenCalled();
+  });
+
+  it("prefers the writable data volume on macOS", async () => {
+    setPlatform("darwin");
+    systemInformationMocks.fsSize.mockResolvedValue([
+      { mount: "/", size: 1000, used: 10 },
+      { mount: "/System/Volumes/Data", size: 1000, used: 700 },
+    ]);
+
+    await expect(collectDiskUsage()).resolves.toEqual({
+      usedBytes: 700,
+      totalBytes: 1000,
     });
   });
 
-  it("collects CPU temperature through systeminformation", async () => {
-    expect(process.platform).toBe("linux");
-    const temperature = await collectCpuTemperatureCelsius();
+  it("falls back to the largest filesystem when no known mount matches", async () => {
+    systemInformationMocks.fsSize.mockResolvedValue([
+      { mount: "/data", size: 2000, used: 900 },
+      { mount: "/boot", size: 500, used: 100 },
+    ]);
 
-    expect(temperature).toBe(54);
-    expect(loggerMocks.debug).not.toHaveBeenCalled();
-    expect(systemInformationMocks.cpuTemperature).toHaveBeenCalledOnce();
+    await expect(collectDiskUsage()).resolves.toEqual({
+      usedBytes: 900,
+      totalBytes: 2000,
+    });
+  });
+
+  it("returns null when collection fails", async () => {
+    systemInformationMocks.fsSize.mockRejectedValue(new Error("no df"));
+
+    await expect(collectDiskUsage()).resolves.toBeNull();
+    expect(loggerMocks.debug).toHaveBeenCalledOnce();
   });
 });

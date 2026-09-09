@@ -183,10 +183,6 @@ importers:
       vitest:
         specifier: ^4.0.0
         version: 4.1.10(@types/node@25.9.5)(vite@8.2.0(@types/node@25.9.5)(esbuild@0.27.3)(jiti@2.7.0))
-    optionalDependencies:
-      macos-temperature-sensor:
-        specifier: ^1.0.4
-        version: 1.0.4
 
 packages:
 
@@ -3273,11 +3269,6 @@ packages:
     resolution: {integrity: sha512-Xs9QFG5+9sNX04MdKVT4++umA+hJ2qsJVlRlRWHQ7qZobXgMiNHSpZ5eZm8JUoGCdNyoEdXoEwa8HVr0DNjOQg==}
     peerDependencies:
       react: ^16.5.1 || ^17.0.0 || ^18.0.0 || ^19.0.0
-
-  macos-temperature-sensor@1.0.4:
-    resolution: {integrity: sha512-JROshGB+f+UnsbNwM6SER4AK82fdGmk79ElhH+8xVieCUQ1fxTanTwp7Rv9DTRtmgB6hLcEGvQYL8XsPbAKLUA==}
-    cpu: [arm64]
-    os: [darwin]
 
   magic-string@0.30.21:
     resolution: {integrity: sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==}
@@ -7422,9 +7413,6 @@ snapshots:
   lucide-react@1.29.0(react@19.2.8):
     dependencies:
       react: 19.2.8
-
-  macos-temperature-sensor@1.0.4:
-    optional: true
 
   magic-string@0.30.21:
     dependencies:

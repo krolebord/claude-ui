@@ -14,16 +14,11 @@ export function MachineStatsLine() {
     stats.cpuLoadPercent === null
       ? "--"
       : `${Math.round(stats.cpuLoadPercent)}%`;
-  const temperatureLabel =
-    stats.cpuTemperatureCelsius === null
-      ? ""
-      : ` (${Math.round(stats.cpuTemperatureCelsius)}C)`;
-  const memoryLabel =
-    stats.memoryUsedBytes === null || stats.memoryTotalBytes === null
-      ? "-- / -- GB"
-      : `${formatMemoryGiB(stats.memoryUsedBytes)} / ${formatMemoryGiB(
-          stats.memoryTotalBytes,
-        )} GB`;
+  const memoryLabel = formatUsage(
+    stats.memoryUsedBytes,
+    stats.memoryTotalBytes,
+  );
+  const diskLabel = formatUsage(stats.diskUsedBytes, stats.diskTotalBytes);
 
   return (
     <div
@@ -31,14 +26,23 @@ export function MachineStatsLine() {
       title={stats.error ?? undefined}
     >
       <span className="truncate">
-        CPU: {cpuLabel}
-        {temperatureLabel} | {memoryLabel}
+        CPU: {cpuLabel} | RAM: {memoryLabel} | Disk: {diskLabel}
       </span>
     </div>
   );
 }
 
-function formatMemoryGiB(bytes: number): string {
+function formatUsage(
+  usedBytes: number | null,
+  totalBytes: number | null,
+): string {
+  if (usedBytes === null || totalBytes === null) {
+    return "-- / -- GB";
+  }
+  return `${formatGiB(usedBytes)} / ${formatGiB(totalBytes)} GB`;
+}
+
+function formatGiB(bytes: number): string {
   const value = bytes / 1024 ** 3;
   return value >= 10 ? value.toFixed(1) : value.toFixed(2);
 }
