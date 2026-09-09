@@ -17,10 +17,6 @@ import {
   type ClaudeStartOptions,
 } from "./claude-cli";
 import {
-  fetchUsageWithToken,
-  getUsage as getClaudeUsage,
-} from "./claude-usage";
-import {
   createInMemorySessionBufferStore,
   type SessionBufferStore,
 } from "./database/session-buffer-store";
@@ -184,41 +180,6 @@ export const claudeSessionsRouter = {
     .input(renameClaudeSessionSchema)
     .handler(async ({ input, context }) => {
       context.sessionsService.renameSession(input.sessionId, input.title);
-    }),
-  getUsage: procedure
-    .input(z.object({ accountId: z.string().optional() }).optional())
-    .handler(async ({ input, context }) => {
-      const accountId = input?.accountId;
-      if (!accountId) {
-        return await getClaudeUsage();
-      }
-
-      // An explicit account bypasses the global API-billing env guard: the
-      // account's own credentials decide, not the host environment.
-      const account = context.claudeAccounts.getAccount(accountId);
-      if (!account) {
-        return { ok: false, message: "Claude account not found" };
-      }
-      if (account.type === "setup-token") {
-        return {
-          ok: false,
-          message:
-            "Usage is unavailable for setup-token accounts (missing scope)",
-        };
-      }
-
-      let accessToken: string;
-      try {
-        accessToken =
-          await context.claudeAccounts.getValidAccessToken(accountId);
-      } catch (error) {
-        return {
-          ok: false,
-          message:
-            error instanceof Error ? error.message : "Token refresh failed",
-        };
-      }
-      return await fetchUsageWithToken(accessToken);
     }),
   subscribeToSessionTerminal: procedure
     .input(z.object({ sessionId: z.string() }))

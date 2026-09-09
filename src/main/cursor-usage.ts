@@ -98,7 +98,7 @@ const PlanUsageSchema = z.object({
   bonusSpend: z.number().nullable(),
 });
 
-const UsageDataSchema = z.object({
+export const cursorUsageDataSchema = z.object({
   billingCycleStart: z.string().nullable(),
   billingCycleEnd: z.string(),
   membershipType: z.string().nullable(),
@@ -107,7 +107,7 @@ const UsageDataSchema = z.object({
   credits: z.object({ balance: z.number() }).nullable(),
 });
 
-export type CursorUsageData = z.infer<typeof UsageDataSchema>;
+export type CursorUsageData = z.infer<typeof cursorUsageDataSchema>;
 
 async function querySqlite(key: string): Promise<string | null> {
   try {
@@ -414,7 +414,7 @@ export async function getCursorUsage() {
     membershipType,
     creditsBalance,
   );
-  UsageDataSchema.parse(usage);
+  cursorUsageDataSchema.parse(usage);
 
   log.info("Cursor usage: fetched successfully");
   return { ok: true, usage };

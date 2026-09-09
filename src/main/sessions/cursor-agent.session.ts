@@ -10,7 +10,6 @@ import {
   type CursorAgentPermissionMode,
 } from "../cursor-cli";
 import { CursorFocusReporter } from "../cursor-focus-reporter";
-import { getCursorUsage } from "../cursor-usage";
 import {
   createInMemorySessionBufferStore,
   type SessionBufferStore,
@@ -74,7 +73,6 @@ const renameCursorAgentSessionSchema = z.object({
 });
 
 export const cursorAgentSessionsRouter = {
-  getUsage: procedure.handler(getCursorUsage),
   startSession: procedure
     .input(startCursorAgentSessionSchema)
     .handler(async ({ input, context }) => {

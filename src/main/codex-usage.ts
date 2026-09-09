@@ -53,7 +53,7 @@ const codexUsageWindowSchema = z.object({
   windowSeconds: z.number(),
 });
 
-const codexUsageDataSchema = z.object({
+export const codexUsageDataSchema = z.object({
   planType: z.string().nullable().optional(),
   primaryWindow: codexUsageWindowSchema.nullable(),
   secondaryWindow: codexUsageWindowSchema.nullable(),
@@ -177,11 +177,20 @@ async function readRateLimitsFromAppServer(
  * given, otherwise for the default `~/.codex` login.
  */
 export async function getCodexUsage(
-  options: { externalAuth?: CodexExternalAuthTokens } = {},
+  options: {
+    externalAuth?: CodexExternalAuthTokens;
+    /**
+     * Reads through an app-server that is already running, avoiding a spawn.
+     * Returning null falls back to starting a throwaway one.
+     */
+    readRateLimits?: () => Promise<unknown | null>;
+  } = {},
 ) {
   let responseJson: unknown;
   try {
-    responseJson = await readRateLimitsFromAppServer(options.externalAuth);
+    responseJson =
+      (await options.readRateLimits?.()) ??
+      (await readRateLimitsFromAppServer(options.externalAuth));
   } catch (error) {
     const err = error as { message?: string };
     log.error("CodexUsage: app-server request failed", {

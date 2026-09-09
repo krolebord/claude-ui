@@ -17,7 +17,6 @@ import {
   type CodexExternalAuthTokens,
 } from "../codex-app-server-tracker";
 import { buildCodexArgs } from "../codex-cli";
-import { getCodexUsage } from "../codex-usage";
 import {
   createInMemorySessionBufferStore,
   type SessionBufferStore,
@@ -217,31 +216,6 @@ export const codexSessionsRouter = {
     )
     .handler(async ({ input, context }) => {
       return await context.sessions.codex.setSessionAccount(input);
-    }),
-  getUsage: procedure
-    .input(z.object({ accountId: z.string().optional() }).optional())
-    .handler(async ({ input, context }) => {
-      const accountId = input?.accountId;
-      if (!accountId) {
-        return await getCodexUsage();
-      }
-
-      // A dead refresh token should read as "usage unavailable" rather than
-      // failing the whole panel.
-      let externalAuth: CodexExternalAuthTokens;
-      try {
-        externalAuth = await context.codexAccounts.getExternalAuth(accountId);
-      } catch (error) {
-        return {
-          ok: false as const,
-          message:
-            error instanceof Error
-              ? error.message
-              : "Codex account is not available",
-        };
-      }
-
-      return await getCodexUsage({ externalAuth });
     }),
   subscribeToSessionTerminal: procedure
     .input(z.object({ sessionId: z.string() }))
@@ -587,6 +561,28 @@ export class CodexSessionsManager {
         ? (session.startupConfig.accountId ?? spawnAccountId)
         : spawnAccountId;
     return await this.resolveExternalAuth(accountId);
+  }
+
+  /**
+   * Reads rate limits through the app-server of a live session on `accountId`,
+   * so usage polling does not have to spawn one. Returns null when no live
+   * session is on that account, or when the read fails and the caller should
+   * fall back to its own app-server.
+   */
+  async readLiveAccountRateLimits(
+    accountId: string | undefined,
+  ): Promise<unknown | null> {
+    for (const [sessionId, live] of this.liveSessions) {
+      const session = this.sessionsState.state[sessionId];
+      if (session?.type !== "codex-local-terminal") {
+        continue;
+      }
+      if (session.startupConfig.accountId !== accountId) {
+        continue;
+      }
+      return await live.tracker.readAccountRateLimits().catch(() => null);
+    }
+    return null;
   }
 
   /**

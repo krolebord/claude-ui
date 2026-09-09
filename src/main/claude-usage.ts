@@ -32,14 +32,14 @@ const ExtraUsageSchema = z
   })
   .nullable();
 
-const UsageResponseSchema = z.object({
+export const claudeUsageDataSchema = z.object({
   five_hour: UsageBucketSchema,
   seven_day: UsageBucketSchema,
   seven_day_sonnet: UsageBucketSchema,
   extra_usage: ExtraUsageSchema,
 });
 
-export type UsageData = z.infer<typeof UsageResponseSchema>;
+export type UsageData = z.infer<typeof claudeUsageDataSchema>;
 
 async function readCredentialsFile(
   filePath: string,
@@ -185,7 +185,7 @@ export async function fetchUsageWithToken(accessToken: string) {
     return { ok: false, message: "Failed to fetch usage data" };
   }
 
-  const usageResult = UsageResponseSchema.safeParse(responseJson);
+  const usageResult = claudeUsageDataSchema.safeParse(responseJson);
   if (!usageResult.success) {
     log.error("Usage: response schema validation failed", {
       message: usageResult.error.message,

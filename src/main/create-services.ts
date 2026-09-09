@@ -78,6 +78,11 @@ import { StateOrchestrator } from "./state-orchestrator";
 import { TerminalManager } from "./terminal-manager";
 import { getTextGenerationWorkingDirectory } from "./text-generation-workspace";
 import { TitleGenerationService } from "./title-generation-service";
+import {
+  defineUsagePersistence,
+  defineUsageState,
+  UsageTracker,
+} from "./usage-tracking";
 
 const STORAGE_SCHEMA_VERSION = 3;
 
@@ -389,6 +394,16 @@ export async function createServices(options: CreateServicesOptions) {
     disposeSignal,
   );
 
+  const usageState = defineUsageState();
+  persistenceService.registerAndHydrate(defineUsagePersistence(usageState));
+  const usageTracker = new UsageTracker({
+    state: usageState,
+    claudeAccounts: claudeAccountsService,
+    codexAccounts: codexAccountsService,
+    codexSessions: codexSessionsManager,
+  });
+  usageTracker.start();
+
   const scheduledSessionsState = defineScheduledSessionsState();
   persistenceService.registerAndHydrate(
     defineScheduledSessionsPersistence(scheduledSessionsState),
@@ -477,6 +492,7 @@ export async function createServices(options: CreateServicesOptions) {
       skills: skillsState,
       scheduledSessions: scheduledSessionsState,
       artifacts: artifactsState,
+      usage: usageState,
     },
   });
 
@@ -512,6 +528,7 @@ export async function createServices(options: CreateServicesOptions) {
   );
   shutdownDisposable.addDisposable(() => scheduledSessionsService.dispose());
   shutdownDisposable.addDisposable(() => machineStatsMonitor.dispose());
+  shutdownDisposable.addDisposable(() => usageTracker.dispose());
   shutdownDisposable.addDisposable(() => handoffsService.dispose());
   shutdownDisposable.addDisposable(() => skillsService.dispose());
   shutdownDisposable.addDisposable(() => stateService.dispose());
@@ -532,6 +549,8 @@ export async function createServices(options: CreateServicesOptions) {
     codexAccounts: codexAccountsService,
     codexAccountLogin,
     machineStatsState,
+    usageState,
+    usageTracker,
     projectsState,
     projectTerminalsState,
     projectGitService,

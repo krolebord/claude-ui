@@ -59,10 +59,12 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from "@renderer/components/ui/toggle-group";
+import { useAccountUsagePercent } from "@renderer/hooks/use-account-usage";
 import { useActiveSessionStore } from "@renderer/hooks/use-active-session-id";
 import { getTerminalSize } from "@renderer/hooks/use-terminal-size";
 import { shouldAutoFocus } from "@renderer/lib/autofocus";
 import { isCoarsePointer } from "@renderer/lib/pointer";
+import { cn } from "@renderer/lib/utils";
 import { orpc } from "@renderer/orpc-client";
 import { claudeCatalogModels } from "@shared/claude-models";
 import type { ClaudeEffort } from "@shared/claude-types";
@@ -293,6 +295,24 @@ function cursorConfigToOptions(
     mode: config.mode,
     permissionMode: config.permissionMode,
   };
+}
+
+/** Short-window plan usage for an account, hidden until it has been read. */
+function AccountUsagePercent({ percent }: { percent: number | null }) {
+  if (percent == null) {
+    return null;
+  }
+
+  return (
+    <span
+      className={cn(
+        "ml-auto text-xs tabular-nums",
+        percent >= 100 ? "text-[#DE7356]" : "text-muted-foreground",
+      )}
+    >
+      {percent}%
+    </span>
+  );
 }
 
 export function NewSessionDialog() {
@@ -694,6 +714,7 @@ function LocalClaudeSessionForm({
   );
 
   const claudeAccounts = useAppState((s) => s.claudeAccounts.accounts);
+  const accountUsagePercent = useAccountUsagePercent("claude");
   const selectedAccountId =
     options.accountId &&
     claudeAccounts.some((account) => account.id === options.accountId)
@@ -896,10 +917,16 @@ function LocalClaudeSessionForm({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="default">Default account</SelectItem>
+              <SelectItem value="default">
+                Default account
+                <AccountUsagePercent percent={accountUsagePercent(null)} />
+              </SelectItem>
               {claudeAccounts.map((account) => (
                 <SelectItem key={account.id} value={account.id}>
                   {account.label}
+                  <AccountUsagePercent
+                    percent={accountUsagePercent(account.id)}
+                  />
                 </SelectItem>
               ))}
             </SelectContent>
@@ -1168,6 +1195,7 @@ function CodexSessionForm({
   );
 
   const codexAccounts = useAppState((s) => s.codexAccounts.accounts);
+  const accountUsagePercent = useAccountUsagePercent("codex");
   const selectedAccountId =
     options.accountId &&
     codexAccounts.some((account) => account.id === options.accountId)
@@ -1398,10 +1426,16 @@ function CodexSessionForm({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="default">Default account</SelectItem>
+              <SelectItem value="default">
+                Default account
+                <AccountUsagePercent percent={accountUsagePercent(null)} />
+              </SelectItem>
               {codexAccounts.map((account) => (
                 <SelectItem key={account.id} value={account.id}>
                   {account.label}
+                  <AccountUsagePercent
+                    percent={accountUsagePercent(account.id)}
+                  />
                 </SelectItem>
               ))}
             </SelectContent>

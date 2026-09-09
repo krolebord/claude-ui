@@ -24,6 +24,7 @@ import { worktreeSetupSessionsRouter } from "./sessions/worktree-setup.session";
 import { skillsRouter } from "./skills-service";
 import { stateSyncRouter } from "./state-orchestrator";
 import { terminalsRouter } from "./terminal-manager";
+import { usageRouter } from "./usage-tracking";
 
 export const sessionsRouter = {
   markSeen: procedure
@@ -337,4 +338,5 @@ export const orpcRouter = {
   skills: skillsRouter,
   globalInstructions: globalInstructionsRouter,
   scheduledSessions: scheduledSessionsRouter,
+  usage: usageRouter,
 };

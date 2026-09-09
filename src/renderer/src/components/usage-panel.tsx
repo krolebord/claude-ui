@@ -8,7 +8,8 @@ import {
 } from "@renderer/lib/usage-pace";
 import { cn } from "@renderer/lib/utils";
 import { orpc } from "@renderer/orpc-client";
-import { useQuery } from "@tanstack/react-query";
+import { usageEntryKey } from "@shared/usage-keys";
+import { useMutation } from "@tanstack/react-query";
 import { BarChart3, LoaderCircle } from "lucide-react";
 import { toast } from "sonner";
 import { useAppState } from "./sync-state-provider";
@@ -28,37 +29,6 @@ const CLAUDE_WINDOW_SECONDS: Record<UsageBucketKey, number> = {
 };
 
 type UsageSource = "claude" | "codex" | "cursorAgent";
-
-type ClaudeUsageData = {
-  five_hour: { utilization: number; resets_at: string | null } | null;
-  seven_day: { utilization: number; resets_at: string | null } | null;
-  seven_day_sonnet: { utilization: number; resets_at: string | null } | null;
-  extra_usage: {
-    is_enabled: boolean;
-    monthly_limit: number | null;
-    used_credits: number | null;
-    utilization: number | null;
-  } | null;
-};
-
-type CodexUsageData = {
-  planType?: string | null;
-  primaryWindow: {
-    utilization: number;
-    resetsAt: string | null;
-    windowSeconds: number;
-  } | null;
-  secondaryWindow: {
-    utilization: number;
-    resetsAt: string | null;
-    windowSeconds: number;
-  } | null;
-  credits?: {
-    hasCredits: boolean;
-    unlimited: boolean;
-    balance: number;
-  };
-};
 
 function getBarColor(pct: number): string {
   return pct >= 100 ? "bg-[#DE7356]" : "bg-zinc-500";
@@ -212,16 +182,6 @@ export function UsagePanel() {
   const claudeAccountLabel = claudeAccount?.label ?? null;
   const claudeUsageUnsupported = claudeAccount?.type === "setup-token";
 
-  const claudeQuery = useQuery(
-    orpc.sessions.localClaude.getUsage.queryOptions({
-      input: { accountId: claudeAccountId },
-      retry: false,
-      refetchInterval: 5 * 60_000,
-      staleTime: 5 * 60_000,
-      enabled: usageSource === "claude" && !claudeUsageUnsupported,
-    }),
-  );
-
   const codexAccountId =
     activeSession?.type === "codex-local-terminal"
       ? activeSession.startupConfig.accountId
@@ -235,24 +195,33 @@ export function UsagePanel() {
   );
   const codexAccountLabel = codexAccount?.label ?? null;
 
-  const codexQuery = useQuery(
-    orpc.sessions.codex.getUsage.queryOptions({
-      input: { accountId: codexAccountId },
-      retry: false,
-      refetchInterval: 5 * 60_000,
-      staleTime: 5 * 60_000,
-      enabled: usageSource === "codex",
-    }),
-  );
+  // Usage is tracked in the main process for every account, so the panel reads
+  // the entry for the session's account instead of requesting a fetch.
+  const claudeKey = usageEntryKey("claude", claudeAccountId);
+  const codexKey = usageEntryKey("codex", codexAccountId);
+  const cursorKey = usageEntryKey("cursor", null);
+  const claudeEntry = useAppState((x) => x.usage.entries[claudeKey] ?? null);
+  const codexEntry = useAppState((x) => x.usage.entries[codexKey] ?? null);
+  const cursorEntry = useAppState((x) => x.usage.entries[cursorKey] ?? null);
+  const claudeUsage =
+    claudeEntry?.provider === "claude" ? claudeEntry.data : null;
+  const codexUsage = codexEntry?.provider === "codex" ? codexEntry.data : null;
+  const cursorUsage =
+    cursorEntry?.provider === "cursor" ? cursorEntry.data : null;
 
-  const cursorAgentQuery = useQuery(
-    orpc.sessions.cursorAgent.getUsage.queryOptions({
-      retry: false,
-      refetchInterval: 5 * 60_000,
-      staleTime: 5 * 60_000,
-      enabled: usageSource === "cursorAgent",
-    }),
-  );
+  const refreshUsage = useMutation(orpc.usage.refresh.mutationOptions());
+  const handleRefresh = async (key: string) => {
+    try {
+      const result = await refreshUsage.mutateAsync({ key });
+      if (!result.ok && result.message) {
+        toast.error(result.message);
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to refresh usage",
+      );
+    }
+  };
 
   if (!usageSource) {
     return (
@@ -265,15 +234,8 @@ export function UsagePanel() {
   }
 
   if (usageSource === "cursorAgent") {
-    const handleRefetch = async () => {
-      const result = await cursorAgentQuery.refetch();
-      if (result.error) {
-        toast.error(result.error.message);
-      }
-    };
-
-    if (cursorAgentQuery.data?.ok && cursorAgentQuery.data.usage) {
-      const usage = cursorAgentQuery.data.usage;
+    if (cursorUsage) {
+      const usage = cursorUsage;
       const plan = usage.planUsage;
       const planLabel = formatMembership(usage.membershipType) ?? "Plan";
 
@@ -386,11 +348,7 @@ export function UsagePanel() {
       );
     }
 
-    if (cursorAgentQuery.isPending) {
-      return null;
-    }
-
-    if (cursorAgentQuery.isFetching) {
+    if (cursorEntry?.refreshing) {
       return (
         <div className="border-t border-border/70 p-2">
           <div className="flex items-center justify-center gap-1.5 py-1.5 text-xs text-zinc-400">
@@ -405,7 +363,7 @@ export function UsagePanel() {
       <div className="border-t border-border/70 p-2">
         <button
           type="button"
-          onClick={() => void handleRefetch()}
+          onClick={() => void handleRefresh(cursorKey)}
           className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-2.5 py-1.5 text-xs font-medium text-zinc-100 transition hover:bg-white/10"
         >
           <BarChart3 className="size-3.5" />
@@ -416,15 +374,8 @@ export function UsagePanel() {
   }
 
   if (usageSource === "codex") {
-    const handleRefetch = async () => {
-      const result = await codexQuery.refetch();
-      if (result.error) {
-        toast.error(result.error.message);
-      }
-    };
-
-    if (codexQuery.data?.ok && codexQuery.data.usage) {
-      const usage = codexQuery.data.usage as CodexUsageData;
+    if (codexUsage) {
+      const usage = codexUsage;
       const planType = usage.planType?.trim();
       const windows = [usage.primaryWindow, usage.secondaryWindow]
         .filter(
@@ -477,11 +428,7 @@ export function UsagePanel() {
       );
     }
 
-    if (codexQuery.isPending) {
-      return null;
-    }
-
-    if (codexQuery.isFetching) {
+    if (codexEntry?.refreshing) {
       return (
         <div className="border-t border-border/70 p-2">
           <div className="flex items-center justify-center gap-1.5 py-1.5 text-xs text-zinc-400">
@@ -496,7 +443,7 @@ export function UsagePanel() {
       <div className="border-t border-border/70 p-2">
         <button
           type="button"
-          onClick={() => void handleRefetch()}
+          onClick={() => void handleRefresh(codexKey)}
           className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-2.5 py-1.5 text-xs font-medium text-zinc-100 transition hover:bg-white/10"
         >
           <BarChart3 className="size-3.5" />
@@ -523,17 +470,8 @@ export function UsagePanel() {
     );
   }
 
-  const activeClaudeQuery = claudeQuery;
-
-  const handleRefetch = async () => {
-    const result = await activeClaudeQuery.refetch();
-    if (result.error) {
-      toast.error(result.error.message);
-    }
-  };
-
-  if (activeClaudeQuery.data?.ok && activeClaudeQuery.data.usage) {
-    const usage = activeClaudeQuery.data.usage as ClaudeUsageData;
+  if (claudeUsage) {
+    const usage = claudeUsage;
     return (
       <div className="border-t border-border/70 p-2">
         <div className="space-y-1.5">
@@ -592,11 +530,7 @@ export function UsagePanel() {
     );
   }
 
-  if (activeClaudeQuery.isPending) {
-    return null;
-  }
-
-  if (activeClaudeQuery.isFetching) {
+  if (claudeEntry?.refreshing) {
     return (
       <div className="border-t border-border/70 p-2">
         <div className="flex items-center justify-center gap-1.5 py-1.5 text-xs text-zinc-400">
@@ -611,7 +545,7 @@ export function UsagePanel() {
     <div className="border-t border-border/70 p-2">
       <button
         type="button"
-        onClick={() => void handleRefetch()}
+        onClick={() => void handleRefresh(claudeKey)}
         className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-2.5 py-1.5 text-xs font-medium text-zinc-100 transition hover:bg-white/10"
       >
         <BarChart3 className="size-3.5" />
